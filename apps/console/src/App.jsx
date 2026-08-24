@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { AlertTriangle, BriefcaseBusiness, CheckCircle2, FileText, LockKeyhole, Mail, RefreshCw, ShieldCheck, Sparkles, UserRound, CalendarDays, Search, Users, Briefcase, Settings as SettingsIcon, LayoutDashboard, ClipboardList, Cpu } from "lucide-react";
+import { AlertTriangle, BriefcaseBusiness, CheckCircle2, FileText, LockKeyhole, Mail, RefreshCw, ShieldCheck, Sparkles, UserRound, CalendarDays, Search, Users, Briefcase, LayoutDashboard, ClipboardList, Cpu, PanelLeftClose, PanelLeftOpen, Zap } from "lucide-react";
 import { authClient } from "./auth-client.js";
 import TodayPage from "./pages/TodayPage.jsx";
 
@@ -32,7 +32,9 @@ function StatusCard({ safety, reload }) {
 function App() {
   const [safety, setSafety] = useState({ state: "loading" });
   const [view, setView] = useState("today");
+  const [isCollapsed, setIsCollapsed] = useState(false);
   const { data: session, isPending: sessionLoading } = authClient.useSession();
+
   const loadSafety = async () => {
     setSafety({ state: "loading" });
     try {
@@ -41,24 +43,73 @@ function App() {
       setSafety({ state: "ready", ...(await response.json()) });
     } catch { setSafety({ state: "error" }); }
   };
+
   useEffect(() => { loadSafety(); }, []);
-  return <div className="app-shell">
-    <aside className="rail" aria-label="Workbench navigation">
-      <div className="mark"><Sparkles /></div>
-      {navItems.map((item) => (
+
+  return <div className={`app-shell ${isCollapsed ? "sidebar-collapsed" : ""}`}>
+    <aside className={`rail ${isCollapsed ? "collapsed" : ""}`} aria-label="Workbench navigation">
+      {/* Sidebar Header: Brand & Collapse Toggle */}
+      <div className="sidebar-header">
+        <div className="sidebar-brand">
+          <div className="mark"><Sparkles /></div>
+          {!isCollapsed && (
+            <div className="brand-text">
+              <span className="brand-eyebrow">JA STUDIO</span>
+              <strong className="brand-name">Workbench</strong>
+            </div>
+          )}
+        </div>
         <button
-          key={item.id}
-          className={`rail-button ${view === item.id ? "active" : ""} ${!item.enabled ? "rail-disabled" : ""} ${item.id === "settings" ? "lower" : ""}`}
-          onClick={() => item.enabled && setView(item.id)}
-          aria-label={item.label}
-          title={item.enabled ? item.label : `${item.label} — coming soon`}
-          disabled={!item.enabled}
+          className="sidebar-toggle"
+          onClick={() => setIsCollapsed(!isCollapsed)}
+          aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+          title={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
         >
-          <item.icon />
-          <span className="rail-label">{item.label}</span>
+          {isCollapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
         </button>
-      ))}
+      </div>
+
+      {/* Nav Items List */}
+      <nav className="nav-list">
+        {navItems.map((item) => (
+          <button
+            key={item.id}
+            className={`rail-button ${view === item.id ? "active" : ""} ${!item.enabled ? "rail-disabled" : ""}`}
+            onClick={() => item.enabled && setView(item.id)}
+            aria-label={item.label}
+            title={item.enabled ? item.label : `${item.label} — coming soon`}
+            disabled={!item.enabled}
+          >
+            <item.icon />
+            {!isCollapsed && <span className="rail-label">{item.label}</span>}
+          </button>
+        ))}
+      </nav>
+
+      {/* Image 2 Style Feature/Promo Card (When Expanded) */}
+      {!isCollapsed && (
+        <div className="sidebar-promo-card">
+          <div className="promo-icon"><Zap size={20} /></div>
+          <strong>Recruiting Engine</strong>
+          <p>Safe Draft Mode active. All candidate actions require human review.</p>
+          <span className="promo-badge">Active</span>
+        </div>
+      )}
+
+      {/* Sidebar Footer User Info */}
+      <div className="sidebar-footer">
+        <div className="user-avatar">
+          <UserRound size={18} />
+        </div>
+        {!isCollapsed && (
+          <div className="user-info">
+            <span className="user-name">Ja Studio</span>
+            <span className="user-role">Recruiter</span>
+          </div>
+        )}
+      </div>
     </aside>
+
     <main>
       {view !== "today" && (
         <header><div><span className="eyebrow">JA STUDIO CONSULTING</span><h1>Recruiting Workbench</h1></div><SessionControl safety={safety} session={session} loading={sessionLoading} /></header>
