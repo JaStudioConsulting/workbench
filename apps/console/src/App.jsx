@@ -1,8 +1,21 @@
 import { useEffect, useState } from "react";
-import { AlertTriangle, BriefcaseBusiness, CheckCircle2, FileText, LockKeyhole, Mail, RefreshCw, ShieldCheck, Sparkles, UserRound } from "lucide-react";
+import { AlertTriangle, BriefcaseBusiness, CheckCircle2, FileText, LockKeyhole, Mail, RefreshCw, ShieldCheck, Sparkles, UserRound, CalendarDays, Search, Users, Briefcase, Settings as SettingsIcon, LayoutDashboard, ClipboardList, Cpu } from "lucide-react";
 import { authClient } from "./auth-client.js";
+import TodayPage from "./pages/TodayPage.jsx";
 
 const gateway = import.meta.env.VITE_GATEWAY_URL || "";
+
+const navItems = [
+  { id: "today", label: "Today", icon: LayoutDashboard, enabled: true },
+  { id: "case", label: "Cases", icon: BriefcaseBusiness, enabled: true },
+  { id: "candidates", label: "Candidates", icon: Users, enabled: false },
+  { id: "jobs", label: "Jobs", icon: Briefcase, enabled: false },
+  { id: "sourcing", label: "Sourcing", icon: Search, enabled: false },
+  { id: "calendar", label: "Calendar", icon: CalendarDays, enabled: false },
+  { id: "automations", label: "Automations", icon: Cpu, enabled: false },
+  { id: "queue", label: "Reviews", icon: ClipboardList, enabled: true },
+  { id: "settings", label: "Settings", icon: LockKeyhole, enabled: true },
+];
 
 const sections = [
   ["Case intake", "Source material and missing facts", FileText],
@@ -18,7 +31,7 @@ function StatusCard({ safety, reload }) {
 
 function App() {
   const [safety, setSafety] = useState({ state: "loading" });
-  const [view, setView] = useState("case");
+  const [view, setView] = useState("today");
   const { data: session, isPending: sessionLoading } = authClient.useSession();
   const loadSafety = async () => {
     setSafety({ state: "loading" });
@@ -32,16 +45,32 @@ function App() {
   return <div className="app-shell">
     <aside className="rail" aria-label="Workbench navigation">
       <div className="mark"><Sparkles /></div>
-      <button className={view === "case" ? "rail-button active" : "rail-button"} onClick={() => setView("case")} aria-label="Case intake"><BriefcaseBusiness /></button>
-      <button className={view === "queue" ? "rail-button active" : "rail-button"} onClick={() => setView("queue")} aria-label="Review queue"><CheckCircle2 /></button>
-      <button className={view === "settings" ? "rail-button active lower" : "rail-button lower"} onClick={() => setView("settings")} aria-label="Safety settings"><LockKeyhole /></button>
+      {navItems.map((item) => (
+        <button
+          key={item.id}
+          className={`rail-button ${view === item.id ? "active" : ""} ${!item.enabled ? "rail-disabled" : ""} ${item.id === "settings" ? "lower" : ""}`}
+          onClick={() => item.enabled && setView(item.id)}
+          aria-label={item.label}
+          title={item.enabled ? item.label : `${item.label} — coming soon`}
+          disabled={!item.enabled}
+        >
+          <item.icon />
+          <span className="rail-label">{item.label}</span>
+        </button>
+      ))}
     </aside>
     <main>
-      <header><div><span className="eyebrow">JA STUDIO CONSULTING</span><h1>Recruiting Workbench</h1></div><SessionControl safety={safety} session={session} loading={sessionLoading} /></header>
-      <StatusCard safety={safety} reload={loadSafety} />
+      {view !== "today" && (
+        <header><div><span className="eyebrow">JA STUDIO CONSULTING</span><h1>Recruiting Workbench</h1></div><SessionControl safety={safety} session={session} loading={sessionLoading} /></header>
+      )}
+      {view !== "today" && <StatusCard safety={safety} reload={loadSafety} />}
+      {view === "today" && <TodayPage />}
       {view === "case" && <CaseIntake />}
       {view === "queue" && <EmptyState title="Review queue is clear" note="Approval-ready resumes, submissions, and email drafts will appear here once a durable service is configured." icon={CheckCircle2} />}
       {view === "settings" && <Settings safety={safety} />}
+      {!["today", "case", "queue", "settings"].includes(view) && (
+        <EmptyState title={`${navItems.find(n => n.id === view)?.label || view} — Coming Soon`} note="This section will be available in a future release." icon={Sparkles} />
+      )}
     </main>
   </div>;
 }
