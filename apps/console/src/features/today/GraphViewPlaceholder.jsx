@@ -1,41 +1,68 @@
-import { GitBranch } from 'lucide-react';
+import { GitBranch, TrendingUp } from 'lucide-react';
 
 export function GraphViewPlaceholder() {
   return (
-    <section className="today-card graph-placeholder">
-      <div className="graph-inner">
-        <div className="card-title" style={{ color: '#1A1C1E', fontSize: '1.25rem' }}>
-          <GitBranch size={22} style={{ color: '#222525' }} />
-          Your Recruiting Network Topology
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+      {/* 4 Metric Cards matching Image 2 Top Row */}
+      <div className="metrics-row">
+        <div className="metric-card dark">
+          <span className="metric-label">Active Placements</span>
+          <span className="metric-value">21,480</span>
+          <span className="metric-sub"><TrendingUp size={14} /> + 8.6% vs last month</span>
         </div>
-        <p style={{ color: '#565C58', fontSize: '0.88rem', marginTop: '4px' }}>
-          Graph View — Cases, candidates, and job relationships visualised live.
-        </p>
+        <div className="metric-card">
+          <span className="metric-label">Active Candidates</span>
+          <span className="metric-value">14,320</span>
+          <span className="metric-sub"><TrendingUp size={14} /> + 11.4% vs last month</span>
+        </div>
+        <div className="metric-card">
+          <span className="metric-label">New Intakes</span>
+          <span className="metric-value">1,289</span>
+          <span className="metric-sub"><TrendingUp size={14} /> + 3.7% vs last month</span>
+        </div>
+        <div className="metric-card">
+          <span className="metric-label">Active Mentors</span>
+          <span className="metric-value">1,876</span>
+          <span className="metric-sub"><TrendingUp size={14} /> + 1.2% vs last month</span>
+        </div>
       </div>
 
-      <div className="graph-visual">
-        <div className="graph-bubble bubble-yellow" />
-        <div className="graph-bubble bubble-pink" />
-        <div className="graph-bubble bubble-dark">
-          <span>2.3k</span>
-          <span style={{ fontSize: '0.65rem', fontWeight: 'normal', opacity: 0.8 }}>nodes</span>
+      {/* Main Bar Chart & Topology Card matching Image 2 "Évolution" Chart */}
+      <section className="graph-placeholder">
+        <div className="card-header" style={{ marginBottom: '8px' }}>
+          <h2 className="card-title">
+            <GitBranch size={18} /> Candidate Pipeline Evolution & Graph Topology
+          </h2>
+          <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)', fontWeight: 600 }}>Monthly overview</span>
         </div>
-      </div>
 
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', zIndex: 2 }}>
-        <div style={{ display: 'flex', gap: '14px', fontSize: '0.78rem', fontWeight: '700', color: '#565C58' }}>
-          <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-            <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#FFC82C' }} /> Active Cases
-          </span>
-          <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-            <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#FF5A5A' }} /> Candidates
-          </span>
-          <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-            <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#222525' }} /> Connected Jobs
-          </span>
+        <div className="bar-chart-mock">
+          <div className="bar-col">
+            <div className="bar-fill" style={{ height: '70%' }} />
+            <span className="bar-label">Mar</span>
+          </div>
+          <div className="bar-col">
+            <div className="bar-fill" style={{ height: '50%' }} />
+            <span className="bar-label">Apr</span>
+          </div>
+          <div className="bar-col">
+            <div className="bar-fill light" style={{ height: '100%' }} />
+            <span className="bar-label">May</span>
+          </div>
+          <div className="bar-col">
+            <div className="bar-fill" style={{ height: '60%' }} />
+            <span className="bar-label">Jun</span>
+          </div>
+          <div className="bar-col">
+            <div className="bar-fill" style={{ height: '85%' }} />
+            <span className="bar-label">Jul</span>
+          </div>
+          <div className="bar-col">
+            <div className="bar-fill sage" style={{ height: '40%' }} />
+            <span className="bar-label">Aug</span>
+          </div>
         </div>
-        <span className="graph-tag">Future Release</span>
-      </div>
-    </section>
+      </section>
+    </div>
   );
 }
