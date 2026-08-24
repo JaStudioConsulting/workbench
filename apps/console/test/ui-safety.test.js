@@ -11,6 +11,9 @@ test("console has no local persistence or send authority", async () => {
   assert.match(app, /Sign in with Google/);
   assert.match(app, /Signed in/);
   assert.match(app, /Signed out/);
+  assert.match(app, /Synthetic sandbox/);
+  assert.match(app, /No uploads, storage, login, Gmail, Loxo, Neo4j, sends, or submissions/);
+  assert.doesNotMatch(app, /<input|<textarea/);
 });
 
 test("console entrypoint and all local static references resolve", async () => {

@@ -16,6 +16,14 @@ pnpm check
 pnpm audit --prod
 ```
 
+## Synthetic sandbox
+
+```sh
+pnpm dev:sandbox
+```
+
+This opens a fixed fake case with no uploads, persistence, login, or live integrations. The click-through sandbox uses the same source-grounding and draft-output function as the gateway, then stops at human review.
+
 The recruitment authority is an external private package pinned to a verified Git commit. It is not copied into this repository.
 
 See `docs/` for architecture, configuration, deployment, cutover, and host-compatibility boundaries.

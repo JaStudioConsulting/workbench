@@ -7,6 +7,8 @@
   "engines": { "node": ">=20" },
   "scripts": {
     "dev": "pnpm --filter @ja/workbench-console dev",
+    "dev:sandbox": "VITE_SANDBOX_MODE=true pnpm --filter @ja/workbench-console dev",
+    "build:sandbox": "pnpm --filter @ja/workbench-console build:sandbox",
     "build": "pnpm -r --if-present build",
     "test": "pnpm -r --if-present test && node --test scripts/*.test.mjs",
     "typecheck": "pnpm -r --if-present typecheck",

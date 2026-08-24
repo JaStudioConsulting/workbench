@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "build:sandbox": "VITE_SANDBOX_MODE=true vite build",
     "typecheck": "vite build --mode check --emptyOutDir false",
     "test": "node --test test/*.test.js"
   },

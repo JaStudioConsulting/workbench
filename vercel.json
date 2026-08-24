@@ -1,0 +1,7 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "installCommand": "pnpm install --frozen-lockfile --filter @ja/workbench-console...",
+  "buildCommand": "pnpm build:sandbox",
+  "outputDirectory": "apps/console/dist",
+  "framework": "vite"
+}

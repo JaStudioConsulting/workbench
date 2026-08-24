@@ -2,6 +2,10 @@
 
 The clean Workbench migration is implemented but is not deployed or cut over.
 
+## Synthetic sandbox
+
+The console includes a fixed synthetic-only test mode. It accepts no uploads or free-form candidate data, stores nothing, calls no live integration, and stops after showing source-grounded draft outputs for human review. `pnpm dev:sandbox` runs it locally; the root Vercel configuration builds only this static sandbox preview. This does not deploy or enable the production gateway.
+
 ## Verified dependency boundary
 
 `@jastudioconsulting/recruitment-skills` is pinned to `github:JaStudioConsulting/recruitment-skills#0f8e929f28c94098f3f992ab33eb7ba901dd9527`. The package is loaded through public exports, validated for every published manifest asset, and is never copied into this repository.

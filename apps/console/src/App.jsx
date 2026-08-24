@@ -1,8 +1,25 @@
-import { useEffect, useState } from "react";
-import { AlertTriangle, BriefcaseBusiness, CheckCircle2, FileText, LockKeyhole, Mail, RefreshCw, ShieldCheck, Sparkles, UserRound } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import {
+  AlertTriangle,
+  BriefcaseBusiness,
+  CheckCircle2,
+  ClipboardCheck,
+  FileText,
+  FlaskConical,
+  LockKeyhole,
+  Mail,
+  Play,
+  RefreshCw,
+  RotateCcw,
+  ShieldCheck,
+  Sparkles,
+  UserRound,
+} from "lucide-react";
 import { authClient } from "./auth-client.js";
+import { runSyntheticRecruiter, syntheticCase } from "./synthetic-case.js";
 
 const gateway = import.meta.env.VITE_GATEWAY_URL || "";
+const sandboxMode = import.meta.env.VITE_SANDBOX_MODE === "true";
 
 const sections = [
   ["Case intake", "Source material and missing facts", FileText],
@@ -16,7 +33,7 @@ function StatusCard({ safety, reload }) {
   return <section className="state-card"><ShieldCheck /><div><strong>Review mode</strong><span>Auth: {safety.auth}. Gmail: draft only. External writes: disabled.</span></div></section>;
 }
 
-function App() {
+function ConnectedApp() {
   const [safety, setSafety] = useState({ state: "loading" });
   const [view, setView] = useState("case");
   const { data: session, isPending: sessionLoading } = authClient.useSession();
@@ -46,6 +63,94 @@ function App() {
   </div>;
 }
 
+const demoStages = ["Source audit", "Recruiter routing", "Draft preparation", "Review gate"];
+const outputTabs = [
+  ["audit", "Source audit"],
+  ["resume", "Resume"],
+  ["submission", "Submission"],
+  ["email", "Email"],
+  ["loxo", "Loxo notes"],
+];
+
+function SandboxApp() {
+  const [stage, setStage] = useState(0);
+  const [running, setRunning] = useState(false);
+  const [result, setResult] = useState(null);
+  const [activeTab, setActiveTab] = useState("audit");
+  const sources = useMemo(() => [
+    ["Resume", syntheticCase.sources.resume],
+    ["Transcript", syntheticCase.sources.transcript],
+    ["Job description", syntheticCase.sources.jobDescription],
+    ["Call notes", syntheticCase.sources.callNotes],
+  ], []);
+
+  const runDemo = async () => {
+    setRunning(true);
+    setResult(null);
+    setActiveTab("audit");
+    for (let next = 1; next <= demoStages.length; next += 1) {
+      setStage(next);
+      await new Promise((resolve) => window.setTimeout(resolve, 260));
+    }
+    setResult(runSyntheticRecruiter());
+    setRunning(false);
+  };
+
+  const resetDemo = () => {
+    setStage(0);
+    setRunning(false);
+    setResult(null);
+    setActiveTab("audit");
+  };
+
+  return <div className="sandbox-shell">
+    <header className="sandbox-header">
+      <div className="sandbox-brand"><span className="brand-mark"><Sparkles /></span><div><span className="eyebrow">JA STUDIO CONSULTING</span><h1>Recruiting Workbench</h1></div></div>
+      <span className="sandbox-badge"><FlaskConical /> Synthetic sandbox</span>
+    </header>
+    <main className="sandbox-main">
+      <section className="sandbox-safety"><ShieldCheck /><div><strong>Safe test mode</strong><span>Fixed fake person. No uploads, storage, login, Gmail, Loxo, Neo4j, sends, or submissions.</span></div></section>
+      <section className="sandbox-case-head">
+        <div><span className="eyebrow">SAMPLE CASE</span><h2>{syntheticCase.candidate.name}</h2><p>{syntheticCase.candidate.role}</p></div>
+        <div className="sandbox-actions">
+          <button className="secondary" onClick={resetDemo} disabled={!stage && !result}><RotateCcw /> Reset</button>
+          <button className="primary run-button" onClick={runDemo} disabled={running}><Play /> {running ? "Running recruiter..." : result ? "Run again" : "Run synthetic test"}</button>
+        </div>
+      </section>
+      <section className="source-grid" aria-label="Synthetic source material">
+        {sources.map(([label, source]) => <article className="source-panel" key={label}><span>{label}</span><p>{source}</p></article>)}
+      </section>
+      <section className="run-panel" aria-live="polite">
+        <div className="stage-list">
+          {demoStages.map((label, index) => {
+            const complete = stage > index;
+            const current = running && stage === index + 1;
+            return <div className={`stage-row ${complete ? "complete" : ""} ${current ? "current" : ""}`} key={label}>
+              <span className="stage-icon">{complete ? <CheckCircle2 /> : <span>{index + 1}</span>}</span>
+              <div><strong>{label}</strong><small>{complete ? "Passed" : "Waiting"}</small></div>
+            </div>;
+          })}
+        </div>
+        <div className="result-panel">
+          {!result ? <div className="result-empty"><ClipboardCheck /><h3>Ready for safe test</h3><p>Click “Run synthetic test.” Workbench will ground every claim, route through <code>$recruiter</code>, prepare four drafts, and stop at human review.</p></div> : <>
+            <div className="result-head"><div><span className="eyebrow">RECRUITER RESULT</span><h3>Four drafts ready for review</h3></div><span className="review-chip"><LockKeyhole /> No external action</span></div>
+            <nav className="output-tabs" aria-label="Synthetic outputs">{outputTabs.map(([id, label]) => <button className={activeTab === id ? "active" : ""} onClick={() => setActiveTab(id)} key={id}>{label}</button>)}</nav>
+            <OutputView result={result} tab={activeTab} />
+          </>}
+        </div>
+      </section>
+    </main>
+  </div>;
+}
+
+function OutputView({ result, tab }) {
+  if (tab === "audit") return <div className="audit-list">{result.audit.supportedClaims.map((fact) => <article key={fact.label}><CheckCircle2 /><div><strong>{fact.label}</strong><span>{fact.value}</span><small>{fact.source.replace("_", " ")} evidence: “{fact.evidence}”</small></div></article>)}</div>;
+  if (tab === "resume") return <pre className="draft-copy">{result.brandedResume.content}</pre>;
+  if (tab === "submission") return <dl className="submission-fields">{Object.entries(result.submission.fields).map(([label, value]) => <div key={label}><dt>{label.replace(/([A-Z])/g, " $1")}</dt><dd>{Array.isArray(value) ? <ul>{value.map((item) => <li key={item}>{item}</li>)}</ul> : value}</dd></div>)}</dl>;
+  if (tab === "email") return <div className="email-draft"><strong>{result.presentationEmail.subject}</strong><pre>{result.presentationEmail.body}</pre></div>;
+  return <ul className="loxo-list">{result.loxoDraft.bullets.map((bullet) => <li key={bullet}>{bullet}</li>)}</ul>;
+}
+
 function SessionControl({ safety, session, loading }) {
   if (safety.state === "loading" || loading) return <div className="session"><RefreshCw className="spin" /> Checking session</div>;
   if (safety.state !== "ready" || safety.auth !== "configured") return <div className="session"><UserRound /> Authentication is unavailable</div>;
@@ -66,5 +171,7 @@ function CaseIntake() {
 function EmptyState({ title, note, icon: Icon }) { return <section className="empty-state"><Icon /><h2>{title}</h2><p>{note}</p></section>; }
 
 function Settings({ safety }) { return <section className="settings"><span className="eyebrow">SAFETY STATE</span><h2>Production configuration is intentionally incomplete.</h2><p>This app does not save cases locally. Configure hosted PostgreSQL and Better Auth to enable login; configure durable case storage separately. Google integration remains draft-only.</p><dl><dt>Authentication</dt><dd>{safety.auth || "unavailable"}</dd><dt>Storage</dt><dd>{safety.storage || "unavailable"}</dd><dt>Neo4j</dt><dd>{safety.neo4j || "disabled"} / read-only</dd></dl></section>; }
+
+function App() { return sandboxMode ? <SandboxApp /> : <ConnectedApp />; }
 
 export default App;
