@@ -1,4 +1,6 @@
-# Deployment plan - not run
+# Production deployment plan - not run
+
+A static synthetic-only sandbox preview was deployed for click testing. It is separate from the production plan below: it accepts no inputs, has no persistence or credentials, and connects to no gateway or live integration.
 
 Create two independent Vercel projects after a separate approval:
 

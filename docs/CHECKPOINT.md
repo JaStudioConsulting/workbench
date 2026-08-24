@@ -6,6 +6,10 @@ The clean Workbench migration is implemented but is not deployed or cut over.
 
 The console includes a fixed synthetic-only test mode. It accepts no uploads or free-form candidate data, stores nothing, calls no live integration, and stops after showing source-grounded draft outputs for human review. `pnpm dev:sandbox` runs it locally; the root Vercel configuration builds only this static sandbox preview. This does not deploy or enable the production gateway.
 
+Vercel project `workbench-synthetic-sandbox` now hosts a Vercel-authenticated static preview at `https://workbench-synthetic-sandbox-pk2y81mv3-jas-projects-dbe01bda.vercel.app`. Verified preview deployment `dpl_2Mx9pDRBVDtKfishwTuAvvNW8hUf` returned HTTP 200 through authenticated access and completed the source-audit-to-four-drafts click flow. No environment secrets or live service connections were supplied.
+
+Vercel automatically assigned the project's first synthetic static deployment a production alias even though preview was requested. That artifact contains the same fixed fake-only sandbox and no live connections. The verified URL above is the later unaliased preview deployment; production Workbench console and gateway cutover remain unrun.
+
 ## Verified dependency boundary
 
 `@jastudioconsulting/recruitment-skills` is pinned to `github:JaStudioConsulting/recruitment-skills#0f8e929f28c94098f3f992ab33eb7ba901dd9527`. The package is loaded through public exports, validated for every published manifest asset, and is never copied into this repository.
