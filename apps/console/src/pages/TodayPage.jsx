@@ -98,25 +98,17 @@ export default function TodayPage() {
 
   return (
     <div className="today-page">
+      {/* 1. Header with search & time filter pills */}
       <TodayHeader attentionCount={attention.length} caseCount={cases.length} />
 
-      {/* TOP ROW: Graph Placeholder (60%) + Calendar Schedule (40%) */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 420px', gap: '20px', marginBottom: '20px' }}>
-        <GraphViewPlaceholder />
-        <TodayCalendar items={calendarItems} />
-      </div>
+      {/* 2. Top Metric Cards Row */}
+      <GraphViewPlaceholder />
 
-      {/* BOTTOM ROW: Stacked Left (40%) + Main Right (60%) */}
-      <div style={{ display: 'grid', gridTemplateColumns: '420px 1fr', gap: '20px' }}>
-        {/* Left Column Stack */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+      {/* 3. Clean 2-Column Main Layout (65% / 35%) */}
+      <div className="main-dashboard-grid">
+        {/* Left Main Column (65% width): Core operational tables & queues */}
+        <div className="dashboard-col-main">
           <AttentionQueue items={attention} />
-          <AutomationHealth integrations={integrations} />
-          <SourcingRuns runs={sourcingRuns} />
-        </div>
-
-        {/* Right Column Stack */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
           <ActiveCases
             cases={cases}
             onDragStart={onDragStart}
@@ -124,6 +116,17 @@ export default function TodayPage() {
             onActionMenu={handleActionMenu}
             onStageChange={handleStageChange}
           />
+          <ReviewQueue
+            items={reviews}
+            onReview={handleReview}
+            onRequestChanges={handleRequestChanges}
+            onApprove={handleApprove}
+          />
+        </div>
+
+        {/* Right Side Column (35% width): Calendar, Action Dock, Integration Health */}
+        <div className="dashboard-col-side">
+          <TodayCalendar items={calendarItems} />
           <ActionDock
             onDragOver={onDragOver}
             onDragLeave={onDragLeave}
@@ -132,12 +135,8 @@ export default function TodayPage() {
             selectedCase={selectedCase}
             onRequestAction={handleRequestAction}
           />
-          <ReviewQueue
-            items={reviews}
-            onReview={handleReview}
-            onRequestChanges={handleRequestChanges}
-            onApprove={handleApprove}
-          />
+          <SourcingRuns runs={sourcingRuns} />
+          <AutomationHealth integrations={integrations} />
           <RecentWork activity={activity} />
         </div>
       </div>
