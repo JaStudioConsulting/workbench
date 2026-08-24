@@ -18,7 +18,6 @@ import {
   integrations,
   recentActivity as initialActivity,
   attentionItems as initialAttention,
-  ACTIONS,
 } from '../data/synthetic-today.js';
 
 export default function TodayPage() {
@@ -30,33 +29,27 @@ export default function TodayPage() {
 
   const { draggedItem, dragOverTarget, onDragStart, onDragEnd, onDragOver, onDragLeave, onDrop } = useDragDrop();
 
-  // Stage change — status only, no workflow execution
   const handleStageChange = useCallback((caseId, newStage) => {
     setCases((prev) => prev.map((c) => c.id === caseId ? { ...c, stage: newStage } : c));
   }, []);
 
-  // Action menu — select case for action dock
   const handleActionMenu = useCallback((caseItem) => {
     setSelectedCase(caseItem);
   }, []);
 
-  // Request workflow — synthetic progression: Ready → Running → Review
   const handleRequestAction = useCallback((caseItem, action) => {
     const missing = action.requires.filter((r) => !caseItem.sources[r]);
     if (missing.length > 0) {
-      // Move to Needs Info
       setCases((prev) => prev.map((c) =>
         c.id === caseItem.id ? { ...c, stage: 'Needs Info', blocker: `Missing: ${missing.join(', ')}` } : c
       ));
       return;
     }
 
-    // Progress: Ready → Running → Review (synthetic)
     setCases((prev) => prev.map((c) =>
       c.id === caseItem.id ? { ...c, stage: 'Review', workflow: action.label, draftCount: c.draftCount + 1 } : c
     ));
 
-    // Add review item
     const newReview = {
       id: `rev-syn-${Date.now()}`,
       caseId: caseItem.id,
@@ -67,7 +60,6 @@ export default function TodayPage() {
     };
     setReviews((prev) => [newReview, ...prev]);
 
-    // Add activity
     const newActivity = {
       id: `act-syn-${Date.now()}`,
       type: 'workflow-started',
@@ -80,10 +72,7 @@ export default function TodayPage() {
     setSelectedCase(null);
   }, []);
 
-  // Review actions
-  const handleReview = useCallback((item) => {
-    // Synthetic: just log
-  }, []);
+  const handleReview = useCallback((item) => {}, []);
 
   const handleRequestChanges = useCallback((item) => {
     setReviews((prev) => prev.map((r) => r.id === item.id ? { ...r, status: 'Changes Requested' } : r));
@@ -111,10 +100,23 @@ export default function TodayPage() {
     <div className="today-page">
       <TodayHeader attentionCount={attention.length} caseCount={cases.length} />
 
-      <div className="today-grid">
-        {/* Left column — main content */}
-        <div className="today-col-main">
+      {/* TOP ROW: Graph Placeholder (60%) + Calendar Schedule (40%) */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 420px', gap: '20px', marginBottom: '20px' }}>
+        <GraphViewPlaceholder />
+        <TodayCalendar items={calendarItems} />
+      </div>
+
+      {/* BOTTOM ROW: Stacked Left (40%) + Main Right (60%) */}
+      <div style={{ display: 'grid', gridTemplateColumns: '420px 1fr', gap: '20px' }}>
+        {/* Left Column Stack */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
           <AttentionQueue items={attention} />
+          <AutomationHealth integrations={integrations} />
+          <SourcingRuns runs={sourcingRuns} />
+        </div>
+
+        {/* Right Column Stack */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
           <ActiveCases
             cases={cases}
             onDragStart={onDragStart}
@@ -136,14 +138,6 @@ export default function TodayPage() {
             onRequestChanges={handleRequestChanges}
             onApprove={handleApprove}
           />
-        </div>
-
-        {/* Right column — schedule + status */}
-        <div className="today-col-side">
-          <GraphViewPlaceholder />
-          <TodayCalendar items={calendarItems} />
-          <SourcingRuns runs={sourcingRuns} />
-          <AutomationHealth integrations={integrations} />
           <RecentWork activity={activity} />
         </div>
       </div>
