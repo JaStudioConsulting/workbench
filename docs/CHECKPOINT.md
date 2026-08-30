@@ -1,6 +1,6 @@
 # Workbench checkpoint
 
-Updated: 2026-08-24
+Updated: 2026-08-29
 
 This is the durable handoff for the repository migration, current deployment truth, and UI discussion. It distinguishes code that exists from features Ja can use today.
 
@@ -8,12 +8,14 @@ This is the durable handoff for the repository migration, current deployment tru
 
 - Application: private `JaStudioConsulting/workbench` repository.
 - Recruiting authority: private `JaStudioConsulting/recruitment-skills` repository.
-- Workbench `main`: `03a43b768ac03d7477a9b45f85196712723b267a` before this checkpoint update.
-- Recruitment skills `main`: `0f8e929f28c94098f3f992ab33eb7ba901dd9527`.
-- Synthetic demonstration branch: `codex/synthetic-sandbox` at `6ad65674deb2798a49ce70c62d8ef5f54912ce57`.
+- Workbench verified baseline: `f181e57af82ab09c30d5b0bfd23d827631bc21ef` before the 2026-08-29 housekeeping update.
+- Recruitment skills `main` and Workbench pin: `9e9a116c2ae3f56b9aef1abff8476698da793fbb`.
+- Rejected UI experiment preserved at tag `archive/today-ui-2026-08-24` (`56c6251a58055354be98f96a3101f3ff886ffa6f`).
+- Fixed synthetic demonstration preserved at tag `archive/synthetic-sandbox-2026-08-24` (`6ad65674deb2798a49ce70c62d8ef5f54912ce57`).
+- `main` is the only active source-of-truth branch. Archived experiments are not merge candidates.
 - Workbench loads `@jastudioconsulting/recruitment-skills` through its public package exports. Skills are not copied back into the application repository.
 
-## Deployment truth
+## Deployment truth verified 2026-08-29
 
 - A synthetic-only frontend is deployed at `https://workbench-synthetic-sandbox.vercel.app/`.
 - Vercel project: `workbench-synthetic-sandbox` under Ja's Vercel team.
@@ -22,6 +24,10 @@ This is the durable handoff for the repository migration, current deployment tru
 - It can run a fixed source audit and display basic resume, submission, presentation-email, and Loxo-note drafts.
 - It cannot accept uploads, edit candidate inputs, save cases, sign in, create Gmail drafts, read Loxo, query Neo4j, or process a real candidate.
 - No connected production gateway, database, OAuth session, case storage, or live recruiting integration has been deployed.
+
+## Rejected UI experiment
+
+The seven UI screenshots reviewed on 2026-08-29 all came from the retired `feat/today-ui` experiment. Its hard-coded metrics, generic fake candidates, crowded cards, promotional Recruiting Engine panel, user block, excessive empty states, and navigation are not approved. Future frontend work must start from `main`; archived code may be consulted only for a specifically approved interaction idea.
 
 ## Implemented application foundation
 
@@ -160,11 +166,11 @@ The map is a discussion and approval artifact. It is not evidence that these tab
 
 ## Current safety posture
 
-- Workbench main tests, type checks, privacy validation, production build, and production dependency audit passed during the 2026-08-24 inspection.
+- Workbench main tests, type checks, privacy validation, production build, and production dependency audit passed again during the 2026-08-29 housekeeping update.
 - Synthetic branch verification passed 16 Workbench tests plus privacy, type, build, and dependency checks.
-- Recruitment skills validation found 22 capabilities, 19 declared tool contracts, 6 hosts, and 88 packaged skill files; its three tests and Python/package checks passed.
+- The current recruitment-skills package pin loaded successfully and its packaged authority validation passed with the Workbench tests.
 - Passing checks do not authorize live candidate use, Gmail send, candidate submission, Loxo write, Neo4j write, active-client repointing, repository deletion, or production cutover.
 
 ## Next continuation instruction
 
-Read this checkpoint first. Do not restart migration or treat the synthetic Vercel page as the completed Workbench. Resume from UI decisions, then build the smallest usable private release: Cases, Sources, Audit and Fit, Outputs, Review, authentication, and durable storage.
+Read this checkpoint first. Do not restart migration, restore either archived experiment wholesale, or treat the synthetic Vercel page as the completed Workbench. Start UI work from current `main` and implement only the next Ja-approved frontend slice.

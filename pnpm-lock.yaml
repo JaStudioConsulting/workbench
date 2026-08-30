@@ -39,8 +39,8 @@ importers:
         specifier: workspace:*
         version: link:../../packages/shared-types
       '@jastudioconsulting/recruitment-skills':
-        specifier: github:JaStudioConsulting/recruitment-skills#0f8e929f28c94098f3f992ab33eb7ba901dd9527
-        version: git+https://github.com/JaStudioConsulting/recruitment-skills.git#0f8e929f28c94098f3f992ab33eb7ba901dd9527
+        specifier: github:JaStudioConsulting/recruitment-skills#9e9a116c2ae3f56b9aef1abff8476698da793fbb
+        version: git+https://github.com/JaStudioConsulting/recruitment-skills.git#9e9a116c2ae3f56b9aef1abff8476698da793fbb
       '@modelcontextprotocol/sdk':
         specifier: 1.29.0
         version: 1.29.0(zod@4.4.3)
@@ -392,8 +392,8 @@ packages:
     peerDependencies:
       hono: ^4
 
-  '@jastudioconsulting/recruitment-skills@git+https://github.com/JaStudioConsulting/recruitment-skills.git#0f8e929f28c94098f3f992ab33eb7ba901dd9527':
-    resolution: {commit: 0f8e929f28c94098f3f992ab33eb7ba901dd9527, repo: https://github.com/JaStudioConsulting/recruitment-skills.git, type: git}
+  '@jastudioconsulting/recruitment-skills@git+https://github.com/JaStudioConsulting/recruitment-skills.git#9e9a116c2ae3f56b9aef1abff8476698da793fbb':
+    resolution: {commit: 9e9a116c2ae3f56b9aef1abff8476698da793fbb, repo: https://github.com/JaStudioConsulting/recruitment-skills.git, type: git}
     version: 0.1.0
     engines: {node: '>=20'}
 
@@ -1629,7 +1629,7 @@ snapshots:
     dependencies:
       hono: 4.13.3
 
-  '@jastudioconsulting/recruitment-skills@git+https://github.com/JaStudioConsulting/recruitment-skills.git#0f8e929f28c94098f3f992ab33eb7ba901dd9527': {}
+  '@jastudioconsulting/recruitment-skills@git+https://github.com/JaStudioConsulting/recruitment-skills.git#9e9a116c2ae3f56b9aef1abff8476698da793fbb': {}
 
   '@jridgewell/gen-mapping@0.3.13':
     dependencies:
