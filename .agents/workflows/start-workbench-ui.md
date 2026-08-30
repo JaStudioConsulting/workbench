@@ -7,9 +7,9 @@ Start the approved frontend-only Workbench design cycle with the correct reposit
 ## Steps
 
 1. Read `AGENTS.md`, `docs/ANTIGRAVITY-UI-HANDOFF.md`, `README.md`, and `docs/CHECKPOINT.md` completely.
-2. Confirm this workspace is `/Users/TTTG/JA/Workbench`, the branch is based on current `main`, and the checkout does not come from a temporary preview folder.
+2. Confirm the checkout is the intended Workbench repository and the branch is based on current `main`.
 3. Inspect the existing console. Query Graphify for existing components, routes, styling, and reusable work before creating replacements; verify its answers against the checked-out files.
-4. Study both images in `docs/ui-references/`. Treat them as mood, layout, and colour references only.
+4. Follow the warm ivory, dark forest green, muted sage, restrained clay, quiet-spacing, and editorial-layout direction in the handoff.
 5. Produce a concise page map for Home, Mail, Candidates, Leads, Process, Staff, Profile, and Settings using the distinct purposes in the handoff.
 6. Implement a frontend-only interactive proposal on a new feature branch. Make every page clickable and meaningfully different. Add a safe Arrange layout mode with moving, resizing, collision prevention, reset, and per-page saved layout.
 7. Use honest empty states and real labels. Do not invent candidates, leads, staff, messages, integrations, activity, or metrics.

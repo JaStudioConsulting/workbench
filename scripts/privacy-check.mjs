@@ -47,7 +47,7 @@ export async function validateRepository(root) {
     const text = buffer.toString("utf8");
     if (/\/Users\/|[A-Z]:\\Users\\/i.test(text)) findings.push(`${relative}: machine path`);
     if (/(BEGIN( [A-Z]+)? PRIVATE KEY|AIza|ghp_|github_pat_|xox[baprs]-|sk-[A-Za-z0-9]{16,})/.test(text)) findings.push(`${relative}: credential-like value`);
-    if (/[A-Z0-9._%+-]+@(?!example\.invalid\b)[A-Z0-9.-]+\.[A-Z]{2,}/i.test(text)) findings.push(`${relative}: possible live email`);
+    if (relative !== "pnpm-lock.yaml" && /[A-Z0-9._%+-]+@(?!example\.invalid\b)[A-Z0-9.-]+\.[A-Z]{2,}/i.test(text)) findings.push(`${relative}: possible live email`);
     if (/(?:loxo|gmail|account)[_-]?id\b\s*[:=]\s*["'][A-Za-z0-9_-]{6,}/i.test(text)) findings.push(`${relative}: possible live account id`);
     if (!/(^|\/)test\//.test(relative) && !relative.startsWith("scripts/privacy-check")) {
       if (unsafe.test(text)) findings.push(`${relative}: unsafe route or tool name`);

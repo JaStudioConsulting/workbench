@@ -1,1915 +1,453 @@
-/* ═══════════════════════════════════════════════════════════════
-   JA RECRUITING WORKBENCH — LUXE APPLE-GRADE DESIGN SYSTEM
-   ─────────────────────────────────────────────────────────────
-   Aesthetic:
-     • Warm ivory canvas, silk-white card surfaces
-     • Deep forest green, muted sage, restrained gold & terracotta
-     • Crisp typography hierarchy, hairline borders, micro-elevation
-     • Edge-to-edge space efficiency, zero wasted gutters
-   Citations:
-     • @shadcn/sidebar-15 (Left main area + right inset inspector pane)
-     • @shadcn/tabs (Pill tab headers switching master stream views)
-     • @shadcn/card & @shadcn/dialog (Containers & modals)
-     • Google Workspace (3-Pane Gmail with Folders, Labels, Calendar, Tasks & Notes)
-   ═══════════════════════════════════════════════════════════════ */
-
-/* ── 1. Tokens ── */
 :root {
-  /* Canvas & Surfaces */
-  --bg: #faf7f2;
-  --bg-subtle: #f3eee7;
-  --surface: #ffffff;
-  --surface-hover: #f8f6f2;
-  --surface-muted: #f4f0e8;
-
-  /* Sidebar */
-  --sidebar-bg: #213328;
-  --sidebar-text: #dbe4dd;
-  --sidebar-text-dim: #84998b;
-  --sidebar-active-bg: rgba(255, 255, 255, 0.12);
-  --sidebar-active-text: #ffffff;
-  --sidebar-border: rgba(255, 255, 255, 0.08);
-
-  /* Borders & Dividers */
-  --border: #e8e2d8;
-  --border-light: #f0ebe2;
-  --border-strong: #d8d0c4;
-
-  /* Text Hierarchy */
-  --text: #191816;
-  --text-secondary: #484540;
-  --text-muted: #78746c;
-  --text-dim: #a49f96;
-
-  /* Refined Luxe Accents */
-  --forest: #273c30;
-  --sage: #6b8273;
-  --sage-light: #eaf0ec;
-  --sage-medium: #c2d1c6;
-  --gold: #b59146;
-  --gold-light: #f6efe0;
-  --clay: #c47c5d;
-  --clay-light: #f7ece5;
-
-  /* Dimensions & Radii */
-  --rail-width: 64px;
-  --radius-lg: 14px;
-  --radius: 10px;
-  --radius-sm: 7px;
-  --radius-xs: 5px;
-
-  /* Typography */
-  font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   font-synthesis: none;
-  color: var(--text);
-  background: var(--bg);
+  color: #1b1c1a;
+  background: #faf7f2;
+  --bg: #faf7f2;
+  --surface: #ffffff;
+  --surface-muted: #f5f1ea;
+  --forest: #273c30;
+  --forest-soft: #e9efeb;
+  --sage: #718276;
+  --text: #1b1c1a;
+  --muted: #77746d;
+  --dim: #a39e95;
+  --border: #e4ddd2;
+  --border-strong: #cec5b8;
+  --rail-width: 72px;
+  color-scheme: light;
   -webkit-font-smoothing: antialiased;
 }
 
-/* ── 2. Reset ── */
-*, *::before, *::after { box-sizing: border-box; }
+* {
+  box-sizing: border-box;
+}
+
 body {
   margin: 0;
   min-width: 320px;
+  min-height: 100vh;
   background: var(--bg);
-  overflow-x: hidden;
 }
-button { font: inherit; cursor: pointer; }
-h1, h2, h3, h4, p { margin-top: 0; }
-ul { list-style: none; margin: 0; padding: 0; }
-a { color: inherit; text-decoration: none; }
-input, select, textarea { font: inherit; }
 
-/* ── 3. Shell ── */
+button {
+  font: inherit;
+}
+
+button:focus-visible {
+  outline: 2px solid #6f8c79;
+  outline-offset: 2px;
+}
+
+h1,
+h2,
+h3,
+p {
+  margin: 0;
+}
+
 .app-shell {
   min-height: 100vh;
   display: grid;
   grid-template-columns: var(--rail-width) minmax(0, 1fr);
 }
 
-/* ── 4. Compact Navigation Rail ── */
 .rail {
   position: sticky;
   top: 0;
   height: 100vh;
   padding: 16px 8px;
-  background: var(--sidebar-bg);
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
-  z-index: 20;
+  gap: 6px;
+  background: #213328;
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
+  z-index: 10;
 }
 
 .mark {
   width: 38px;
   height: 38px;
-  margin: 0 auto 16px;
   display: grid;
   place-items: center;
+  margin-bottom: 12px;
+  color: #d9c38d;
+  border: 1px solid rgba(255, 255, 255, 0.11);
   border-radius: 9px;
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid var(--sidebar-border);
-}
-.mark-text {
-  font-size: 0.76rem;
+  font-size: 0.75rem;
   font-weight: 800;
-  letter-spacing: 0.06em;
-  color: var(--gold);
+  letter-spacing: 0.08em;
 }
 
 .nav-group {
+  width: 100%;
   display: flex;
   flex-direction: column;
   gap: 3px;
-  width: 100%;
 }
+
 .nav-group.lower {
   margin-top: auto;
   padding-top: 10px;
-  border-top: 1px solid var(--sidebar-border);
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .rail-button {
+  width: 100%;
+  min-height: 54px;
+  padding: 7px 2px;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 3px;
-  width: 100%;
-  padding: 8px 2px 6px;
+  gap: 4px;
+  color: #91a297;
   background: transparent;
   border: 0;
-  border-radius: var(--radius-sm);
-  color: var(--sidebar-text-dim);
-  transition: all 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+  border-radius: 8px;
+  cursor: pointer;
 }
+
 .rail-button:hover {
-  color: var(--sidebar-text);
+  color: #e8eee9;
   background: rgba(255, 255, 255, 0.06);
 }
+
 .rail-button.active {
-  color: var(--sidebar-active-text);
-  background: var(--sidebar-active-bg);
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.12);
 }
 
 .nav-label {
   font-size: 0.52rem;
-  font-weight: 600;
-  letter-spacing: 0.04em;
+  font-weight: 650;
+  letter-spacing: 0.035em;
   text-transform: uppercase;
 }
 
-/* ── 5. Main Content Area ── */
 main {
   width: 100%;
   max-width: 1520px;
   margin: 0 auto;
-  padding: 24px 32px 64px;
+  padding: 24px 32px 48px;
 }
 
-header {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 20px;
+.page-header {
   margin-bottom: 20px;
 }
 
 .eyebrow {
   display: block;
+  margin-bottom: 4px;
   color: var(--sage);
-  font-size: 0.64rem;
-  font-weight: 700;
+  font-size: 0.65rem;
+  font-weight: 750;
   letter-spacing: 0.14em;
-  text-transform: uppercase;
-  margin-bottom: 3px;
 }
 
 h1 {
-  margin-bottom: 0;
-  font-size: clamp(1.5rem, 2.6vw, 2.1rem);
-  font-weight: 750;
-  letter-spacing: -0.035em;
   color: var(--text);
-  line-height: 1.15;
+  font-size: clamp(1.55rem, 2.6vw, 2.1rem);
+  line-height: 1.1;
+  letter-spacing: -0.035em;
 }
 
-.greeting {
-  color: var(--text-muted);
-  font-size: 0.84rem;
-  margin-top: 3px;
-  margin-bottom: 0;
-}
-
-.header-actions {
-  display: flex;
-  gap: 8px;
-}
-
-.arrange-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 7px 14px;
-  font-size: 0.76rem;
-  font-weight: 600;
-  color: var(--text-secondary);
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 99px;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
-  transition: all 0.15s ease;
-}
-.arrange-toggle:hover {
-  background: var(--surface-hover);
-  border-color: var(--border-strong);
-}
-
-/* ── 6. Home Dashboard Layout (2 Tiers) ── */
-.home-dashboard-layout {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-/* ── 7. Top Hero Section: Split Grid (Canvas on Left + Bounded Inspector on Right) ── */
-.dashboard-top-section {
-  width: 100%;
-  min-height: 340px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
+.home-layout {
   display: grid;
-  grid-template-columns: 1fr;
+  gap: 18px;
+}
+
+.graph-section {
+  min-height: 390px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
   overflow: hidden;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02), 0 4px 16px rgba(0, 0, 0, 0.02);
-  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-.dashboard-top-section.with-inspector {
-  grid-template-columns: minmax(0, 1fr) 360px;
-}
-
-/* Left Canvas Area */
-.canvas-main-area {
-  position: relative;
-  height: 100%;
-  min-height: 340px;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  padding: 16px 20px;
-  background: radial-gradient(circle at 50% 50%, rgba(246, 240, 230, 0.45) 0%, transparent 70%);
-}
-
-.canvas-header-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  z-index: 5;
-}
-
-.canvas-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 5px 12px;
-  background: var(--sage-light);
-  border: 1px solid var(--sage-medium);
-  border-radius: 99px;
-  color: var(--forest);
-  font-size: 0.72rem;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-}
-
-.canvas-header-right {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.canvas-hint {
-  font-size: 0.72rem;
-  color: var(--text-dim);
-  font-weight: 500;
-}
-.canvas-toggle-inspector-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 4px 10px;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 99px;
-  font-size: 0.72rem;
-  font-weight: 650;
-  color: var(--forest);
+  border-radius: 16px;
 }
 
-/* Canvas Viewport */
-.canvas-interactive-viewport {
-  position: absolute;
-  inset: 48px 20px 52px 20px;
+.graph-section.with-profile {
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 35%);
 }
 
-.canvas-network-svg {
+.graph-canvas {
+  position: relative;
+  min-height: 390px;
+  background:
+    linear-gradient(rgba(39, 60, 48, 0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(39, 60, 48, 0.025) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+
+.graph-lines {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
+  overflow: visible;
   pointer-events: none;
 }
 
-.canvas-node-pill {
+.graph-lines line {
+  stroke: #cfc8bc;
+  stroke-width: 0.32;
+  vector-effect: non-scaling-stroke;
+}
+
+.graph-node {
   position: absolute;
+  width: 10px;
+  height: 10px;
+  padding: 0;
   transform: translate(-50%, -50%);
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 7px 12px 7px 8px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 99px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
-  cursor: pointer;
-  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
-  z-index: 4;
-}
-.canvas-node-pill:hover {
-  transform: translate(-50%, -54%) scale(1.03);
-  border-color: var(--forest);
-  box-shadow: 0 6px 20px rgba(39, 60, 48, 0.12);
-}
-.canvas-node-pill.selected {
-  border-color: var(--forest);
-  background: var(--sage-light);
-  box-shadow: 0 0 0 2px var(--sage-medium);
-}
-
-.node-icon-circle {
-  width: 24px;
-  height: 24px;
+  border: 2px solid #ffffff;
   border-radius: 50%;
-  display: grid;
-  place-items: center;
-  flex-shrink: 0;
+  background: #647a6b;
+  box-shadow: 0 0 0 1px #647a6b;
+  cursor: pointer;
+  transition: transform 120ms ease, background-color 120ms ease, box-shadow 120ms ease;
 }
 
-.node-text {
+.graph-node:hover,
+.graph-node.selected {
+  transform: translate(-50%, -50%) scale(1.4);
+  background: var(--forest);
+  box-shadow: 0 0 0 1px var(--forest);
+}
+
+.profile-inspector {
+  min-width: 0;
   display: flex;
   flex-direction: column;
-  text-align: left;
-}
-.node-title {
-  font-size: 0.78rem;
-  font-weight: 700;
-  color: var(--text);
-  line-height: 1.2;
-}
-.node-sub {
-  font-size: 0.64rem;
-  color: var(--text-muted);
-}
-
-/* Quick Links Bar */
-.canvas-quick-links-bar {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  z-index: 5;
-  padding-top: 10px;
-  border-top: 1px solid var(--border-light);
-  flex-wrap: wrap;
-}
-
-.quick-links-label {
-  font-size: 0.7rem;
-  font-weight: 700;
-  color: var(--text-dim);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-}
-
-.quick-link-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 4px 10px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  font-size: 0.74rem;
-  font-weight: 600;
-  color: var(--text-secondary);
-  transition: all 0.15s ease;
-}
-.quick-link-chip:hover {
-  background: var(--surface-muted);
-  border-color: var(--border-strong);
-  color: var(--text);
-}
-
-/* Right Area: Inset Inspector Panel (STRICTLY Bounded in Top Section) */
-.top-inspector-pane {
-  background: var(--surface);
+  background: #fff;
   border-left: 1px solid var(--border);
-  display: flex;
-  flex-direction: column;
+}
+
+.profile-inspector-header {
+  min-height: 58px;
   padding: 16px 18px;
-  overflow-y: auto;
-  max-height: 380px;
-  animation: fade-in 0.2s cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-.inspector-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 10px;
-  padding-bottom: 12px;
-  border-bottom: 1px solid var(--border-light);
-}
-.inspector-title-wrap {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-.inspector-avatar {
-  width: 36px;
-  height: 36px;
-  border-radius: 8px;
-  background: var(--sage-light);
-  color: var(--forest);
-  font-weight: 800;
-  font-size: 0.78rem;
-  display: grid;
-  place-items: center;
-  border: 1px solid var(--border);
-}
-.inspector-name {
-  font-size: 0.95rem;
-  font-weight: 750;
-  color: var(--text);
-  margin: 0 0 1px;
-}
-.inspector-sub {
-  font-size: 0.72rem;
-  color: var(--text-muted);
-}
-.inspector-close-btn {
-  background: none;
-  border: none;
-  color: var(--text-dim);
-  padding: 4px;
-  border-radius: 4px;
-}
-.inspector-close-btn:hover {
-  background: var(--surface-muted);
-  color: var(--text);
-}
-
-/* Actions in Inspector */
-.inspector-actions-bar {
-  display: flex;
-  gap: 6px;
-  padding: 10px 0;
-  border-bottom: 1px solid var(--border-light);
-  flex-wrap: wrap;
-}
-.inspector-action-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 6px 10px;
-  font-size: 0.72rem;
-  font-weight: 650;
-  border-radius: var(--radius-xs);
-  border: 1px solid var(--border);
-  background: var(--surface);
-  color: var(--text-secondary);
-  transition: all 0.15s;
-}
-.inspector-action-btn:hover {
-  background: var(--surface-muted);
-  color: var(--text);
-}
-.inspector-action-btn.primary {
-  background: var(--sage-light);
-  border-color: var(--sage-medium);
-  color: var(--forest);
-}
-
-.inspector-toast {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin: 6px 0;
-  padding: 7px 10px;
-  background: var(--forest);
-  color: #ffffff;
-  border-radius: var(--radius-xs);
-  font-size: 0.72rem;
-  font-weight: 600;
-  animation: fade-in 0.15s ease;
-}
-
-.inspector-body {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding-top: 10px;
-}
-.inspector-section {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-.inspector-section-tag {
-  font-size: 0.6rem;
-  font-weight: 750;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--text-dim);
-}
-.inspector-detail-text, .inspector-notes-text {
-  font-size: 0.76rem;
-  color: var(--text-secondary);
-  line-height: 1.5;
-  margin: 0;
-}
-.inspector-activity-row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 0.74rem;
-  color: var(--text-muted);
-}
-
-/* ── 8. Section Divider ── */
-.dashboard-section-divider {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin: 2px 0;
-}
-.divider-line {
-  flex: 1;
-  height: 1px;
-  background: var(--border);
-}
-.divider-tag {
-  font-size: 0.62rem;
-  font-weight: 700;
-  letter-spacing: 0.12em;
-  color: var(--text-dim);
-  text-transform: uppercase;
-}
-
-/* ── 9. Bottom Section: List Card + Calendar ── */
-.dashboard-bottom-section {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 340px;
-  gap: 16px;
-  align-items: start;
-}
-
-/* Master List Card */
-.dashboard-list-card {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  overflow: hidden;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
-}
-
-.list-tabs-bar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--border-light);
-  background: var(--surface);
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
-.tabs-pill-group {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
-}
-
-.list-tab-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: 99px;
-  font-size: 0.76rem;
-  font-weight: 600;
-  color: var(--text-muted);
-  transition: all 0.15s ease;
-}
-.list-tab-pill:hover {
-  background: var(--surface-muted);
-  color: var(--text);
-}
-.list-tab-pill.active {
-  background: var(--forest);
-  color: #ffffff;
-  border-color: var(--forest);
-}
-
-.tab-pill-badge {
-  font-size: 0.65rem;
-  padding: 1px 6px;
-  border-radius: 99px;
-  background: rgba(0, 0, 0, 0.06);
-  color: inherit;
-}
-.list-tab-pill.active .tab-pill-badge {
-  background: rgba(255, 255, 255, 0.2);
-}
-
-.tab-customize-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 5px 10px;
-  background: none;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  font-size: 0.72rem;
-  font-weight: 600;
-  color: var(--text-muted);
-}
-.tab-customize-btn:hover {
-  background: var(--surface-muted);
-  color: var(--text);
-}
-
-/* Master List Rows */
-.list-body-container {
-  padding: 6px 0;
-  max-height: 380px;
-  overflow-y: auto;
-}
-
-.stream-row-item {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 11px 18px;
-  border-bottom: 1px solid var(--border-light);
-  cursor: pointer;
-  transition: background 0.12s ease;
-}
-.stream-row-item:last-child {
-  border-bottom: none;
-}
-.stream-row-item:hover {
-  background: var(--surface-hover);
-}
-
-.priority-indicator {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-.priority-high { background: var(--clay); }
-.priority-medium { background: var(--gold); }
-.priority-low { background: var(--sage); }
-
-.job-row-icon, .company-row-icon {
-  width: 28px;
-  height: 28px;
-  border-radius: 6px;
-  display: grid;
-  place-items: center;
-  background: var(--surface-muted);
-  color: var(--forest);
-  flex-shrink: 0;
-}
-
-.candidate-row-avatar {
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  display: grid;
-  place-items: center;
-  background: var(--sage-light);
-  color: var(--forest);
-  font-weight: 800;
-  font-size: 0.68rem;
-  flex-shrink: 0;
-}
-
-.stream-row-main {
-  flex: 1;
-  min-width: 0;
-}
-.stream-row-title {
-  font-size: 0.83rem;
-  font-weight: 650;
-  color: var(--text);
-  margin: 0 0 1px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.stream-row-desc {
-  font-size: 0.72rem;
-  color: var(--text-muted);
-  margin: 0;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.stream-priority-tag {
-  font-size: 0.62rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  padding: 2px 7px;
-  border-radius: 99px;
-  flex-shrink: 0;
-}
-.tag-high, .tag-critical { background: var(--clay-light); color: var(--clay); }
-.tag-medium { background: var(--gold-light); color: var(--gold); }
-.tag-low { background: var(--sage-light); color: var(--sage); }
-.tag-signal { background: var(--clay-light); color: var(--clay); }
-.tag-active { background: var(--sage-light); color: var(--forest); }
-
-.stream-stat-badge {
-  font-size: 0.68rem;
-  color: var(--text-dim);
-  white-space: nowrap;
-  flex-shrink: 0;
-}
-
-.stream-row-arrow {
-  color: var(--text-dim);
-  flex-shrink: 0;
-}
-
-/* ── 10. Dedicated Calendar Widget ── */
-.dashboard-calendar-card {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  overflow: hidden;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
-}
-
-.calendar-widget-card {
-  display: flex;
-  flex-direction: column;
-  padding: 16px;
-  gap: 12px;
-}
-
-.cal-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-.cal-title-wrap {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.cal-icon { color: var(--sage); }
-.cal-title {
-  font-size: 0.86rem;
-  font-weight: 700;
-  color: var(--text);
-}
-
-.cal-nav-btns {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-.cal-add-meeting-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 4px 8px;
-  background: var(--sage-light);
-  border: 1px solid var(--sage-medium);
-  border-radius: var(--radius-xs);
-  color: var(--forest);
-  font-size: 0.72rem;
-  font-weight: 700;
-  transition: all 0.15s;
-}
-.cal-add-meeting-btn:hover {
-  background: var(--sage-medium);
-  color: var(--sidebar-bg);
-}
-
-.cal-nav-btn, .cal-gcal-link {
-  width: 24px;
-  height: 24px;
-  display: grid;
-  place-items: center;
-  background: var(--surface-muted);
-  border: 1px solid var(--border);
-  border-radius: 5px;
-  color: var(--text-muted);
-}
-.cal-nav-btn:hover, .cal-gcal-link:hover {
-  background: var(--border-light);
-  color: var(--text);
-}
-
-/* Week Day Strip */
-.cal-days-strip {
-  display: grid;
-  grid-template-columns: repeat(7, 1fr);
-  gap: 4px;
-}
-
-.cal-day-pill {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 6px 2px;
-  border-radius: var(--radius-xs);
-  background: transparent;
-  border: 1px solid transparent;
-  transition: all 0.15s ease;
-}
-.cal-day-pill:hover {
-  background: var(--surface-muted);
-}
-.cal-day-pill.selected {
-  background: var(--forest);
-  color: #ffffff;
-}
-.cal-day-pill.today:not(.selected) {
-  border-color: var(--sage-medium);
-  background: var(--sage-light);
-}
-
-.cal-day-letter {
-  font-size: 0.58rem;
-  font-weight: 600;
-  color: inherit;
-  opacity: 0.8;
-}
-.cal-day-num {
-  font-size: 0.78rem;
-  font-weight: 750;
-  color: inherit;
-}
-
-/* Agenda */
-.cal-agenda {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 10px 0;
-  border-top: 1px solid var(--border-light);
-  border-bottom: 1px solid var(--border-light);
-}
-.cal-agenda-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-.cal-agenda-label {
-  font-size: 0.7rem;
-  font-weight: 700;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-.cal-agenda-count {
-  font-size: 0.65rem;
-  color: var(--text-dim);
-}
-
-.cal-slots-list {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-.cal-slot-item {
-  display: flex;
-  flex-direction: column;
-  padding: 6px 8px;
-  background: var(--surface-muted);
-  border-radius: var(--radius-xs);
-  border-left: 3px solid var(--sage);
-}
-.cal-slot-item.type-call { border-left-color: var(--sage); }
-.cal-slot-item.type-interview { border-left-color: var(--gold); }
-.cal-slot-item.type-task { border-left-color: var(--clay); }
-
-.cal-slot-top {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-.cal-slot-time {
-  font-size: 0.64rem;
-  font-weight: 600;
-  color: var(--text-dim);
-}
-.cal-meet-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  font-size: 0.6rem;
-  font-weight: 700;
-  color: var(--forest);
-  background: var(--sage-light);
-  padding: 1px 5px;
-  border-radius: 4px;
-}
-.cal-slot-label {
-  font-size: 0.74rem;
-  font-weight: 600;
-  color: var(--text);
-  margin-top: 2px;
-}
-
-/* Copy Availability Button (Apple Luxe) */
-.cal-footer {
-  padding-top: 2px;
-}
-.cal-copy-btn {
-  width: 100%;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  padding: 9px 12px;
-  background: var(--sage-light);
-  border: 1px solid var(--sage-medium);
-  border-radius: var(--radius-sm);
-  color: var(--forest);
-  font-size: 0.78rem;
-  font-weight: 700;
-  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
-}
-.cal-copy-btn:hover {
-  background: var(--sage-medium);
-  color: var(--sidebar-bg);
-}
-.cal-copy-btn.copied {
-  background: var(--forest);
-  color: #ffffff;
-  border-color: var(--forest);
-}
-
-/* Modal Overlay & Box (ref: @shadcn/dialog) */
-.cal-modal-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(25, 24, 22, 0.35);
-  backdrop-filter: blur(2px);
-  z-index: 70;
-  display: grid;
-  place-items: center;
-  animation: fade-in 0.15s ease;
-}
-.cal-modal-box {
-  width: min(440px, 92vw);
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.12);
-  padding: 20px;
-  animation: scale-up 0.18s cubic-bezier(0.16, 1, 0.3, 1);
-}
-.cal-modal-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 14px;
-}
-.cal-modal-header h3 {
-  font-size: 0.96rem;
-  font-weight: 750;
-  color: var(--text);
-  margin: 0;
-}
-.cal-modal-close {
-  background: none;
-  border: none;
-  color: var(--text-dim);
-  padding: 4px;
-}
-
-.cal-modal-form {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-.cal-modal-form label {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-.cal-modal-form span {
-  font-size: 0.72rem;
-  font-weight: 650;
-  color: var(--text-secondary);
-}
-.cal-modal-form input, .cal-modal-form select {
-  padding: 8px 10px;
-  background: var(--surface-hover);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-xs);
-  color: var(--text);
-  font-size: 0.8rem;
-}
-.cal-form-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
-}
-.cal-meet-toggle-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  padding: 8px 10px;
-  background: var(--surface-muted);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-xs);
-  font-size: 0.76rem;
-  font-weight: 650;
-  color: var(--text-muted);
-}
-.cal-meet-toggle-btn.active {
-  background: var(--sage-light);
-  border-color: var(--sage-medium);
-  color: var(--forest);
-}
-.cal-modal-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  margin-top: 8px;
-}
-.cal-btn-cancel {
-  padding: 7px 12px;
-  background: none;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-xs);
-  font-size: 0.76rem;
-  color: var(--text-muted);
-}
-.cal-btn-submit {
-  padding: 7px 14px;
-  background: var(--forest);
-  border: 1px solid var(--forest);
-  border-radius: var(--radius-xs);
-  font-size: 0.76rem;
-  font-weight: 700;
-  color: #ffffff;
-}
-
-/* ══════════════════════════════════════════════════════════════
-   11. GOOGLE WORKSPACE 3-PANE MAIL CLIENT
-   ─────────────────────────────────────────────────────────────
-   Left: Folders & Custom Labels Sub-sidebar
-   Center: Stream of Messages & Rich Reading Pane with inline reply
-   Right: Google Workspace Companion Panel (Calendar, Tasks, Keep)
-   ══════════════════════════════════════════════════════════════ */
-.gmail-workspace-container {
-  display: grid;
-  grid-template-columns: 210px minmax(0, 1fr) auto;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  min-height: 720px;
-  overflow: hidden;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02), 0 6px 20px rgba(0, 0, 0, 0.03);
-}
-
-/* ── A. Left Mailbox Sub-sidebar ── */
-.gmail-folder-sidebar {
-  background: var(--surface-hover);
-  border-right: 1px solid var(--border-light);
-  padding: 16px 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.gmail-compose-trigger {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 10px 18px;
-  background: var(--forest);
-  border: 1px solid var(--forest);
-  border-radius: 99px;
-  color: #ffffff;
-  font-size: 0.82rem;
-  font-weight: 700;
-  box-shadow: 0 2px 6px rgba(39, 60, 48, 0.2);
-  transition: all 0.15s ease;
-}
-.gmail-compose-trigger:hover {
-  background: #1e2f24;
-  box-shadow: 0 4px 12px rgba(39, 60, 48, 0.3);
-}
-
-.gmail-folder-nav {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-.gmail-nav-header {
-  font-size: 0.64rem;
-  font-weight: 750;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--text-dim);
-  padding: 4px 8px;
-  margin-bottom: 2px;
-}
-
-.gmail-folder-btn {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 7px 10px;
-  background: transparent;
-  border: 0;
-  border-radius: var(--radius-xs);
-  color: var(--text-secondary);
-  font-size: 0.78rem;
-  font-weight: 600;
-  transition: all 0.12s ease;
-}
-.gmail-folder-btn:hover {
-  background: var(--surface-muted);
-  color: var(--text);
-}
-.gmail-folder-btn.active {
-  background: var(--sage-light);
-  color: var(--forest);
-  font-weight: 750;
-}
-
-.gmail-folder-label { flex: 1; text-align: left; }
-.gmail-folder-badge {
-  font-size: 0.65rem;
-  font-weight: 750;
-  padding: 1px 6px;
-  border-radius: 99px;
-  background: var(--forest);
-  color: #ffffff;
-}
-
-/* Labels Section */
-.gmail-labels-section {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding-top: 12px;
-  border-top: 1px solid var(--border-light);
-}
-.gmail-labels-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 4px;
-}
-.gmail-tag-icon { color: var(--text-dim); }
-
-.gmail-labels-list {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-.gmail-label-btn {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 10px;
-  background: transparent;
-  border: 0;
-  border-radius: var(--radius-xs);
-  font-size: 0.76rem;
-  font-weight: 600;
-  color: var(--text-secondary);
-}
-.gmail-label-btn:hover { background: var(--surface-muted); color: var(--text); }
-.gmail-label-btn.active { background: var(--sage-light); color: var(--forest); }
-.gmail-label-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
-
-/* ── B. Center Mail Stream & Reading Pane ── */
-.gmail-main-stream {
-  display: flex;
-  flex-direction: column;
-  background: var(--surface);
-  overflow-y: auto;
-}
-
-.gmail-stream-toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 12px 18px;
-  border-bottom: 1px solid var(--border-light);
-  background: var(--surface);
-  gap: 12px;
-}
-
-.gmail-search-bar {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 14px;
-  background: var(--surface-hover);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  flex: 1;
-}
-.gmail-search-icon { color: var(--text-dim); }
-.gmail-search-bar input {
-  background: none;
-  border: none;
-  outline: none;
-  font-size: 0.8rem;
-  color: var(--text);
-  width: 100%;
-}
-
-.gmail-quick-tool-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 7px 12px;
-  background: var(--sage-light);
-  border: 1px solid var(--sage-medium);
-  border-radius: var(--radius-xs);
-  color: var(--forest);
-  font-size: 0.74rem;
-  font-weight: 700;
-}
-
-.gmail-toast-banner {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: 8px 18px;
-  padding: 8px 14px;
-  background: var(--forest);
-  color: #ffffff;
-  border-radius: var(--radius-xs);
-  font-size: 0.78rem;
-  font-weight: 600;
-  animation: fade-in 0.15s ease;
-}
-
-/* Messages List */
-.gmail-messages-list {
-  display: flex;
-  flex-direction: column;
-}
-.gmail-empty-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 80px 20px;
-  color: var(--text-dim);
-  gap: 10px;
-}
-
-.gmail-message-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px 18px;
-  border-bottom: 1px solid var(--border-light);
-  cursor: pointer;
-  transition: background 0.12s ease;
-}
-.gmail-message-row:hover { background: var(--surface-hover); }
-.gmail-message-row.unread { background: var(--sage-light); font-weight: 700; }
-
-.msg-row-left {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 150px;
-  flex-shrink: 0;
-}
-.msg-star-btn {
-  background: none;
-  border: none;
-  color: var(--text-dim);
-  padding: 2px;
-}
-.msg-star-btn.starred { color: var(--gold); }
-.msg-unread-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--forest);
-  opacity: 0;
-  flex-shrink: 0;
-}
-.msg-unread-dot.visible { opacity: 1; }
-.msg-sender {
-  font-size: 0.8rem;
-  color: var(--text);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.msg-row-body {
-  flex: 1;
-  min-width: 0;
-  font-size: 0.8rem;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.msg-subject { color: var(--text); font-weight: 600; }
-.msg-snippet { color: var(--text-muted); }
-
-.msg-row-right {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-shrink: 0;
-}
-.msg-label-pill {
-  font-size: 0.64rem;
-  font-weight: 700;
-  padding: 2px 7px;
-  border-radius: 99px;
-}
-.msg-time {
-  font-size: 0.7rem;
-  color: var(--text-dim);
-  white-space: nowrap;
-}
-
-/* Reading Pane View */
-.gmail-reading-pane {
-  display: flex;
-  flex-direction: column;
-  padding: 20px;
-  gap: 16px;
-}
-
-.reading-pane-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-.reading-back-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  background: none;
-  border: 1px solid var(--border);
-  padding: 6px 12px;
-  border-radius: var(--radius-xs);
-  font-size: 0.76rem;
-  font-weight: 650;
-  color: var(--text-secondary);
-}
-.reading-back-btn:hover { background: var(--surface-muted); color: var(--text); }
-.reading-pane-meta { display: flex; align-items: center; gap: 8px; }
-.reading-label-chip { font-size: 0.65rem; font-weight: 750; padding: 2px 8px; border-radius: 99px; }
-.reading-time { font-size: 0.72rem; color: var(--text-dim); }
-
-.reading-message-card {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 22px;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-.reading-subject { font-size: 1.15rem; font-weight: 750; color: var(--text); margin: 0; }
-.reading-sender-box {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding-bottom: 12px;
-  border-bottom: 1px solid var(--border-light);
-}
-.reading-avatar {
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  background: var(--sage-light);
-  color: var(--forest);
-  font-weight: 800;
-  display: grid;
-  place-items: center;
-}
-.reading-sender-name-row { display: flex; align-items: baseline; gap: 6px; }
-.reading-from-name { font-size: 0.84rem; font-weight: 700; color: var(--text); }
-.reading-from-email { font-size: 0.72rem; color: var(--text-dim); }
-.reading-to-text { font-size: 0.7rem; color: var(--text-muted); display: block; }
-.reading-body-text { font-size: 0.86rem; line-height: 1.65; color: var(--text-secondary); }
-
-.reading-reply-container {
-  margin-top: 10px;
-  padding: 14px;
-  background: var(--surface-muted);
-  border-radius: var(--radius);
-  border: 1px solid var(--border);
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.reading-reply-header {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 0.74rem;
-  font-weight: 700;
-  color: var(--forest);
-}
-.reading-reply-container textarea {
-  width: 100%;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-xs);
-  padding: 10px;
-  font-size: 0.82rem;
-  line-height: 1.5;
-  color: var(--text);
-  outline: none;
-  resize: vertical;
-}
-.reading-reply-footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-.reading-send-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 7px 14px;
-  background: var(--forest);
-  border: 1px solid var(--forest);
-  border-radius: var(--radius-xs);
-  font-size: 0.76rem;
-  font-weight: 700;
-  color: #ffffff;
-}
-.reading-attach-btn {
-  width: 28px;
-  height: 28px;
-  display: grid;
-  place-items: center;
-  background: none;
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  color: var(--text-muted);
-}
-
-/* ── C. Right Google Workspace Companion Rail (Calendar, Tasks, Notes) ── */
-.gmail-companion-rail {
-  display: flex;
-  background: var(--surface-hover);
-  border-left: 1px solid var(--border-light);
-}
-
-.companion-icon-strip {
-  width: 44px;
-  padding: 14px 6px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 12px;
-  border-right: 1px solid var(--border-light);
-}
-
-.companion-icon-btn {
-  width: 32px;
-  height: 32px;
-  display: grid;
-  place-items: center;
-  border-radius: 50%;
-  background: transparent;
-  border: 0;
-  color: var(--text-dim);
-  transition: all 0.15s ease;
-}
-.companion-icon-btn:hover { background: var(--surface-muted); color: var(--text); }
-.companion-icon-btn.active { background: var(--sage-light); color: var(--forest); }
-
-.companion-drawer-panel {
-  width: 270px;
-  padding: 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  animation: fade-in 0.18s ease;
-}
-
-.companion-panel-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-.companion-panel-header h3 {
-  font-size: 0.84rem;
-  font-weight: 750;
-  color: var(--text);
-  margin: 0;
-}
-.companion-close-btn {
-  background: none;
-  border: none;
-  color: var(--text-dim);
-  padding: 3px;
-}
-
-.companion-content-box {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-/* Companion Calendar */
-.companion-cal-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-.companion-cal-day { font-size: 0.74rem; font-weight: 700; color: var(--forest); }
-.companion-ext-link { font-size: 0.68rem; color: var(--text-muted); text-decoration: underline; }
-
-.companion-events-list {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.companion-event-item {
-  display: flex;
-  flex-direction: column;
-  padding: 8px 10px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-left: 3px solid var(--sage);
-  border-radius: var(--radius-xs);
-  gap: 2px;
-}
-.companion-event-item.meet { border-left-color: var(--forest); }
-.event-time { font-size: 0.64rem; font-weight: 700; color: var(--text-dim); }
-.event-title { font-size: 0.74rem; font-weight: 650; color: var(--text); }
-.event-meet-tag {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  font-size: 0.58rem;
-  font-weight: 750;
-  color: var(--forest);
-  background: var(--sage-light);
-  padding: 1px 4px;
-  border-radius: 3px;
-  width: fit-content;
-}
-
-/* Companion Tasks */
-.companion-add-task-form input {
-  width: 100%;
-  padding: 7px 10px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-xs);
-  font-size: 0.76rem;
-}
-.companion-tasks-list {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  max-height: 480px;
-  overflow-y: auto;
-}
-.companion-task-item {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  padding: 6px 8px;
-  background: var(--surface);
-  border: 1px solid var(--border-light);
-  border-radius: var(--radius-xs);
-  cursor: pointer;
-}
-.companion-task-item.done .task-title {
-  text-decoration: line-through;
-  color: var(--text-dim);
-}
-.task-text-wrap { display: flex; flex-direction: column; }
-.task-title { font-size: 0.74rem; font-weight: 600; color: var(--text); line-height: 1.3; }
-.task-due { font-size: 0.62rem; color: var(--text-dim); }
-
-/* Companion Notes */
-.companion-notes-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.companion-note-card {
-  padding: 10px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-xs);
-}
-.note-card-title { font-size: 0.76rem; font-weight: 750; color: var(--forest); margin: 0 0 4px; }
-.note-card-text { font-size: 0.72rem; color: var(--text-secondary); line-height: 1.4; margin: 0; }
-
-/* ── 12. Gmail Compose Modal ── */
-.gmail-compose-box {
-  width: min(540px, 94vw);
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.15);
-  overflow: hidden;
-}
-.gmail-compose-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 12px 16px;
-  background: var(--surface-muted);
   border-bottom: 1px solid var(--border);
 }
-.gmail-compose-title {
+
+.profile-inspector-title {
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-size: 0.8rem;
-  font-weight: 700;
+  gap: 9px;
   color: var(--forest);
 }
-.gmail-compose-form {
-  display: flex;
-  flex-direction: column;
+
+.profile-inspector-title h2 {
+  font-size: 1rem;
+  letter-spacing: -0.015em;
 }
-.gmail-from-row, .gmail-input-row {
-  display: flex;
-  align-items: center;
-  padding: 8px 16px;
-  border-bottom: 1px solid var(--border-light);
-  gap: 8px;
-}
-.gmail-row-label {
-  font-size: 0.72rem;
-  font-weight: 650;
-  color: var(--text-dim);
-  width: 45px;
-}
-.gmail-account-select, .gmail-input-row input {
-  flex: 1;
-  background: none;
-  border: none;
-  outline: none;
-  font-size: 0.82rem;
-  color: var(--text);
-}
-.gmail-body-row textarea {
-  width: 100%;
-  padding: 14px 16px;
-  background: none;
-  border: none;
-  outline: none;
-  resize: vertical;
-  font-size: 0.84rem;
-  line-height: 1.6;
-  color: var(--text);
-}
-.gmail-compose-footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 12px 16px;
-  background: var(--surface-hover);
-  border-top: 1px solid var(--border-light);
-}
-.gmail-btn-draft {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 16px;
-  background: var(--forest);
-  border: 1px solid var(--forest);
-  border-radius: var(--radius-xs);
-  color: #ffffff;
-  font-size: 0.78rem;
-  font-weight: 700;
-}
-.gmail-footer-tools {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.gmail-tool-icon {
-  width: 28px;
-  height: 28px;
+
+.icon-button {
+  width: 34px;
+  height: 34px;
   display: grid;
   place-items: center;
-  background: none;
-  border: 1px solid var(--border);
-  border-radius: 5px;
-  color: var(--text-muted);
+  color: var(--muted);
+  background: transparent;
+  border: 0;
+  border-radius: 8px;
+  cursor: pointer;
 }
 
-/* ── 13. Page Stubs ── */
-.page-stub {
-  padding: clamp(40px, 8vw, 80px) 24px;
-  text-align: center;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  background: var(--surface);
-}
-.stub-icon {
-  width: 52px;
-  height: 52px;
-  margin: 0 auto 16px;
-  display: grid;
-  place-items: center;
-  border-radius: 50%;
-  background: var(--sage-light);
-  color: var(--forest);
-}
-.page-stub h2 {
-  font-size: 1.15rem;
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  margin-bottom: 6px;
+.icon-button:hover {
   color: var(--text);
-}
-.page-stub p {
-  color: var(--text-muted);
-  max-width: 440px;
-  margin: 0 auto;
-  line-height: 1.6;
-  font-size: 0.84rem;
-}
-
-/* Companies filtered */
-.companies-filtered {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-.companies-filter-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  color: var(--clay);
-}
-.companies-filter-header h2 {
-  margin: 0;
-  font-size: 1.15rem;
-  color: var(--text);
-}
-.filter-badge {
-  font-size: 0.68rem;
-  font-weight: 650;
-  padding: 2px 9px;
-  border-radius: 99px;
-  background: var(--clay-light);
-  color: var(--clay);
-}
-.companies-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.company-card {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 16px 18px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-}
-.company-card h3 {
-  font-size: 0.88rem;
-  margin: 0 0 2px;
-}
-.company-sector {
-  font-size: 0.7rem;
-  color: var(--text-dim);
-}
-.company-signal {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  font-size: 0.76rem;
-  color: var(--clay);
-}
-
-/* Settings */
-.settings-page { padding: 0; }
-.settings-page h2 { font-size: 1.15rem; margin-bottom: 3px; }
-.settings-intro { color: var(--text-muted); font-size: 0.84rem; margin-bottom: 20px; }
-.settings-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-  gap: 12px;
-}
-.settings-group {
-  padding: 18px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-}
-.settings-group h3 {
-  font-size: 0.65rem;
-  font-weight: 750;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  color: var(--text-dim);
-  margin: 0 0 10px;
-}
-.settings-group li { margin-bottom: 2px; }
-.settings-item {
-  display: block;
-  width: 100%;
-  text-align: left;
-  padding: 7px 8px;
-  font-size: 0.8rem;
-  color: var(--text-secondary);
-  background: none;
-  border: none;
-  border-radius: var(--radius-xs);
-}
-.settings-item:hover {
   background: var(--surface-muted);
-  color: var(--text);
 }
 
-/* ── 14. Animations ── */
-@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
-@keyframes scale-up { from { transform: scale(0.96); opacity: 0; } to { transform: scale(1); opacity: 1; } }
-
-/* ── 15. Responsive ── */
-@media (max-width: 1180px) {
-  .gmail-workspace-container {
-    grid-template-columns: 180px minmax(0, 1fr) auto;
-  }
+.workspace-section,
+.page-panel {
+  min-height: 260px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
 }
-@media (max-width: 980px) {
-  .gmail-workspace-container {
-    grid-template-columns: 1fr;
+
+.section-heading {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.section-heading h2 {
+  font-size: 0.92rem;
+  letter-spacing: -0.01em;
+}
+
+.empty-state {
+  min-height: 205px;
+  padding: 28px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--dim);
+  text-align: center;
+}
+
+.empty-state.compact {
+  min-height: 0;
+  flex: 1;
+  padding: 34px 24px;
+}
+
+.empty-state.page-empty {
+  min-height: 420px;
+}
+
+.empty-state h2,
+.empty-state h3 {
+  color: #5a5751;
+  font-size: 0.92rem;
+  font-weight: 650;
+}
+
+.empty-state p {
+  max-width: 360px;
+  color: var(--muted);
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+
+.mail-shell {
+  min-height: 610px;
+  display: grid;
+  grid-template-columns: 180px minmax(270px, 0.82fr) minmax(360px, 1.18fr);
+  overflow: hidden;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+}
+
+.mail-folders,
+.mail-list-pane {
+  border-right: 1px solid var(--border);
+}
+
+.mail-folders {
+  padding: 14px 10px;
+  background: #f7f4ef;
+}
+
+.mail-folders nav {
+  display: grid;
+  gap: 3px;
+}
+
+.mail-folder {
+  width: 100%;
+  min-height: 38px;
+  padding: 0 10px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: #5f5c56;
+  background: transparent;
+  border: 0;
+  border-radius: 8px;
+  font-size: 0.79rem;
+  cursor: pointer;
+}
+
+.mail-folder:hover {
+  background: #eee9e1;
+}
+
+.mail-folder.active {
+  color: var(--forest);
+  background: #e5ece7;
+  font-weight: 700;
+}
+
+.mail-list-pane,
+.mail-reader-pane {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.mail-search {
+  min-height: 54px;
+  padding: 0 18px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: var(--dim);
+  border-bottom: 1px solid var(--border);
+  font-size: 0.78rem;
+}
+
+@media (max-width: 920px) {
+  .graph-section.with-profile {
+    grid-template-columns: minmax(0, 1fr) 300px;
   }
-  .gmail-folder-sidebar, .gmail-companion-rail {
+
+  .mail-shell {
+    grid-template-columns: 150px minmax(240px, 1fr);
+  }
+
+  .mail-reader-pane {
     display: none;
   }
-  .dashboard-bottom-section {
-    grid-template-columns: 1fr;
-  }
 }
-@media (max-width: 768px) {
-  .app-shell {
+
+@media (max-width: 680px) {
+  :root {
+    --rail-width: 58px;
+  }
+
+  main {
+    padding: 18px 14px 32px;
+  }
+
+  .rail {
+    padding-inline: 5px;
+  }
+
+  .nav-label {
+    font-size: 0.44rem;
+  }
+
+  .graph-section.with-profile {
     grid-template-columns: 1fr;
   }
-  .rail {
-    position: fixed;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    top: auto;
-    height: 56px;
-    flex-direction: row;
-    justify-content: center;
-    padding: 0 6px;
-    border-top: 1px solid var(--sidebar-border);
+
+  .profile-inspector {
+    min-height: 240px;
+    border-top: 1px solid var(--border);
+    border-left: 0;
   }
-  .mark { display: none; }
-  .nav-group { flex-direction: row; }
-  .nav-group.lower {
-    margin-top: 0;
-    margin-left: 6px;
-    padding-left: 6px;
-    padding-top: 0;
-    border-top: 0;
-    border-left: 1px solid var(--sidebar-border);
+
+  .mail-shell {
+    min-height: 560px;
+    grid-template-columns: 1fr;
   }
-  .nav-label { display: none; }
-  main { padding: 16px 16px 72px; }
+
+  .mail-folders {
+    padding: 8px;
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+    overflow-x: auto;
+  }
+
+  .mail-folders nav {
+    display: flex;
+    min-width: max-content;
+  }
+
+  .mail-folder {
+    width: auto;
+  }
+
+  .mail-list-pane {
+    border-right: 0;
+  }
 }

@@ -6,8 +6,7 @@ Build the Workbench around the recruiting work Ja actually does. This is a front
 
 Use the best qualities of both supplied references:
 
-- `docs/ui-references/northstar-dashboard.png`: clear navigation, quiet spacing, readable work areas.
-- `docs/ui-references/financial-reset-dashboard.png`: warm ivory, dark forest green, muted sage, restrained clay accents, and a more editorial mix of large and small blocks.
+- Visual direction: clear navigation, quiet spacing, readable work areas, warm ivory, dark forest green, muted sage, restrained clay accents, and an editorial mix of large and small blocks.
 
 The images are visual references, not content specifications. Do not copy their fake metrics, personal-planner language, or financial content.
 
