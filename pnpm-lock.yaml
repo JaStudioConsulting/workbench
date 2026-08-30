@@ -13,9 +13,6 @@ importers:
       '@ja/shared-types':
         specifier: workspace:*
         version: link:../../packages/shared-types
-      better-auth:
-        specifier: ^1.7.1
-        version: 1.7.1(pg@8.23.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       lucide-react:
         specifier: ^0.468.0
         version: 0.468.0(react@19.2.8)
