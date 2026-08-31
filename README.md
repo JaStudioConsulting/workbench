@@ -23,6 +23,15 @@ pnpm check
 pnpm audit --prod
 ```
 
+The ChatGPT Sites build uses the same console and pinned Recruiter authority:
+
+```sh
+pnpm build:site
+pnpm test:site
+```
+
+The Site exposes the Recruiter as the sole recruiting front door. Google Workspace and durable case data remain unavailable until their hosted connection is configured.
+
 The recruitment authority is an external private package pinned to a verified Git commit. It is not copied into this repository.
 
 See `docs/` for the current architecture, authentication, readiness, cutover,
