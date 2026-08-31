@@ -1,9 +1,10 @@
-import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
+import { createCipheriv, createDecipheriv, randomBytes, randomUUID } from "node:crypto";
 
 const PROVIDER = "google";
 const KEY_VERSION = 1;
 const CREDENTIAL_VERSION = 1;
 const MAX_ACCOUNT_ID_LENGTH = 255;
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function safeError(code, message) {
   return Object.assign(new Error(message), { code });
@@ -25,6 +26,13 @@ function validAccountId(value) {
     throw safeError("CREDENTIAL_INPUT_INVALID", "Google credential account is invalid");
   }
   return value;
+}
+
+function validGeneration(value) {
+  if (typeof value !== "string" || !UUID_PATTERN.test(value)) {
+    throw safeError("CREDENTIAL_INPUT_INVALID", "Google credential generation is invalid");
+  }
+  return value.toLowerCase();
 }
 
 function optionalToken(value, field) {
@@ -89,7 +97,7 @@ function safeStatus(row) {
   });
 }
 
-export function createGoogleCredentialStore({ pool, encryptionKey, randomBytesFn = randomBytes } = {}) {
+export function createGoogleCredentialStore({ pool, encryptionKey, randomBytesFn = randomBytes, randomUuidFn = randomUUID } = {}) {
   const key = parseEncryptionKey(encryptionKey);
   if (!pool || typeof pool.connect !== "function" || typeof pool.query !== "function") {
     throw safeError("CREDENTIAL_STORE_NOT_CONFIGURED", "Google credential storage is not configured");
@@ -100,6 +108,7 @@ export function createGoogleCredentialStore({ pool, encryptionKey, randomBytesFn
 
     async save({ accountId: rawAccountId, credentials, scopes, expiresAt } = {}) {
       const accountId = validAccountId(rawAccountId);
+      const generation = validGeneration(randomUuidFn());
       if (!credentials || typeof credentials !== "object" || Array.isArray(credentials)) throw safeError("CREDENTIAL_INPUT_INVALID", "Google credentials are invalid");
       const incoming = {
         accessToken: optionalToken(credentials.access_token, "access token"),
@@ -131,20 +140,21 @@ export function createGoogleCredentialStore({ pool, encryptionKey, randomBytesFn
         const encrypted = encryptPayload({ accountId, payload, key, randomBytesFn });
         const result = await client.query(
           `INSERT INTO google_oauth_credentials
-            (account_id, provider, ciphertext, iv, auth_tag, key_version, credential_version, scopes, expires_at)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+            (account_id, provider, ciphertext, iv, auth_tag, key_version, credential_version, generation, scopes, expires_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
            ON CONFLICT (account_id, provider) DO UPDATE SET
              ciphertext = EXCLUDED.ciphertext,
              iv = EXCLUDED.iv,
              auth_tag = EXCLUDED.auth_tag,
              key_version = EXCLUDED.key_version,
              credential_version = EXCLUDED.credential_version,
+             generation = EXCLUDED.generation,
              scopes = EXCLUDED.scopes,
              expires_at = EXCLUDED.expires_at,
              revision = google_oauth_credentials.revision + 1,
              updated_at = now()
-           RETURNING scopes, expires_at, created_at, updated_at, revision`,
-          [accountId, PROVIDER, encrypted.ciphertext, encrypted.iv, encrypted.authTag, KEY_VERSION, CREDENTIAL_VERSION, persistedScopes, persistedExpiry],
+           RETURNING generation, scopes, expires_at, created_at, updated_at, revision`,
+          [accountId, PROVIDER, encrypted.ciphertext, encrypted.iv, encrypted.authTag, KEY_VERSION, CREDENTIAL_VERSION, generation, persistedScopes, persistedExpiry],
         );
         await client.query("COMMIT");
         transactionStarted = false;
@@ -158,12 +168,79 @@ export function createGoogleCredentialStore({ pool, encryptionKey, randomBytesFn
       }
     },
 
+    async persistRefresh(rawAccountId, { generation: rawGeneration, revision, credentials } = {}) {
+      const accountId = validAccountId(rawAccountId);
+      const generation = validGeneration(rawGeneration);
+      if (!Number.isSafeInteger(revision) || revision < 1) throw safeError("CREDENTIAL_INPUT_INVALID", "Google credential revision is invalid");
+      if (!credentials || typeof credentials !== "object" || Array.isArray(credentials)) throw safeError("CREDENTIAL_INPUT_INVALID", "Google refreshed credentials are invalid");
+      const incoming = {
+        accessToken: optionalToken(credentials.access_token, "access token"),
+        refreshToken: optionalToken(credentials.refresh_token, "refresh token"),
+        tokenType: optionalToken(credentials.token_type, "token type"),
+      };
+      const safeExpiry = normalizedExpiry(credentials.expiry_date);
+      if (!incoming.accessToken && !incoming.refreshToken && !incoming.tokenType && safeExpiry === undefined) {
+        throw safeError("CREDENTIAL_INPUT_INVALID", "Google refreshed credentials are empty");
+      }
+      const client = await pool.connect().catch(() => { throw safeError("CREDENTIAL_STORE_UNAVAILABLE", "Google credential storage is unavailable"); });
+      let transactionStarted = false;
+      try {
+        await client.query("BEGIN");
+        transactionStarted = true;
+        const existingResult = await client.query(
+          "SELECT ciphertext, iv, auth_tag, key_version, credential_version, generation, scopes, expires_at, revision FROM google_oauth_credentials WHERE account_id = $1 AND provider = $2 AND generation = $3 AND revision = $4 FOR UPDATE",
+          [accountId, PROVIDER, generation, revision],
+        );
+        if (!existingResult.rows[0]) {
+          await client.query("ROLLBACK");
+          transactionStarted = false;
+          return Object.freeze({ persisted: false });
+        }
+        const existing = decryptPayload({ accountId, row: existingResult.rows[0], key });
+        const payload = {
+          version: CREDENTIAL_VERSION,
+          accessToken: incoming.accessToken || existing.accessToken || null,
+          refreshToken: incoming.refreshToken || existing.refreshToken,
+          tokenType: incoming.tokenType || existing.tokenType || "Bearer",
+        };
+        const encrypted = encryptPayload({ accountId, payload, key, randomBytesFn });
+        const result = await client.query(
+          `UPDATE google_oauth_credentials SET
+             ciphertext = $5,
+             iv = $6,
+             auth_tag = $7,
+             key_version = $8,
+             credential_version = $9,
+             expires_at = $10,
+             revision = revision + 1,
+             updated_at = now()
+           WHERE account_id = $1 AND provider = $2 AND generation = $3 AND revision = $4
+           RETURNING generation, scopes, expires_at, created_at, updated_at, revision`,
+          [accountId, PROVIDER, generation, revision, encrypted.ciphertext, encrypted.iv, encrypted.authTag, KEY_VERSION, CREDENTIAL_VERSION, safeExpiry === undefined ? existingResult.rows[0].expires_at ?? null : safeExpiry],
+        );
+        if (!result.rows[0]) {
+          await client.query("ROLLBACK");
+          transactionStarted = false;
+          return Object.freeze({ persisted: false });
+        }
+        await client.query("COMMIT");
+        transactionStarted = false;
+        return Object.freeze({ persisted: true, revision: Number(result.rows[0].revision) });
+      } catch (error) {
+        if (transactionStarted) await client.query("ROLLBACK").catch(() => {});
+        if (error?.code && ["CREDENTIAL_INPUT_INVALID", "CREDENTIAL_DECRYPTION_FAILED"].includes(error.code)) throw error;
+        throw safeError("CREDENTIAL_STORE_UNAVAILABLE", "Google credential storage is unavailable");
+      } finally {
+        client.release();
+      }
+    },
+
     async load(rawAccountId) {
       const accountId = validAccountId(rawAccountId);
       let result;
       try {
         result = await pool.query(
-          "SELECT ciphertext, iv, auth_tag, key_version, credential_version, scopes, expires_at, created_at, updated_at, revision FROM google_oauth_credentials WHERE account_id = $1 AND provider = $2",
+          "SELECT ciphertext, iv, auth_tag, key_version, credential_version, generation, scopes, expires_at, created_at, updated_at, revision FROM google_oauth_credentials WHERE account_id = $1 AND provider = $2",
           [accountId, PROVIDER],
         );
       } catch { throw safeError("CREDENTIAL_STORE_UNAVAILABLE", "Google credential storage is unavailable"); }
@@ -171,6 +248,7 @@ export function createGoogleCredentialStore({ pool, encryptionKey, randomBytesFn
       const payload = decryptPayload({ accountId, row: result.rows[0], key });
       return Object.freeze({
         credentials: Object.freeze({ access_token: payload.accessToken, refresh_token: payload.refreshToken, token_type: payload.tokenType }),
+        generation: validGeneration(result.rows[0].generation),
         revision: Number(result.rows[0].revision),
         ...safeStatus(result.rows[0]),
       });
@@ -187,13 +265,15 @@ export function createGoogleCredentialStore({ pool, encryptionKey, randomBytesFn
       } catch { throw safeError("CREDENTIAL_STORE_UNAVAILABLE", "Google credential storage is unavailable"); }
     },
 
-    async disconnect(rawAccountId, { revision } = {}) {
+    async disconnect(rawAccountId, { generation: rawGeneration, revision } = {}) {
       const accountId = validAccountId(rawAccountId);
-      if (revision !== undefined && (!Number.isSafeInteger(revision) || revision < 1)) throw safeError("CREDENTIAL_INPUT_INVALID", "Google credential revision is invalid");
+      const revisionBound = rawGeneration !== undefined || revision !== undefined;
+      const generation = revisionBound ? validGeneration(rawGeneration) : undefined;
+      if (revisionBound && (!Number.isSafeInteger(revision) || revision < 1)) throw safeError("CREDENTIAL_INPUT_INVALID", "Google credential revision is invalid");
       try {
-        const result = revision === undefined
+        const result = !revisionBound
           ? await pool.query("DELETE FROM google_oauth_credentials WHERE account_id = $1 AND provider = $2", [accountId, PROVIDER])
-          : await pool.query("DELETE FROM google_oauth_credentials WHERE account_id = $1 AND provider = $2 AND revision = $3", [accountId, PROVIDER, revision]);
+          : await pool.query("DELETE FROM google_oauth_credentials WHERE account_id = $1 AND provider = $2 AND generation = $3 AND revision = $4", [accountId, PROVIDER, generation, revision]);
         return Object.freeze({ disconnected: result.rowCount > 0 });
       } catch { throw safeError("CREDENTIAL_STORE_UNAVAILABLE", "Google credential storage is unavailable"); }
     },

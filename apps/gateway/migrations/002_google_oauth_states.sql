@@ -14,4 +14,5 @@ CREATE INDEX google_oauth_states_expires_at_idx
   ON google_oauth_states (expires_at);
 
 ALTER TABLE google_oauth_credentials
+  ADD COLUMN generation uuid NOT NULL DEFAULT gen_random_uuid(),
   ADD COLUMN revision bigint NOT NULL DEFAULT 1 CHECK (revision > 0);

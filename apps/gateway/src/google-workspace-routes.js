@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
-import { GoogleWorkspaceStartSchema, GoogleWorkspaceStatusSchema, errorEnvelope } from "@ja/shared-types";
+import { GoogleCalendarUpcomingSchema, GoogleWorkspaceStartSchema, GoogleWorkspaceStatusSchema, errorEnvelope } from "@ja/shared-types";
 import { parseExactHttpsOrigins } from "./auth.js";
+import { readUpcomingGoogleCalendarEvents } from "./google-calendar.js";
 import { createGoogleCredentialStore } from "./google-credential-store.js";
 import { createGoogleOAuthStateStore } from "./google-oauth-state-store.js";
 import {
@@ -52,6 +53,21 @@ function integrationErrorCode(error) {
   return ["GOOGLE_WORKSPACE_UNAVAILABLE", "Google Workspace authorization is unavailable", 503];
 }
 
+function calendarErrorCode(error) {
+  const status = Number(error?.response?.status ?? error?.code);
+  const providerCode = error?.response?.data?.error;
+  if (error?.code === "GOOGLE_CALENDAR_CONNECTION_CHANGED") {
+    return ["GOOGLE_WORKSPACE_CONNECTION_CHANGED", "Google Workspace connection changed; retry Calendar", 409];
+  }
+  if (status === 401 || providerCode === "invalid_grant" || error?.code === "invalid_grant") {
+    return ["GOOGLE_WORKSPACE_REAUTH_REQUIRED", "Google Calendar must be connected again", 401];
+  }
+  if (status === 403 || providerCode === "insufficientPermissions") {
+    return ["GOOGLE_CALENDAR_SCOPE_REQUIRED", "Google Calendar read-only access is not connected", 403];
+  }
+  return ["GOOGLE_CALENDAR_UNAVAILABLE", "Upcoming Google Calendar events are unavailable", 502];
+}
+
 export function createGoogleWorkspaceHandlers({
   env = process.env,
   auth,
@@ -59,6 +75,7 @@ export function createGoogleWorkspaceHandlers({
   stateStore,
   randomBytesFn = randomBytes,
   oauth = {},
+  calendar = {},
 } = {}) {
   try {
     if (!auth?.enabled || !auth.pool || typeof auth.isApprovedEmail !== "function") throw new Error("auth unavailable");
@@ -71,6 +88,7 @@ export function createGoogleWorkspaceHandlers({
     const exchangeCode = oauth.exchangeCode ?? exchangeGoogleWorkspaceAuthorizationCode;
     const verifyGrant = oauth.verifyGrant ?? verifyGoogleWorkspaceGrant;
     const revokeCredentials = oauth.revokeCredentials ?? revokeGoogleWorkspaceCredentials;
+    const readUpcomingEvents = calendar.readUpcomingEvents ?? readUpcomingGoogleCalendarEvents;
 
     return Object.freeze({
       enabled: true,
@@ -141,6 +159,38 @@ export function createGoogleWorkspaceHandlers({
         }
       },
 
+      async upcomingEvents(req, res) {
+        const binding = sessionBinding(req);
+        if (!binding) return respondError(res, "UNAUTHORIZED", "A valid session is required", 401);
+        let connection;
+        try {
+          connection = await credentials.load(binding.userId);
+        } catch {
+          return respondError(res, "GOOGLE_WORKSPACE_UNAVAILABLE", "Google Workspace authorization is unavailable", 503);
+        }
+        if (!connection) return respondError(res, "GOOGLE_WORKSPACE_NOT_CONNECTED", "Google Calendar is not connected", 409);
+        if (!Array.isArray(connection.scopes) || !connection.scopes.includes(CALENDAR_SCOPE)) {
+          return respondError(res, "GOOGLE_CALENDAR_SCOPE_REQUIRED", "Google Calendar read-only access is not connected", 403);
+        }
+        try {
+          const result = await readUpcomingEvents({
+            env,
+            credentials: {
+              ...connection.credentials,
+              ...(connection.expiresAt instanceof Date ? { expiry_date: connection.expiresAt.getTime() } : {}),
+            },
+            async persistRefresh(tokens) {
+              const persisted = await credentials.persistRefresh(binding.userId, { generation: connection.generation, revision: connection.revision, credentials: tokens });
+              if (!persisted.persisted) throw Object.assign(new Error("Google Workspace connection changed"), { code: "GOOGLE_CALENDAR_CONNECTION_CHANGED" });
+            },
+          });
+          return noStore(res).json(GoogleCalendarUpcomingSchema.parse(result));
+        } catch (error) {
+          const [code, message, status] = calendarErrorCode(error);
+          return respondError(res, code, message, status);
+        }
+      },
+
       async disconnect(req, res) {
         const binding = sessionBinding(req);
         if (!binding) return respondError(res, "UNAUTHORIZED", "A valid session is required", 401);
@@ -157,7 +207,7 @@ export function createGoogleWorkspaceHandlers({
           return respondError(res, code, message, status);
         }
         try {
-          const result = await credentials.disconnect(binding.userId, { revision: connection.revision });
+          const result = await credentials.disconnect(binding.userId, { generation: connection.generation, revision: connection.revision });
           if (!result.disconnected) return respondError(res, "GOOGLE_WORKSPACE_CONNECTION_CHANGED", "Google Workspace connection changed; retry disconnect", 409);
           return noStore(res).json(GoogleWorkspaceStatusSchema.parse({ connected: false }));
         } catch {

@@ -23,6 +23,7 @@ class FakePool {
         if (sql === "BEGIN" || sql === "COMMIT" || sql === "ROLLBACK") return { rows: [], rowCount: 0 };
         if (sql.includes("FOR UPDATE")) {
           const row = pool.rows.get(pool.key(values[0], values[1]));
+          if (values.length === 4 && (row?.generation !== values[2] || row?.revision !== values[3])) return { rows: [], rowCount: 0 };
           return { rows: row ? [row] : [], rowCount: row ? 1 : 0 };
         }
         if (sql.startsWith("INSERT INTO")) {
@@ -31,9 +32,22 @@ class FakePool {
           const prior = pool.rows.get(pool.key(values[0], values[1]));
           const row = {
             account_id: values[0], provider: values[1], ciphertext: values[2], iv: values[3], auth_tag: values[4],
-            key_version: values[5], credential_version: values[6], scopes: values[7], expires_at: values[8],
+            key_version: values[5], credential_version: values[6], generation: values[7], scopes: values[8], expires_at: values[9],
             revision: (prior?.revision || 0) + 1,
             created_at: prior?.created_at || now, updated_at: now,
+          };
+          pool.rows.set(pool.key(values[0], values[1]), row);
+          return { rows: [row], rowCount: 1 };
+        }
+        if (sql.startsWith("UPDATE google_oauth_credentials")) {
+          const prior = pool.rows.get(pool.key(values[0], values[1]));
+          if (!prior || prior.generation !== values[2] || prior.revision !== values[3]) return { rows: [], rowCount: 0 };
+          const row = {
+            ...prior,
+            ciphertext: values[4], iv: values[5], auth_tag: values[6],
+            key_version: values[7], credential_version: values[8], expires_at: values[9],
+            revision: prior.revision + 1,
+            updated_at: new Date("2026-08-31T00:00:01Z"),
           };
           pool.rows.set(pool.key(values[0], values[1]), row);
           return { rows: [row], rowCount: 1 };
@@ -48,7 +62,7 @@ class FakePool {
     this.commands.push({ sql, values });
     const key = this.key(values[0], values[1]);
     if (sql.startsWith("DELETE")) {
-      if (values.length === 3 && this.rows.get(key)?.revision !== values[2]) return { rows: [], rowCount: 0 };
+      if (values.length === 4 && (this.rows.get(key)?.generation !== values[2] || this.rows.get(key)?.revision !== values[3])) return { rows: [], rowCount: 0 };
       const existed = this.rows.delete(key);
       return { rows: [], rowCount: existed ? 1 : 0 };
     }
@@ -109,6 +123,59 @@ test("access-only refresh retains the durable refresh token and a new refresh to
   }
 });
 
+test("revision-bound refresh persists access changes without recreating a disconnected credential", async () => {
+  const pool = new FakePool();
+  const store = createGoogleCredentialStore({ pool, encryptionKey });
+  await store.save({ ...credentialsFor("synthetic-user-a", { access_token: "access-1", refresh_token: "refresh-1" }), scopes: ["calendar.readonly"], expiresAt: 1 });
+  let loaded = await store.load("synthetic-user-a");
+  const persisted = await store.persistRefresh("synthetic-user-a", {
+    generation: loaded.generation,
+    revision: loaded.revision,
+    credentials: { access_token: "access-2", expiry_date: 2 },
+  });
+  assert.equal(persisted.persisted, true);
+  loaded = await store.load("synthetic-user-a");
+  assert.deepEqual(loaded.credentials, { access_token: "access-2", refresh_token: "refresh-1", token_type: "Bearer" });
+  assert.equal(loaded.expiresAt.getTime(), 2);
+  const staleGeneration = loaded.generation;
+  const staleRevision = loaded.revision;
+  await store.disconnect("synthetic-user-a", { generation: staleGeneration, revision: staleRevision });
+  assert.deepEqual(await store.persistRefresh("synthetic-user-a", { generation: staleGeneration, revision: staleRevision, credentials: { refresh_token: "refresh-2" } }), { persisted: false });
+  assert.equal(await store.load("synthetic-user-a"), null);
+  assert.equal(pool.commands.filter(({ sql }) => sql.startsWith("INSERT INTO")).length, 1);
+});
+
+test("revision-bound refresh rotates a returned refresh token and rejects stale revisions", async () => {
+  const pool = new FakePool();
+  const store = createGoogleCredentialStore({ pool, encryptionKey });
+  await store.save(credentialsFor("synthetic-user-a", { access_token: "access-1", refresh_token: "refresh-1" }));
+  const first = await store.load("synthetic-user-a");
+  assert.equal((await store.persistRefresh("synthetic-user-a", { generation: first.generation, revision: first.revision, credentials: { access_token: "access-2", refresh_token: "refresh-2" } })).persisted, true);
+  assert.deepEqual((await store.load("synthetic-user-a")).credentials, { access_token: "access-2", refresh_token: "refresh-2", token_type: "Bearer" });
+  assert.deepEqual(await store.persistRefresh("synthetic-user-a", { generation: first.generation, revision: first.revision, credentials: { access_token: "stale-access" } }), { persisted: false });
+  assert.equal((await store.load("synthetic-user-a")).credentials.access_token, "access-2");
+});
+
+test("disconnect and reconnect rejects a stale refresh from the prior credential generation", async () => {
+  const pool = new FakePool();
+  const store = createGoogleCredentialStore({ pool, encryptionKey });
+  await store.save(credentialsFor("synthetic-user-a", { refresh_token: "old-refresh" }));
+  const stale = await store.load("synthetic-user-a");
+  assert.deepEqual(await store.disconnect("synthetic-user-a", { generation: stale.generation, revision: stale.revision }), { disconnected: true });
+
+  await store.save(credentialsFor("synthetic-user-a", { refresh_token: "new-refresh" }));
+  const reconnected = await store.load("synthetic-user-a");
+  assert.equal(reconnected.revision, stale.revision);
+  assert.notEqual(reconnected.generation, stale.generation);
+  assert.deepEqual(await store.persistRefresh("synthetic-user-a", {
+    generation: stale.generation,
+    revision: stale.revision,
+    credentials: { access_token: "stale-access", refresh_token: "stale-refresh" },
+  }), { persisted: false });
+  assert.deepEqual(await store.disconnect("synthetic-user-a", { generation: stale.generation, revision: stale.revision }), { disconnected: false });
+  assert.deepEqual((await store.load("synthetic-user-a")).credentials, { access_token: null, refresh_token: "new-refresh", token_type: "Bearer" });
+});
+
 test("ciphertext is bound to one account and tampering fails safely", async () => {
   const pool = new FakePool();
   const store = createGoogleCredentialStore({ pool, encryptionKey });
@@ -154,7 +221,7 @@ test("revision-bound disconnect cannot delete a newer credential", async () => {
   await store.save(credentialsFor("synthetic-user-a", { refresh_token: "refresh-a" }));
   const loaded = await store.load("synthetic-user-a");
   await store.save(credentialsFor("synthetic-user-a", { access_token: "new-access" }));
-  assert.deepEqual(await store.disconnect("synthetic-user-a", { revision: loaded.revision }), { disconnected: false });
+  assert.deepEqual(await store.disconnect("synthetic-user-a", { generation: loaded.generation, revision: loaded.revision }), { disconnected: false });
   assert.equal((await store.status("synthetic-user-a")).connected, true);
 });
 
@@ -168,6 +235,7 @@ test("migration stores no plaintext tokens, client secrets, or email column", as
 
 test("state migration adds optimistic credential revision without token columns", async () => {
   const sql = await readFile(new URL("../migrations/002_google_oauth_states.sql", import.meta.url), "utf8");
+  assert.match(sql, /ADD COLUMN generation uuid NOT NULL DEFAULT gen_random_uuid\(\)/i);
   assert.match(sql, /ADD COLUMN revision bigint/i);
   assert.doesNotMatch(sql, /access_token|refresh_token|id_token|client_secret/i);
 });
