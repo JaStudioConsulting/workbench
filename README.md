@@ -25,5 +25,5 @@ pnpm audit --prod
 
 The recruitment authority is an external private package pinned to a verified Git commit. It is not copied into this repository.
 
-See `docs/` for the current architecture, authentication, deployment, cutover,
+See `docs/` for the current architecture, authentication, readiness, cutover,
 host-compatibility, private-package, and UI boundaries.

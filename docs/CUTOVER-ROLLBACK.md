@@ -12,13 +12,13 @@
 
 ## Cutover
 
-- [ ] Deploy console and gateway as separate projects.
+- [ ] Deploy the console and gateway only to their separately approved hosts.
 - [ ] Confirm `/healthz`, authentication failure behavior, MCP discovery, and draft-only controls.
 - [ ] Repoint no existing AI host or workflow until its compatibility check is approved.
 
 ## Rollback
 
-- [ ] Disable or roll back the two new Vercel projects.
+- [ ] Disable or roll back the console site and gateway deployment.
 - [ ] Remove their host secrets and OAuth redirect origins if necessary.
 - [ ] Do not alter existing recruiter processes, Gmail, Loxo, Tracker, or original Workbench data.
 - [ ] Record what was tested and the reason for rollback without retaining candidate data.
