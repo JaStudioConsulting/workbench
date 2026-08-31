@@ -5,7 +5,7 @@ import { createGoogleWorkspaceHandlers } from "./src/google-workspace-routes.js"
 import { prepareAfterCallWorkflow } from "./src/after-call.js";
 import { createMcpRequestHandler } from "./src/mcp.js";
 import { createReadOnlyNeo4jAdapter } from "./src/neo4j.js";
-import { discoverMcp, loadRecruitmentAuthority } from "./src/recruitment-package.js";
+import { discoverMcp, loadRecruitmentContext } from "./src/recruitment-package.js";
 
 function respondError(res, code, message, status = 503) {
   return res.status(status).json(errorEnvelope(code, message));
@@ -50,7 +50,7 @@ function requireSession(auth, { authoritative = false, requireStableUser = false
 
 export async function createApp({
   env = process.env,
-  authorityLoader = loadRecruitmentAuthority,
+  recruitmentContextLoader = loadRecruitmentContext,
   authConfig,
   googleWorkspaceConfig,
   googleWorkspaceOptions,
@@ -60,6 +60,15 @@ export async function createApp({
   const app = express();
   app.disable("x-powered-by");
   const configuredAuth = authConfig ?? await createConfiguredAuth(env);
+  let recruitmentContext = null;
+  let mcpHandler = null;
+  try {
+    recruitmentContext = await recruitmentContextLoader();
+    mcpHandler = await mcpHandlerFactory({ context: recruitmentContext });
+  } catch {
+    // Keep public health and safety routes available while every recruiter route fails closed.
+  }
+  const recruiterAuthority = recruitmentContext?.authority;
   app.use(createCorsGuard(env));
 
   // Better Auth must receive raw requests. JSON parsing is intentionally mounted after it.
@@ -92,20 +101,18 @@ export async function createApp({
   app.get("/api/google-workspace/oauth/callback", authoritativeGoogleSession, googleWorkspaceHandler("callback"));
   app.post("/api/google-workspace/disconnect", authoritativeGoogleSession, googleWorkspaceHandler("disconnect"));
   app.get("/api/mcp/discovery", authenticated, async (_req, res) => {
-    try { return res.json(McpDiscoverySchema.parse(discoverMcp(await authorityLoader()))); }
+    try { return res.json(McpDiscoverySchema.parse(discoverMcp(recruiterAuthority))); }
     catch { return respondError(res, "RECRUITER_UNAVAILABLE", "Recruitment authority is unavailable"); }
   });
   app.post("/api/workflows/after-call/prepare", authenticated, async (req, res) => {
-    let authority;
-    try {
-      authority = await authorityLoader();
-    } catch { return respondError(res, "RECRUITER_UNAVAILABLE", "Recruitment authority is unavailable"); }
-    try { return res.status(202).json(prepareAfterCallWorkflow(req.body, authority)); }
+    if (!recruiterAuthority) return respondError(res, "RECRUITER_UNAVAILABLE", "Recruitment authority is unavailable");
+    try { return res.status(202).json(prepareAfterCallWorkflow(req.body, recruiterAuthority)); }
     catch (error) { return respondError(res, "INVALID_INPUT", error instanceof Error ? error.message : "Invalid workflow input", 400); }
   });
   app.all("/mcp", authenticated, async (req, res) => {
     if (!["GET", "POST"].includes(req.method)) return res.status(405).end();
-    try { return await (await mcpHandlerFactory())(req, res); }
+    if (!mcpHandler) return respondError(res, "RECRUITER_UNAVAILABLE", "Recruitment authority is unavailable");
+    try { return await mcpHandler(req, res); }
     catch { return respondError(res, "RECRUITER_UNAVAILABLE", "Recruitment authority is unavailable"); }
   });
   return app;

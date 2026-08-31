@@ -12,6 +12,13 @@ import { createMemoryTestStorage, requireDurableStorage } from "../src/storage.j
 const browserOrigin = "https://console.test";
 const testEnv = { APP_TRUSTED_ORIGINS: browserOrigin };
 const testAuthority = async () => ({ id: "recruiter", routerPath: "recruiter/SKILL.md", capabilities: [] });
+const testRecruitmentContext = async () => ({
+  authority: await testAuthority(),
+  pkg: {
+    readSkillText: async () => "# Recruiter\nThe sole recruiting front door.",
+    assertSkillFile: async () => {},
+  },
+});
 const authenticated = {
   enabled: true,
   handler: (_req, res) => res.status(404).end(),
@@ -42,7 +49,7 @@ async function request(app, method, path, { body, headers = {} } = {}) {
 }
 
 test("public routes work server-to-server while browser CORS is strict", async () => {
-  const app = await createApp({ env: testEnv, authorityLoader: testAuthority });
+  const app = await createApp({ env: testEnv, recruitmentContextLoader: testRecruitmentContext });
   assert.equal((await request(app, "GET", "/healthz")).status, 200);
   const allowed = await request(app, "OPTIONS", "/mcp", { headers: { origin: browserOrigin } });
   assert.equal(allowed.status, 204);
@@ -65,9 +72,9 @@ test("auth malformed environment fails closed without throwing", async () => {
 });
 
 test("every non-public API route requires Better Auth session", async () => {
-  const noAuth = await createApp({ env: testEnv, authorityLoader: testAuthority });
+  const noAuth = await createApp({ env: testEnv, recruitmentContextLoader: testRecruitmentContext });
   assert.equal((await request(noAuth, "GET", "/api/mcp/discovery")).status, 503);
-  const app = await createApp({ env: testEnv, authorityLoader: testAuthority, authConfig: authenticated });
+  const app = await createApp({ env: testEnv, recruitmentContextLoader: testRecruitmentContext, authConfig: authenticated });
   assert.equal((await request(app, "GET", "/api/mcp/discovery")).status, 401);
   assert.equal((await request(app, "POST", "/mcp", { body: { jsonrpc: "2.0", id: 1, method: "initialize", params: {} } })).status, 401);
   assert.equal((await request(app, "GET", "/api/mcp/discovery", { headers: { authorization: "Bearer synthetic-unapproved" } })).status, 403);
@@ -89,6 +96,49 @@ test("MCP initializes and lists only recruiter plus read-only status", async () 
   assert.equal(router.status, 200);
   assert.match(router.body.result.content[0].text, /recruiter/i);
   assert.doesNotMatch(JSON.stringify(listed.body), /gmail|loxo|submit|approve|neo4j/i);
+});
+
+test("Recruiter context loads once at startup and only the requested guide loads later", async () => {
+  let contextLoads = 0;
+  const readPaths = [];
+  const assertedPaths = [];
+  const context = {
+    authority: {
+      id: "recruiter",
+      routerPath: "recruiter/SKILL.md",
+      capabilities: [{ id: "vet", path: "recruiter/modules/vet/GUIDE.md", status: "active" }],
+    },
+    pkg: {
+      readSkillText: async (path) => {
+        readPaths.push(path);
+        if (path === "recruiter/SKILL.md") return "# Recruiter\nThe sole recruiting front door.";
+        if (path === "recruiter/modules/vet/GUIDE.md") return "# Vet guide\nReturn a source-backed verdict.";
+        throw new Error(`Unexpected skill read: ${path}`);
+      },
+      assertSkillFile: async (path) => { assertedPaths.push(path); },
+    },
+  };
+  const app = await createApp({
+    env: testEnv,
+    authConfig: authenticated,
+    recruitmentContextLoader: async () => { contextLoads += 1; return context; },
+  });
+  const headers = { authorization: "Bearer synthetic-review", accept: "application/json, text/event-stream" };
+
+  assert.equal(contextLoads, 1);
+  assert.deepEqual(readPaths, ["recruiter/SKILL.md"]);
+  const discovery = await request(app, "GET", "/api/mcp/discovery", { headers });
+  assert.deepEqual(discovery.body.tools.map((tool) => tool.id), ["recruiter", "workspace_status"]);
+  const listed = await request(app, "POST", "/mcp", { headers, body: { jsonrpc: "2.0", id: 1, method: "tools/list", params: {} } });
+  assert.deepEqual(listed.body.result.tools.map((tool) => tool.name).sort(), ["recruiter", "workspace_status"]);
+  const routerOnly = await request(app, "POST", "/mcp", { headers, body: { jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "recruiter", arguments: {} } } });
+  assert.match(routerOnly.body.result.content[0].text, /sole recruiting front door/i);
+  const routed = await request(app, "POST", "/mcp", { headers, body: { jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "recruiter", arguments: { capability: "vet" } } } });
+  assert.match(routed.body.result.content[0].text, /Vet guide/);
+
+  assert.equal(contextLoads, 1);
+  assert.deepEqual(readPaths, ["recruiter/SKILL.md", "recruiter/modules/vet/GUIDE.md"]);
+  assert.deepEqual(assertedPaths, ["recruiter/modules/vet/GUIDE.md"]);
 });
 
 test("external package manifest and every packaged asset validate", async () => {

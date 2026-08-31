@@ -5,8 +5,8 @@ import { loadRecruitmentContext } from "./recruitment-package.js";
 
 function textResult(text) { return { content: [{ type: "text", text }] }; }
 
-export async function createMcpRequestHandler({ contextLoader = loadRecruitmentContext } = {}) {
-  const { authority, pkg } = await contextLoader();
+export async function createMcpRequestHandler({ context, contextLoader = loadRecruitmentContext } = {}) {
+  const { authority, pkg } = context ?? await contextLoader();
   if (authority.id !== "recruiter") throw new Error("Recruiter authority is required");
   const routerText = await pkg.readSkillText(authority.routerPath);
   return async function handleMcpRequest(req, res) {
