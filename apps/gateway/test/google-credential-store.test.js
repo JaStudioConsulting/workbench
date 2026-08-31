@@ -32,6 +32,7 @@ class FakePool {
           const row = {
             account_id: values[0], provider: values[1], ciphertext: values[2], iv: values[3], auth_tag: values[4],
             key_version: values[5], credential_version: values[6], scopes: values[7], expires_at: values[8],
+            revision: (prior?.revision || 0) + 1,
             created_at: prior?.created_at || now, updated_at: now,
           };
           pool.rows.set(pool.key(values[0], values[1]), row);
@@ -47,6 +48,7 @@ class FakePool {
     this.commands.push({ sql, values });
     const key = this.key(values[0], values[1]);
     if (sql.startsWith("DELETE")) {
+      if (values.length === 3 && this.rows.get(key)?.revision !== values[2]) return { rows: [], rowCount: 0 };
       const existed = this.rows.delete(key);
       return { rows: [], rowCount: existed ? 1 : 0 };
     }
@@ -146,10 +148,26 @@ test("disconnect deletes only the requested account and is idempotent", async ()
   assert.equal((await store.status("synthetic-user-b")).connected, true);
 });
 
+test("revision-bound disconnect cannot delete a newer credential", async () => {
+  const pool = new FakePool();
+  const store = createGoogleCredentialStore({ pool, encryptionKey });
+  await store.save(credentialsFor("synthetic-user-a", { refresh_token: "refresh-a" }));
+  const loaded = await store.load("synthetic-user-a");
+  await store.save(credentialsFor("synthetic-user-a", { access_token: "new-access" }));
+  assert.deepEqual(await store.disconnect("synthetic-user-a", { revision: loaded.revision }), { disconnected: false });
+  assert.equal((await store.status("synthetic-user-a")).connected, true);
+});
+
 test("migration stores no plaintext tokens, client secrets, or email column", async () => {
   const sql = await readFile(new URL("../migrations/001_google_oauth_credentials.sql", import.meta.url), "utf8");
   assert.match(sql, /PRIMARY KEY \(account_id, provider\)/);
   assert.match(sql, /octet_length\(iv\) = 12/);
   assert.match(sql, /octet_length\(auth_tag\) = 16/);
   assert.doesNotMatch(sql, /access_token|refresh_token|id_token|client_secret|\bemail\b/i);
+});
+
+test("state migration adds optimistic credential revision without token columns", async () => {
+  const sql = await readFile(new URL("../migrations/002_google_oauth_states.sql", import.meta.url), "utf8");
+  assert.match(sql, /ADD COLUMN revision bigint/i);
+  assert.doesNotMatch(sql, /access_token|refresh_token|id_token|client_secret/i);
 });

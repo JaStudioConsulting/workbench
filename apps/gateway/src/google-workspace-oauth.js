@@ -3,6 +3,8 @@ import { google } from "googleapis";
 
 const CONFIG_ERROR_CODE = "GOOGLE_WORKSPACE_OAUTH_CONFIG_INVALID";
 const INPUT_ERROR_CODE = "GOOGLE_WORKSPACE_OAUTH_INPUT_INVALID";
+const IDENTITY_ERROR_CODE = "GOOGLE_WORKSPACE_IDENTITY_INVALID";
+const SCOPE_ERROR_CODE = "GOOGLE_WORKSPACE_SCOPE_INVALID";
 const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
 
 export const GOOGLE_WORKSPACE_SCOPES = Object.freeze({
@@ -13,6 +15,12 @@ export const GOOGLE_WORKSPACE_SCOPES = Object.freeze({
 });
 
 const KNOWN_STAGES = new Set(Object.keys(GOOGLE_WORKSPACE_SCOPES));
+const ALLOWED_FIRST_GRANT_SCOPES = new Set([
+  ...GOOGLE_WORKSPACE_SCOPES.identity,
+  ...GOOGLE_WORKSPACE_SCOPES.calendar,
+  "https://www.googleapis.com/auth/userinfo.email",
+  "https://www.googleapis.com/auth/userinfo.profile",
+]);
 
 function configurationError(field) {
   return Object.assign(new Error(`Google Workspace OAuth is not configured: ${field}`), { code: CONFIG_ERROR_CODE });
@@ -20,6 +28,14 @@ function configurationError(field) {
 
 function inputError(message) {
   return Object.assign(new Error(message), { code: INPUT_ERROR_CODE });
+}
+
+function identityError() {
+  return Object.assign(new Error("Google Workspace identity could not be verified"), { code: IDENTITY_ERROR_CODE });
+}
+
+function scopeError() {
+  return Object.assign(new Error("Google Workspace authorization did not grant the required read-only access"), { code: SCOPE_ERROR_CODE });
 }
 
 function requiredEnvironmentValue(env, field) {
@@ -44,13 +60,16 @@ export function readGoogleWorkspaceOAuthConfig(env = process.env) {
   const clientId = requiredEnvironmentValue(env, "GOOGLE_WORKSPACE_CLIENT_ID");
   const clientSecret = requiredEnvironmentValue(env, "GOOGLE_WORKSPACE_CLIENT_SECRET");
   const redirectValue = requiredEnvironmentValue(env, "GOOGLE_WORKSPACE_REDIRECT_URI");
+  const returnValue = requiredEnvironmentValue(env, "GOOGLE_WORKSPACE_RETURN_URI");
   const redirectUri = validRedirectUri(redirectValue);
+  const returnUri = validRedirectUri(returnValue);
 
   if (!clientId.endsWith(".apps.googleusercontent.com")) throw configurationError("GOOGLE_WORKSPACE_CLIENT_ID");
   if (clientSecret.length < 16) throw configurationError("GOOGLE_WORKSPACE_CLIENT_SECRET");
   if (!redirectUri) throw configurationError("GOOGLE_WORKSPACE_REDIRECT_URI");
+  if (!returnUri) throw configurationError("GOOGLE_WORKSPACE_RETURN_URI");
 
-  return Object.freeze({ clientId, clientSecret, redirectUri });
+  return Object.freeze({ clientId, clientSecret, redirectUri, returnUri });
 }
 
 export function scopesForGoogleWorkspaceStages(stages = ["identity"]) {
@@ -119,6 +138,54 @@ export async function exchangeGoogleWorkspaceAuthorizationCode({ env = process.e
   const credentials = validatedCredentials(result?.tokens);
   oauth2Client.setCredentials(credentials);
   return Object.freeze({ oauth2Client, credentials: Object.freeze(credentials) });
+}
+
+function normalizedGoogleEmail(value) {
+  if (typeof value !== "string") throw identityError();
+  const email = value.trim().toLowerCase();
+  if (!email || email.length > 320 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw identityError();
+  return email;
+}
+
+function normalizedGrantedScopes(value) {
+  if (!Array.isArray(value) || value.some((scope) => typeof scope !== "string" || !scope.trim())) throw scopeError();
+  return [...new Set(value.map((scope) => scope.trim()))].sort();
+}
+
+export async function verifyGoogleWorkspaceGrant({ env = process.env, oauth2Client, credentials } = {}) {
+  if (!oauth2Client || typeof oauth2Client.verifyIdToken !== "function" || typeof oauth2Client.getTokenInfo !== "function") throw identityError();
+  if (!credentials || typeof credentials.id_token !== "string" || !credentials.id_token || typeof credentials.access_token !== "string" || !credentials.access_token) throw identityError();
+  const { clientId } = readGoogleWorkspaceOAuthConfig(env);
+  let payload;
+  let tokenInfo;
+  try {
+    const ticket = await oauth2Client.verifyIdToken({ idToken: credentials.id_token, audience: clientId });
+    payload = ticket?.getPayload?.();
+    tokenInfo = await oauth2Client.getTokenInfo(credentials.access_token);
+  } catch {
+    throw identityError();
+  }
+  if (!payload || payload.email_verified !== true || typeof payload.sub !== "string" || !payload.sub || payload.sub.length > 255) throw identityError();
+  const email = normalizedGoogleEmail(payload.email);
+  const scopes = normalizedGrantedScopes(tokenInfo?.scopes);
+  if (!scopes.includes(GOOGLE_WORKSPACE_SCOPES.calendar[0]) || scopes.some((scope) => !ALLOWED_FIRST_GRANT_SCOPES.has(scope))) throw scopeError();
+  return Object.freeze({ subject: payload.sub, email, scopes: Object.freeze(scopes) });
+}
+
+export async function revokeGoogleWorkspaceCredentials({ env = process.env, credentials } = {}, dependencies) {
+  const oauth2Client = createGoogleWorkspaceOAuthClient(env, dependencies);
+  const safeCredentials = validatedCredentials(credentials);
+  const token = safeCredentials.refresh_token || safeCredentials.access_token;
+  if (!token || typeof oauth2Client.revokeToken !== "function") throw inputError("Google OAuth credentials cannot be revoked");
+  try {
+    await oauth2Client.revokeToken(token);
+    return Object.freeze({ revoked: true });
+  } catch (error) {
+    if (error?.response?.status === 400 && error?.response?.data?.error === "invalid_token") {
+      return Object.freeze({ revoked: true, alreadyInvalid: true });
+    }
+    throw Object.assign(new Error("Google Workspace authorization could not be revoked"), { code: "GOOGLE_WORKSPACE_REVOCATION_FAILED" });
+  }
 }
 
 export function createGoogleWorkspaceApiClients({ env = process.env, credentials } = {}, {

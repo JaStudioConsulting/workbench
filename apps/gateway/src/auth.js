@@ -62,9 +62,18 @@ export async function createConfiguredAuth(env = process.env) {
       enabled: true,
       handler: toNodeHandler(auth),
       isApprovedEmail,
+      pool,
       async getSession(req) {
         try { return await auth.api.getSession({ headers: fromNodeHeaders(req.headers) }); }
         catch { return null; }
+      },
+      async getAuthoritativeSession(req) {
+        try {
+          return await auth.api.getSession({
+            headers: fromNodeHeaders(req.headers),
+            query: { disableCookieCache: true },
+          });
+        } catch { return null; }
       },
     };
   } catch { return { enabled: false, reason: "Authentication could not initialize" }; }

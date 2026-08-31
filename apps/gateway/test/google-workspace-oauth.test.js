@@ -6,13 +6,16 @@ import {
   exchangeGoogleWorkspaceAuthorizationCode,
   generateGoogleWorkspaceAuthorizationUrl,
   readGoogleWorkspaceOAuthConfig,
+  revokeGoogleWorkspaceCredentials,
   scopesForGoogleWorkspaceStages,
+  verifyGoogleWorkspaceGrant,
 } from "../src/google-workspace-oauth.js";
 
 const oauthEnv = Object.freeze({
   GOOGLE_WORKSPACE_CLIENT_ID: "synthetic.apps.googleusercontent.com",
   GOOGLE_WORKSPACE_CLIENT_SECRET: "synthetic-client-secret-for-tests",
   GOOGLE_WORKSPACE_REDIRECT_URI: "https://gateway.test/oauth/google-workspace/callback",
+  GOOGLE_WORKSPACE_RETURN_URI: "https://console.test/settings",
 });
 
 const state = "synthetic_state_value_1234567890_abcd";
@@ -22,6 +25,7 @@ test("Google Workspace OAuth configuration fails closed", () => {
     clientId: oauthEnv.GOOGLE_WORKSPACE_CLIENT_ID,
     clientSecret: oauthEnv.GOOGLE_WORKSPACE_CLIENT_SECRET,
     redirectUri: oauthEnv.GOOGLE_WORKSPACE_REDIRECT_URI,
+    returnUri: oauthEnv.GOOGLE_WORKSPACE_RETURN_URI,
   });
 
   for (const env of [
@@ -31,6 +35,7 @@ test("Google Workspace OAuth configuration fails closed", () => {
     { ...oauthEnv, GOOGLE_WORKSPACE_REDIRECT_URI: "http://gateway.test/callback" },
     { ...oauthEnv, GOOGLE_WORKSPACE_REDIRECT_URI: "https://gateway.test/" },
     { ...oauthEnv, GOOGLE_WORKSPACE_REDIRECT_URI: "https://gateway.test/callback?token=bad" },
+    { ...oauthEnv, GOOGLE_WORKSPACE_RETURN_URI: "https://console.test/" },
   ]) {
     assert.throws(() => readGoogleWorkspaceOAuthConfig(env), { code: "GOOGLE_WORKSPACE_OAUTH_CONFIG_INVALID" });
   }
@@ -39,6 +44,53 @@ test("Google Workspace OAuth configuration fails closed", () => {
     readGoogleWorkspaceOAuthConfig({ ...oauthEnv, GOOGLE_WORKSPACE_REDIRECT_URI: "http://127.0.0.1:3000/oauth/callback" }).redirectUri,
     "http://127.0.0.1:3000/oauth/callback",
   );
+});
+
+test("verified Google identity requires the expected audience and only first-stage scopes", async () => {
+  const observed = {};
+  const oauth2Client = {
+    async verifyIdToken(options) {
+      observed.options = options;
+      return { getPayload: () => ({ sub: "synthetic-subject", email: " REVIEW@example.invalid ", email_verified: true }) };
+    },
+    async getTokenInfo(value) {
+      observed.access = value;
+      return { scopes: ["openid", "email", "profile", ...GOOGLE_WORKSPACE_SCOPES.calendar] };
+    },
+  };
+  const result = await verifyGoogleWorkspaceGrant({ env: oauthEnv, oauth2Client, credentials: { id_token: "synthetic-id", access_token: "synthetic-access" } });
+  assert.deepEqual(observed.options, { idToken: "synthetic-id", audience: oauthEnv.GOOGLE_WORKSPACE_CLIENT_ID });
+  assert.equal(observed.access, "synthetic-access");
+  assert.equal(result.email, "review@example.invalid");
+  assert.equal(result.subject, "synthetic-subject");
+
+  oauth2Client.getTokenInfo = async () => ({ scopes: [...GOOGLE_WORKSPACE_SCOPES.calendar, ...GOOGLE_WORKSPACE_SCOPES.gmail] });
+  await assert.rejects(() => verifyGoogleWorkspaceGrant({ env: oauthEnv, oauth2Client, credentials: { id_token: "synthetic-id", access_token: "synthetic-access" } }), { code: "GOOGLE_WORKSPACE_SCOPE_INVALID" });
+  oauth2Client.verifyIdToken = async () => ({ getPayload: () => ({ sub: "synthetic-subject", email: "review@example.invalid", email_verified: false }) });
+  await assert.rejects(() => verifyGoogleWorkspaceGrant({ env: oauthEnv, oauth2Client, credentials: { id_token: "synthetic-id", access_token: "synthetic-access" } }), { code: "GOOGLE_WORKSPACE_IDENTITY_INVALID" });
+});
+
+test("revocation uses the durable token and treats only invalid_token as already revoked", async () => {
+  const seen = [];
+  class FakeOAuth2Client {
+    async revokeToken(value) { seen.push(value); }
+  }
+  await revokeGoogleWorkspaceCredentials({ env: oauthEnv, credentials: { refresh_token: "synthetic-refresh", access_token: "synthetic-access" } }, { OAuth2ClientClass: FakeOAuth2Client });
+  assert.deepEqual(seen, ["synthetic-refresh"]);
+
+  class AlreadyInvalidClient {
+    async revokeToken() { throw { response: { status: 400, data: { error: "invalid_token" } } }; }
+  }
+  assert.equal((await revokeGoogleWorkspaceCredentials({ env: oauthEnv, credentials: { refresh_token: "synthetic-refresh" } }, { OAuth2ClientClass: AlreadyInvalidClient })).alreadyInvalid, true);
+
+  class FailedClient {
+    async revokeToken() { throw { response: { status: 503, data: { error: "provider_detail" } } }; }
+  }
+  await assert.rejects(() => revokeGoogleWorkspaceCredentials({ env: oauthEnv, credentials: { refresh_token: "synthetic-refresh" } }, { OAuth2ClientClass: FailedClient }), (error) => {
+    assert.equal(error.code, "GOOGLE_WORKSPACE_REVOCATION_FAILED");
+    assert.doesNotMatch(error.message, /provider_detail|synthetic-refresh/);
+    return true;
+  });
 });
 
 test("OAuth scopes are staged, read-only, and never grant send authority", () => {
