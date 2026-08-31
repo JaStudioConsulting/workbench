@@ -1,4 +1,4 @@
-import { Contact, GitBranch, Settings, User, UserCog, Users } from "lucide-react";
+import { Cloud, Contact, GitBranch, User, UserCog, Users } from "lucide-react";
 
 function EmptyPage({ icon: Icon, title, message }) {
   return (
@@ -33,5 +33,29 @@ export function ProfilePage() {
 }
 
 export function SettingsPage() {
-  return <EmptyPage icon={Settings} title="No settings configured" message="No account or workflow settings have been configured." />;
+  return (
+    <section className="google-workspace-panel" aria-labelledby="google-workspace-title">
+      <div className="google-workspace-copy">
+        <div className="google-workspace-title">
+          <span className="google-workspace-icon" aria-hidden="true">
+            <Cloud size={22} />
+          </span>
+          <div>
+            <span className="eyebrow">INTEGRATIONS</span>
+            <h2 id="google-workspace-title">Google Workspace</h2>
+          </div>
+        </div>
+        <p>Connect Google once, then use the approved Workspace tools from the Workbench.</p>
+        <p className="google-workspace-services">
+          Gmail, Calendar, Drive, Docs, Sheets, Contacts, Tasks, Chat, Meet, Forms, and Workspace Events
+        </p>
+      </div>
+
+      <div className="google-workspace-action">
+        <span className="connection-status"><span aria-hidden="true" />Not connected</span>
+        <button type="button" disabled>Connect Google Workspace</button>
+        <small>Connection setup is not configured yet.</small>
+      </div>
+    </section>
+  );
 }

@@ -322,6 +322,108 @@ h1 {
   line-height: 1.5;
 }
 
+.google-workspace-panel {
+  min-height: 280px;
+  padding: clamp(24px, 4vw, 44px);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(240px, 340px);
+  align-items: center;
+  gap: 40px;
+  color: #f7f4ed;
+  background: var(--forest);
+  border: 1px solid color-mix(in srgb, var(--forest), #ffffff 12%);
+  border-radius: 16px;
+}
+
+.google-workspace-title {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.google-workspace-title .eyebrow {
+  color: #bdc9bd;
+}
+
+.google-workspace-title h2 {
+  margin-top: 3px;
+  font-size: clamp(1.5rem, 3vw, 2rem);
+  letter-spacing: -0.035em;
+}
+
+.google-workspace-icon {
+  width: 48px;
+  height: 48px;
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  color: var(--forest);
+  background: #edf0e9;
+  border-radius: 12px;
+}
+
+.google-workspace-copy > p {
+  max-width: 640px;
+  margin-top: 20px;
+  color: #dbe1d8;
+  font-size: 0.92rem;
+  line-height: 1.6;
+}
+
+.google-workspace-copy .google-workspace-services {
+  margin-top: 10px;
+  color: #aebbae;
+  font-size: 0.78rem;
+}
+
+.google-workspace-action {
+  padding: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 14px;
+}
+
+.connection-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: #dbe1d8;
+  font-size: 0.74rem;
+  font-weight: 650;
+}
+
+.connection-status > span {
+  width: 7px;
+  height: 7px;
+  background: #c4baae;
+  border-radius: 50%;
+}
+
+.google-workspace-action button {
+  min-height: 46px;
+  color: #667067;
+  background: #dfe4df;
+  border: 0;
+  border-radius: 9px;
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.google-workspace-action button:disabled {
+  cursor: not-allowed;
+  opacity: 1;
+}
+
+.google-workspace-action small {
+  color: #aebbae;
+  font-size: 0.7rem;
+  line-height: 1.45;
+}
+
 .mail-shell {
   min-height: 610px;
   display: grid;
@@ -432,6 +534,12 @@ h1 {
 
   .empty-state {
     padding-inline: 16px;
+  }
+
+  .google-workspace-panel {
+    min-height: 0;
+    grid-template-columns: 1fr;
+    gap: 24px;
   }
 
   .profile-inspector {

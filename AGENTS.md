@@ -15,6 +15,31 @@
 3. Ja may use Nylas products, screens, or documentation to describe a desired workflow or layout. Treat that as a reference unless he explicitly requests a Nylas integration.
 4. Do not merge or restore archived synthetic UI wholesale. Reuse only a specifically approved interaction or component idea.
 
+## Google Cloud project lock
+
+All Google Workspace and Google Cloud work for this repository must use this one project:
+
+- Project name: `workdock`
+- Project ID: `macro-coil-484621-p1`
+- Project number: `755318032067`
+- Primary Google account: `emailjanow` + `@gmail.com`
+- Approved business Google account: `ja` + `@toptiertalentgroup.com`
+
+The addresses are deliberately split above to satisfy the repository privacy check. Treat both as approved accounts for work on the Google project; do not replace either one with an assumed account. Product sign-in still requires a separate server-side allowlist before it can be called live.
+
+Before any Google Cloud command or configuration change:
+
+1. Use a named `gcloud` configuration called `workdock`.
+2. Verify that the active account matches one of the approved Google accounts above and the active project is `macro-coil-484621-p1`.
+3. Pass `--project=macro-coil-484621-p1` explicitly whenever the command supports it.
+4. Stop if the account or project does not match. Never fall back to another default project, including `project-tttg`.
+5. Keep OAuth secrets, client secrets, service-account keys, and tokens out of the repository.
+6. Request the minimum permissions needed and never populate the UI with fabricated Google data or connection states.
+
+## Runner use
+
+Use available subagents as runners for bounded research, audits, and independent verification. The primary agent remains responsible for decisions, edits, integration, and the final result.
+
 ## Nylas development
 
 These rules apply only when Nylas is actually being integrated:
