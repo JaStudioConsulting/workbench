@@ -6,7 +6,7 @@ Start the approved frontend-only Workbench design cycle with the correct reposit
 
 ## Steps
 
-1. Read `AGENTS.md`, `docs/ANTIGRAVITY-UI-HANDOFF.md`, `README.md`, and `docs/CHECKPOINT.md` completely.
+1. Read `AGENTS.md`, `docs/ANTIGRAVITY-UI-HANDOFF.md`, and `README.md` completely.
 2. Confirm the checkout is the intended Workbench repository and the branch is based on current `main`.
 3. Inspect the existing console. Query Graphify for existing components, routes, styling, and reusable work before creating replacements; verify its answers against the checked-out files.
 4. Follow the warm ivory, dark forest green, muted sage, restrained clay, quiet-spacing, and editorial-layout direction in the handoff.

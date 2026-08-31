@@ -41,7 +41,7 @@ Settings must remain visibly reachable below these items.
 
 ## How to work
 
-1. Read `AGENTS.md`, `README.md`, and `docs/CHECKPOINT.md` before editing.
+1. Read `AGENTS.md`, `README.md`, and this handoff before editing.
 2. Confirm the current Git branch and commit. Work from current `main`; never reopen the rejected temporary `feat/today-ui` checkout.
 3. Query Graphify for existing components, routes, styling, and prior implementations before creating replacements. Verify every result against the checked-out commit.
 4. Use the Shadcn MCP for current, accessible component patterns. The current console is not initialized as a Shadcn project, so explain the exact frontend changes before running `shadcn init` or installing components.
