@@ -50,6 +50,20 @@ export const McpDiscoverySchema = z.object({
   tools: z.array(z.object({ id: z.string(), access: z.enum(["router", "read_only"]) })),
 });
 
+export const GoogleWorkspaceStartSchema = z.object({
+  authorizationUrl: z.string().url(),
+  expiresAt: z.string().datetime(),
+}).strict();
+
+export const GoogleWorkspaceStatusSchema = z.discriminatedUnion("connected", [
+  z.object({ connected: z.literal(false) }).strict(),
+  z.object({
+    connected: z.literal(true),
+    account: z.object({ email: z.string().email() }).strict(),
+    scopes: z.array(z.literal("https://www.googleapis.com/auth/calendar.readonly")),
+  }).strict(),
+]);
+
 export const ErrorEnvelopeSchema = z.object({
   error: z.object({ code: z.string(), message: z.string() }),
 });

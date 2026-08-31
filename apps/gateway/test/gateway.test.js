@@ -17,12 +17,13 @@ const authenticated = {
   handler: (_req, res) => res.status(404).end(),
   isApprovedEmail: (email) => email === "review@example.invalid",
   getSession: async (req) => {
-    if (req.headers.authorization === "Bearer synthetic-review") return { session: { id: "synthetic-session" }, user: { email: "review@example.invalid" } };
-    if (req.headers.authorization === "Bearer synthetic-unapproved") return { session: { id: "synthetic-session" }, user: { email: "other@example.invalid" } };
-    if (req.headers.authorization === "Bearer synthetic-missing-email") return { session: { id: "synthetic-session" }, user: {} };
+    if (req.headers.authorization === "Bearer synthetic-review") return { session: { id: "synthetic-session", userId: "synthetic-user" }, user: { id: "synthetic-user", email: "review@example.invalid" } };
+    if (req.headers.authorization === "Bearer synthetic-unapproved") return { session: { id: "synthetic-session", userId: "synthetic-other" }, user: { id: "synthetic-other", email: "other@example.invalid" } };
+    if (req.headers.authorization === "Bearer synthetic-missing-email") return { session: { id: "synthetic-session", userId: "synthetic-missing" }, user: { id: "synthetic-missing" } };
     return null;
   },
 };
+authenticated.getAuthoritativeSession = authenticated.getSession;
 
 async function request(app, method, path, { body, headers = {} } = {}) {
   const server = await new Promise((resolve) => { const value = app.listen(0, () => resolve(value)); });

@@ -1,6 +1,7 @@
 import express from "express";
 import { errorEnvelope, McpDiscoverySchema, SafetyStateSchema } from "@ja/shared-types";
 import { createConfiguredAuth, parseExactHttpsOrigins } from "./src/auth.js";
+import { createGoogleWorkspaceHandlers } from "./src/google-workspace-routes.js";
 import { prepareAfterCallWorkflow } from "./src/after-call.js";
 import { createMcpRequestHandler } from "./src/mcp.js";
 import { createReadOnlyNeo4jAdapter } from "./src/neo4j.js";
@@ -29,11 +30,16 @@ export function createCorsGuard(env) {
   };
 }
 
-function requireSession(auth) {
+function requireSession(auth, { authoritative = false, requireStableUser = false } = {}) {
   return async (req, res, next) => {
     if (!auth.enabled) return respondError(res, "AUTH_UNAVAILABLE", auth.reason);
-    const session = await auth.getSession(req);
+    const getSession = authoritative ? auth.getAuthoritativeSession : auth.getSession;
+    if (typeof getSession !== "function") return respondError(res, "AUTH_UNAVAILABLE", "Authentication is unavailable");
+    const session = await getSession.call(auth, req);
     if (!session?.session) return respondError(res, "UNAUTHORIZED", "A valid session is required", 401);
+    if (requireStableUser && (!session?.user?.id || !session.session.userId || session.user.id !== session.session.userId || !session.session.id)) {
+      return respondError(res, "UNAUTHORIZED", "A valid session is required", 401);
+    }
     if (typeof auth.isApprovedEmail !== "function" || !auth.isApprovedEmail(session?.user?.email)) {
       return respondError(res, "ACCOUNT_FORBIDDEN", "This Google account is not approved for this Workbench", 403);
     }
@@ -42,7 +48,15 @@ function requireSession(auth) {
   };
 }
 
-export async function createApp({ env = process.env, authorityLoader = loadRecruitmentAuthority, authConfig, mcpHandlerFactory = createMcpRequestHandler, neo4j = createReadOnlyNeo4jAdapter() } = {}) {
+export async function createApp({
+  env = process.env,
+  authorityLoader = loadRecruitmentAuthority,
+  authConfig,
+  googleWorkspaceConfig,
+  googleWorkspaceOptions,
+  mcpHandlerFactory = createMcpRequestHandler,
+  neo4j = createReadOnlyNeo4jAdapter(),
+} = {}) {
   const app = express();
   app.disable("x-powered-by");
   const configuredAuth = authConfig ?? await createConfiguredAuth(env);
@@ -63,6 +77,19 @@ export async function createApp({ env = process.env, authorityLoader = loadRecru
   })));
 
   const authenticated = requireSession(configuredAuth);
+  const authoritativeGoogleSession = requireSession(configuredAuth, { authoritative: true, requireStableUser: true });
+  const googleWorkspace = googleWorkspaceConfig ?? createGoogleWorkspaceHandlers({ env, auth: configuredAuth, ...googleWorkspaceOptions });
+  const googleWorkspaceHandler = (name) => async (req, res) => {
+    if (!googleWorkspace.enabled || typeof googleWorkspace[name] !== "function") {
+      res.set("Cache-Control", "private, no-store");
+      return respondError(res, "GOOGLE_WORKSPACE_UNAVAILABLE", googleWorkspace.reason || "Google Workspace authorization is unavailable");
+    }
+    return googleWorkspace[name](req, res);
+  };
+  app.get("/api/google-workspace/status", authoritativeGoogleSession, googleWorkspaceHandler("status"));
+  app.post("/api/google-workspace/oauth/start", authoritativeGoogleSession, googleWorkspaceHandler("start"));
+  app.get("/api/google-workspace/oauth/callback", authoritativeGoogleSession, googleWorkspaceHandler("callback"));
+  app.post("/api/google-workspace/disconnect", authoritativeGoogleSession, googleWorkspaceHandler("disconnect"));
   app.get("/api/mcp/discovery", authenticated, async (_req, res) => {
     try { return res.json(McpDiscoverySchema.parse(discoverMcp(await authorityLoader()))); }
     catch { return respondError(res, "RECRUITER_UNAVAILABLE", "Recruitment authority is unavailable"); }
