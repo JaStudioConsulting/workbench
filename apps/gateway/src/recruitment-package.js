@@ -1,4 +1,5 @@
 const PACKAGE_NAME = "@jastudioconsulting/recruitment-skills";
+export const REQUIRED_RECRUITER_RULES_PATH = "_JA-RULES.md";
 
 export function validateRecruitmentManifest(manifest) {
   if (manifest?.front_door?.id !== "recruiter" || typeof manifest.front_door.path !== "string") {
@@ -6,6 +7,9 @@ export function validateRecruitmentManifest(manifest) {
   }
   if (!Array.isArray(manifest.policies) || !Array.isArray(manifest.capabilities)) {
     throw new Error("Recruitment manifest is incomplete");
+  }
+  if (!manifest.policies.includes(REQUIRED_RECRUITER_RULES_PATH)) {
+    throw new Error("Recruitment manifest must include the mandatory Ja rules");
   }
   const seen = new Set();
   for (const item of manifest.capabilities) {
@@ -30,7 +34,8 @@ export async function loadRecruitmentContext(load = (name) => import(name)) {
   if (typeof pkg.getRecruiterAuthority !== "function") throw new Error("Recruitment package does not export getRecruiterAuthority");
   await validatePublishedRecruitmentAssets(pkg);
   const authority = await pkg.getRecruiterAuthority();
-  if (authority?.id !== "recruiter" || !authority.routerPath || !Array.isArray(authority.capabilities)) {
+  if (authority?.id !== "recruiter" || !authority.routerPath || !Array.isArray(authority.capabilities)
+    || !Array.isArray(authority.policies) || !authority.policies.includes(REQUIRED_RECRUITER_RULES_PATH)) {
     throw new Error("Recruitment package has an invalid recruiter authority manifest");
   }
   return { authority, pkg };

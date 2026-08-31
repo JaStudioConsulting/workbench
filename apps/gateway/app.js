@@ -60,15 +60,16 @@ export async function createApp({
   const app = express();
   app.disable("x-powered-by");
   const configuredAuth = authConfig ?? await createConfiguredAuth(env);
-  let recruitmentContext = null;
+  let recruiterAuthority = null;
   let mcpHandler = null;
   try {
-    recruitmentContext = await recruitmentContextLoader();
-    mcpHandler = await mcpHandlerFactory({ context: recruitmentContext });
+    const recruitmentContext = await recruitmentContextLoader();
+    const initializedMcpHandler = await mcpHandlerFactory({ context: recruitmentContext });
+    recruiterAuthority = recruitmentContext.authority;
+    mcpHandler = initializedMcpHandler;
   } catch {
     // Keep public health and safety routes available while every recruiter route fails closed.
   }
-  const recruiterAuthority = recruitmentContext?.authority;
   app.use(createCorsGuard(env));
 
   // Better Auth must receive raw requests. JSON parsing is intentionally mounted after it.

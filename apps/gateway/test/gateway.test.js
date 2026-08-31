@@ -13,9 +13,11 @@ const browserOrigin = "https://console.test";
 const testEnv = { APP_TRUSTED_ORIGINS: browserOrigin };
 const testAuthority = async () => ({ id: "recruiter", routerPath: "recruiter/SKILL.md", capabilities: [] });
 const testRecruitmentContext = async () => ({
-  authority: await testAuthority(),
+  authority: { ...await testAuthority(), policies: ["_JA-RULES.md", "_TOOL-MAP.md"] },
   pkg: {
-    readSkillText: async () => "# Recruiter\nThe sole recruiting front door.",
+    readSkillText: async (path) => path === "_JA-RULES.md"
+      ? "# Ja rules\nThese rules override defaults."
+      : "# Recruiter\nThe sole recruiting front door.",
     assertSkillFile: async () => {},
   },
 });
@@ -106,11 +108,13 @@ test("Recruiter context loads once at startup and only the requested guide loads
     authority: {
       id: "recruiter",
       routerPath: "recruiter/SKILL.md",
+      policies: ["_JA-RULES.md", "_TOOL-MAP.md"],
       capabilities: [{ id: "vet", path: "recruiter/modules/vet/GUIDE.md", status: "active" }],
     },
     pkg: {
       readSkillText: async (path) => {
         readPaths.push(path);
+        if (path === "_JA-RULES.md") return "# Ja rules\nThese rules override defaults.";
         if (path === "recruiter/SKILL.md") return "# Recruiter\nThe sole recruiting front door.";
         if (path === "recruiter/modules/vet/GUIDE.md") return "# Vet guide\nReturn a source-backed verdict.";
         throw new Error(`Unexpected skill read: ${path}`);
@@ -126,19 +130,41 @@ test("Recruiter context loads once at startup and only the requested guide loads
   const headers = { authorization: "Bearer synthetic-review", accept: "application/json, text/event-stream" };
 
   assert.equal(contextLoads, 1);
-  assert.deepEqual(readPaths, ["recruiter/SKILL.md"]);
+  assert.deepEqual(readPaths, ["_JA-RULES.md", "recruiter/SKILL.md"]);
   const discovery = await request(app, "GET", "/api/mcp/discovery", { headers });
   assert.deepEqual(discovery.body.tools.map((tool) => tool.id), ["recruiter", "workspace_status"]);
   const listed = await request(app, "POST", "/mcp", { headers, body: { jsonrpc: "2.0", id: 1, method: "tools/list", params: {} } });
   assert.deepEqual(listed.body.result.tools.map((tool) => tool.name).sort(), ["recruiter", "workspace_status"]);
   const routerOnly = await request(app, "POST", "/mcp", { headers, body: { jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "recruiter", arguments: {} } } });
+  assert.ok(routerOnly.body.result.content[0].text.indexOf("# Ja rules") < routerOnly.body.result.content[0].text.indexOf("# Recruiter"));
   assert.match(routerOnly.body.result.content[0].text, /sole recruiting front door/i);
   const routed = await request(app, "POST", "/mcp", { headers, body: { jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "recruiter", arguments: { capability: "vet" } } } });
   assert.match(routed.body.result.content[0].text, /Vet guide/);
+  assert.ok(routed.body.result.content[0].text.indexOf("# Ja rules") < routed.body.result.content[0].text.indexOf("# Recruiter"));
+  assert.ok(routed.body.result.content[0].text.indexOf("# Recruiter") < routed.body.result.content[0].text.indexOf("# Vet guide"));
 
   assert.equal(contextLoads, 1);
-  assert.deepEqual(readPaths, ["recruiter/SKILL.md", "recruiter/modules/vet/GUIDE.md"]);
-  assert.deepEqual(assertedPaths, ["recruiter/modules/vet/GUIDE.md"]);
+  assert.deepEqual(readPaths, ["_JA-RULES.md", "recruiter/SKILL.md", "recruiter/modules/vet/GUIDE.md"]);
+  assert.doesNotMatch(readPaths.join("\n"), /_TOOL-MAP/);
+  assert.deepEqual(assertedPaths, ["_JA-RULES.md", "recruiter/modules/vet/GUIDE.md"]);
+});
+
+test("all recruiter routes fail together when MCP startup initialization fails", async () => {
+  let contextLoads = 0;
+  let factoryCalls = 0;
+  const app = await createApp({
+    env: testEnv,
+    authConfig: authenticated,
+    recruitmentContextLoader: async () => { contextLoads += 1; return testRecruitmentContext(); },
+    mcpHandlerFactory: async () => { factoryCalls += 1; throw new Error("synthetic router read failure"); },
+  });
+  const headers = { authorization: "Bearer synthetic-review", accept: "application/json, text/event-stream" };
+
+  assert.equal((await request(app, "GET", "/api/mcp/discovery", { headers })).status, 503);
+  assert.equal((await request(app, "POST", "/api/workflows/after-call/prepare", { headers, body: {} })).status, 503);
+  assert.equal((await request(app, "POST", "/mcp", { headers, body: { jsonrpc: "2.0", id: 1, method: "tools/list", params: {} } })).status, 503);
+  assert.equal(contextLoads, 1);
+  assert.equal(factoryCalls, 1);
 });
 
 test("external package manifest and every packaged asset validate", async () => {
@@ -146,7 +172,8 @@ test("external package manifest and every packaged asset validate", async () => 
   assert.equal(authority.id, "recruiter");
   assert.throws(() => discoverMcp({ id: "other" }));
   assert.throws(() => validateRecruitmentManifest({ front_door: { id: "resume", path: "x" }, policies: [], capabilities: [] }));
-  await assert.rejects(() => validatePublishedRecruitmentAssets({ readSkillText: async () => JSON.stringify({ front_door: { id: "recruiter", path: "recruiter/SKILL.md" }, policies: [], capabilities: [{ id: "valid", path: "missing.md" }] }), assertSkillFile: async () => { throw new Error("missing packaged asset"); } }), /missing packaged asset/);
+  assert.throws(() => validateRecruitmentManifest({ front_door: { id: "recruiter", path: "x" }, policies: ["_TOOL-MAP.md"], capabilities: [] }), /mandatory Ja rules/);
+  await assert.rejects(() => validatePublishedRecruitmentAssets({ readSkillText: async () => JSON.stringify({ front_door: { id: "recruiter", path: "recruiter/SKILL.md" }, policies: ["_JA-RULES.md"], capabilities: [{ id: "valid", path: "missing.md" }] }), assertSkillFile: async () => { throw new Error("missing packaged asset"); } }), /missing packaged asset/);
 });
 
 test("draft-only mail and test-only storage do not expose external write methods", async () => {
