@@ -19,6 +19,7 @@ const sessions = Object.freeze({
   alternate: { session: { id: "session-b", userId: "user-a" }, user: { id: "user-a", email: "review@example.invalid" } },
   forbidden: { session: { id: "session-c", userId: "user-b" }, user: { id: "user-b", email: "other@example.invalid" } },
   mismatched: { session: { id: "session-d", userId: "user-a" }, user: { id: "user-b", email: "review@example.invalid" } },
+  second: { session: { id: "session-e", userId: "user-c" }, user: { id: "user-c", email: "second@example.invalid" } },
 });
 
 function createAuth() {
@@ -27,7 +28,7 @@ function createAuth() {
     enabled: true,
     pool: {},
     handler: (_req, res) => res.status(404).end(),
-    isApprovedEmail: (email) => email === "review@example.invalid",
+    isApprovedEmail: (email) => ["review@example.invalid", "second@example.invalid"].includes(email),
     getSession,
     getAuthoritativeSession: getSession,
   };
@@ -50,10 +51,12 @@ class MemoryStateStore {
 }
 
 class MemoryCredentialStore {
-  constructor() { this.rows = new Map(); this.revision = 0; this.saved = []; this.forceRevisionRace = false; this.disconnectCalls = 0; this.onMissingLoad = null; }
+  constructor() { this.rows = new Map(); this.generationCounter = 0; this.saved = []; this.forceRevisionRace = false; this.forceRefreshRace = false; this.disconnectCalls = 0; this.onMissingLoad = null; }
   async save(value) {
-    this.revision += 1;
-    const row = { credentials: value.credentials, scopes: value.scopes ?? [], revision: this.revision, connected: true };
+    const prior = this.rows.get(value.accountId);
+    this.generationCounter += 1;
+    const generation = `00000000-0000-4000-8000-${String(this.generationCounter).padStart(12, "0")}`;
+    const row = { credentials: value.credentials, scopes: value.scopes ?? [], expiresAt: value.expiresAt ?? null, generation, revision: (prior?.revision ?? 0) + 1, connected: true };
     this.rows.set(value.accountId, row);
     this.saved.push(value);
     return { connected: true };
@@ -63,11 +66,18 @@ class MemoryCredentialStore {
     if (!row && this.onMissingLoad) await this.onMissingLoad(value);
     return row;
   }
+  async persistRefresh(value, { generation, revision, credentials } = {}) {
+    const row = this.rows.get(value);
+    if (!row || this.forceRefreshRace || row.generation !== generation || row.revision !== revision) return { persisted: false };
+    row.credentials = { ...row.credentials, ...credentials, refresh_token: credentials.refresh_token || row.credentials.refresh_token };
+    row.revision += 1;
+    return { persisted: true, revision: row.revision };
+  }
   async disconnect(value, options = {}) {
     this.disconnectCalls += 1;
     const row = this.rows.get(value);
     if (!row) return { disconnected: false };
-    if (this.forceRevisionRace || (options.revision !== undefined && options.revision !== row.revision)) return { disconnected: false };
+    if (this.forceRevisionRace || (options.revision !== undefined && (options.generation !== row.generation || options.revision !== row.revision))) return { disconnected: false };
     this.rows.delete(value);
     return { disconnected: true };
   }
@@ -97,12 +107,12 @@ async function request(app, method, path, { body, authorization, origin } = {}) 
   } finally { await new Promise((resolve) => server.close(resolve)); }
 }
 
-async function fixture({ identityEmail = "review@example.invalid", revokeFailure = false } = {}) {
+async function fixture({ identityEmail = "review@example.invalid", revokeFailure = false, calendarResult, calendarFailure, calendarRefreshTokens, calendarBeforeRefreshPersist } = {}) {
   let currentTime = new Date("2026-08-31T12:00:00.000Z");
   const now = () => new Date(currentTime);
   const states = new MemoryStateStore(now);
   const credentials = new MemoryCredentialStore();
-  const observed = { generated: [], exchanged: [], revoked: [] };
+  const observed = { generated: [], exchanged: [], revoked: [], calendarReads: [] };
   const oauth = {
     generateAuthorizationUrl(value) {
       observed.generated.push(value);
@@ -119,6 +129,21 @@ async function fixture({ identityEmail = "review@example.invalid", revokeFailure
       return { revoked: true };
     },
   };
+  const calendar = {
+    async readUpcomingEvents(value) {
+      observed.calendarReads.push(value.credentials);
+      if (calendarRefreshTokens) {
+        await calendarBeforeRefreshPersist?.();
+        await value.persistRefresh(calendarRefreshTokens);
+      }
+      if (calendarFailure) throw calendarFailure;
+      return calendarResult ?? {
+        connected: true,
+        range: { from: "2026-08-31T12:00:00.000Z", to: "2026-09-30T12:00:00.000Z" },
+        events: [],
+      };
+    },
+  };
   const app = await createApp({
     env,
     authConfig: createAuth(),
@@ -128,6 +153,7 @@ async function fixture({ identityEmail = "review@example.invalid", revokeFailure
       randomBytesFn: () => Buffer.alloc(32, 9),
       now,
       oauth,
+      calendar,
     },
   });
   return { app, states, credentials, observed, advance(ms) { currentTime = new Date(currentTime.getTime() + ms); } };
@@ -224,6 +250,95 @@ test("status never claims Calendar is connected when the stored grant lacks Cale
   const response = await request(fx.app, "GET", "/api/google-workspace/status", { authorization: "review", origin: browserOrigin });
   assert.equal(response.status, 200);
   assert.deepEqual(response.body, { connected: false });
+});
+
+test("upcoming Calendar route distinguishes disconnected, missing-scope, and empty connected states", async () => {
+  const fx = await fixture();
+  let response = await request(fx.app, "GET", "/api/google-workspace/calendar/upcoming", { origin: browserOrigin });
+  assert.equal(response.status, 401);
+  response = await request(fx.app, "GET", "/api/google-workspace/calendar/upcoming", { authorization: "review", origin: browserOrigin });
+  assert.equal(response.status, 409);
+  assert.equal(response.body.error.code, "GOOGLE_WORKSPACE_NOT_CONNECTED");
+  await fx.credentials.save({ accountId: sessions.review.user.id, credentials: { refresh_token: "identity-refresh" }, scopes: ["openid", "email"] });
+  response = await request(fx.app, "GET", "/api/google-workspace/calendar/upcoming", { authorization: "review", origin: browserOrigin });
+  assert.equal(response.status, 403);
+  assert.equal(response.body.error.code, "GOOGLE_CALENDAR_SCOPE_REQUIRED");
+  assert.equal(fx.observed.calendarReads.length, 0);
+  await fx.credentials.save({ accountId: sessions.review.user.id, credentials: { refresh_token: "calendar-refresh" }, scopes: [calendarScope], expiresAt: new Date(0) });
+  response = await request(fx.app, "GET", "/api/google-workspace/calendar/upcoming", { authorization: "review", origin: browserOrigin });
+  assert.equal(response.status, 200);
+  assert.equal(response.headers["cache-control"], "private, no-store");
+  assert.deepEqual(response.body.events, []);
+  assert.equal(fx.observed.calendarReads[0].expiry_date, 0);
+  assert.doesNotMatch(response.text, /calendar-refresh|identity-refresh|token/i);
+});
+
+test("upcoming Calendar reads only the authoritative account and ignores browser account overrides", async () => {
+  const fx = await fixture();
+  await fx.credentials.save({ accountId: sessions.review.user.id, credentials: { refresh_token: "refresh-a" }, scopes: [calendarScope] });
+  await fx.credentials.save({ accountId: sessions.second.user.id, credentials: { refresh_token: "refresh-c" }, scopes: [calendarScope] });
+  let response = await request(fx.app, "GET", "/api/google-workspace/calendar/upcoming?accountId=user-c&calendarId=other", { authorization: "review", origin: browserOrigin });
+  assert.equal(response.status, 200);
+  response = await request(fx.app, "GET", "/api/google-workspace/calendar/upcoming?accountId=user-a", { authorization: "second", origin: browserOrigin });
+  assert.equal(response.status, 200);
+  assert.deepEqual(fx.observed.calendarReads.map((credentials) => credentials.refresh_token), ["refresh-a", "refresh-c"]);
+});
+
+test("upcoming Calendar masks provider failures and maps reauthorization and scope errors", async () => {
+  for (const [failure, expectedStatus, expectedCode] of [
+    [{ response: { status: 401, data: { error: "invalid_grant", detail: "synthetic-refresh" } } }, 401, "GOOGLE_WORKSPACE_REAUTH_REQUIRED"],
+    [{ response: { status: 403, data: { error: "insufficientPermissions", detail: "synthetic-refresh" } } }, 403, "GOOGLE_CALENDAR_SCOPE_REQUIRED"],
+    [{ response: { status: 429, data: { error: "rateLimitExceeded", detail: "synthetic-refresh" } } }, 502, "GOOGLE_CALENDAR_UNAVAILABLE"],
+  ]) {
+    const fx = await fixture({ calendarFailure: failure });
+    await fx.credentials.save({ accountId: sessions.review.user.id, credentials: { refresh_token: "synthetic-refresh" }, scopes: [calendarScope] });
+    const response = await request(fx.app, "GET", "/api/google-workspace/calendar/upcoming", { authorization: "review", origin: browserOrigin });
+    assert.equal(response.status, expectedStatus);
+    assert.equal(response.body.error.code, expectedCode);
+    assert.equal(response.headers["cache-control"], "private, no-store");
+    assert.doesNotMatch(response.text, /synthetic-refresh|invalid_grant|insufficientPermissions|rateLimitExceeded|detail/i);
+  }
+});
+
+test("upcoming Calendar awaits revision-bound refresh persistence and returns no events after a disconnect race", async () => {
+  const fx = await fixture({ calendarRefreshTokens: { access_token: "new-access", refresh_token: "new-refresh" } });
+  await fx.credentials.save({ accountId: sessions.review.user.id, credentials: { refresh_token: "old-refresh" }, scopes: [calendarScope] });
+  let response = await request(fx.app, "GET", "/api/google-workspace/calendar/upcoming", { authorization: "review", origin: browserOrigin });
+  assert.equal(response.status, 200);
+  assert.equal(fx.credentials.rows.get(sessions.review.user.id).credentials.refresh_token, "new-refresh");
+
+  const raced = await fixture({ calendarRefreshTokens: { access_token: "race-access" } });
+  await raced.credentials.save({ accountId: sessions.review.user.id, credentials: { refresh_token: "durable-refresh" }, scopes: [calendarScope] });
+  raced.credentials.forceRefreshRace = true;
+  response = await request(raced.app, "GET", "/api/google-workspace/calendar/upcoming", { authorization: "review", origin: browserOrigin });
+  assert.equal(response.status, 409);
+  assert.equal(response.body.error.code, "GOOGLE_WORKSPACE_CONNECTION_CHANGED");
+  assert.equal("events" in response.body, false);
+  assert.doesNotMatch(response.text, /race-access|durable-refresh/i);
+});
+
+test("upcoming Calendar rejects a stale refresh after disconnect and reconnect reuse the same revision", async () => {
+  let fx;
+  fx = await fixture({
+    calendarRefreshTokens: { access_token: "stale-access", refresh_token: "stale-refresh" },
+    async calendarBeforeRefreshPersist() {
+      const prior = await fx.credentials.load(sessions.review.user.id);
+      await fx.credentials.disconnect(sessions.review.user.id, { generation: prior.generation, revision: prior.revision });
+      await fx.credentials.save({ accountId: sessions.review.user.id, credentials: { refresh_token: "new-refresh" }, scopes: [calendarScope] });
+    },
+  });
+  await fx.credentials.save({ accountId: sessions.review.user.id, credentials: { refresh_token: "old-refresh" }, scopes: [calendarScope] });
+  const stale = await fx.credentials.load(sessions.review.user.id);
+
+  const response = await request(fx.app, "GET", "/api/google-workspace/calendar/upcoming", { authorization: "review", origin: browserOrigin });
+  const current = await fx.credentials.load(sessions.review.user.id);
+  assert.equal(response.status, 409);
+  assert.equal(response.body.error.code, "GOOGLE_WORKSPACE_CONNECTION_CHANGED");
+  assert.equal(current.revision, stale.revision);
+  assert.notEqual(current.generation, stale.generation);
+  assert.equal(current.credentials.refresh_token, "new-refresh");
+  assert.equal(current.credentials.access_token, undefined);
+  assert.doesNotMatch(response.text, /old-refresh|new-refresh|stale-access|stale-refresh/);
 });
 
 test("revocation failure preserves encrypted connection and revision races do not delete newer credentials", async () => {

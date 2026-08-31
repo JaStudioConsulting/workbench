@@ -87,6 +87,7 @@ export async function createApp({
     return googleWorkspace[name](req, res);
   };
   app.get("/api/google-workspace/status", authoritativeGoogleSession, googleWorkspaceHandler("status"));
+  app.get("/api/google-workspace/calendar/upcoming", authoritativeGoogleSession, googleWorkspaceHandler("upcomingEvents"));
   app.post("/api/google-workspace/oauth/start", authoritativeGoogleSession, googleWorkspaceHandler("start"));
   app.get("/api/google-workspace/oauth/callback", authoritativeGoogleSession, googleWorkspaceHandler("callback"));
   app.post("/api/google-workspace/disconnect", authoritativeGoogleSession, googleWorkspaceHandler("disconnect"));

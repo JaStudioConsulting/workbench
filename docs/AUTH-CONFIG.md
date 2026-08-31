@@ -25,8 +25,11 @@ Run `apps/gateway/migrations/001_google_oauth_credentials.sql` and `002_google_o
 The authenticated Google Workspace surface is limited to:
 
 - `GET /api/google-workspace/status`
+- `GET /api/google-workspace/calendar/upcoming`
 - `POST /api/google-workspace/oauth/start`
 - `GET /api/google-workspace/oauth/callback`
 - `POST /api/google-workspace/disconnect`
 
 The first authorization is fixed server-side to identity plus `calendar.readonly`; the browser cannot request stages or scopes. Callback identity must be verified, approved, and exactly match the Better Auth account that started authorization. Status and errors use `Cache-Control: private, no-store` and never return credentials. Disconnect revokes the durable Google grant before deleting the matching credential revision; retryable revocation failures preserve the encrypted credential for a safe retry.
+
+The upcoming-events route reads only the authenticated account's primary calendar through the official Google Calendar v3 client. It is fixed to the next thirty days, one request, at most ten expanded events, and a ten-second provider timeout. It returns only sanitized nullable titles and validated start/end times; it never exposes raw provider IDs, links, credentials, attendees, descriptions, locations, conference details, or pagination tokens. Any automatically refreshed credentials are persisted with a revision-bound update that cannot recreate a concurrently disconnected account.

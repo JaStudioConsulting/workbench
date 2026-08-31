@@ -64,6 +64,25 @@ export const GoogleWorkspaceStatusSchema = z.discriminatedUnion("connected", [
   }).strict(),
 ]);
 
+const GoogleCalendarEventTimeSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("dateTime"), value: z.string().datetime() }).strict(),
+  z.object({ kind: z.literal("date"), value: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) }).strict(),
+]);
+
+export const GoogleCalendarUpcomingSchema = z.object({
+  connected: z.literal(true),
+  range: z.object({
+    from: z.string().datetime(),
+    to: z.string().datetime(),
+  }).strict(),
+  events: z.array(z.object({
+    title: z.string().min(1).max(200).nullable(),
+    start: GoogleCalendarEventTimeSchema,
+    end: GoogleCalendarEventTimeSchema,
+    allDay: z.boolean(),
+  }).strict()).max(10),
+}).strict();
+
 export const ErrorEnvelopeSchema = z.object({
   error: z.object({ code: z.string(), message: z.string() }),
 });

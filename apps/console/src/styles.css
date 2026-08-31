@@ -327,7 +327,7 @@ h1 {
   padding: clamp(24px, 4vw, 44px);
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(240px, 340px);
-  align-items: center;
+  align-items: start;
   gap: 40px;
   color: #f7f4ed;
   background: var(--forest);
@@ -370,7 +370,7 @@ h1 {
   line-height: 1.6;
 }
 
-.google-workspace-copy .google-workspace-services {
+.google-workspace-copy .google-workspace-scope {
   margin-top: 10px;
   color: #aebbae;
   font-size: 0.78rem;
@@ -402,18 +402,41 @@ h1 {
   border-radius: 50%;
 }
 
+.connection-status.is-connected > span {
+  background: #9bd7a8;
+  box-shadow: 0 0 0 3px rgba(155, 215, 168, 0.14);
+}
+
+.connection-status.is-error > span {
+  background: #e4aa99;
+}
+
+.connected-account {
+  color: #f7f4ed;
+  font-size: 0.78rem;
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+
 .google-workspace-action button {
   min-height: 46px;
-  color: #667067;
-  background: #dfe4df;
+  color: var(--forest);
+  background: #edf0e9;
   border: 0;
   border-radius: 9px;
   font: inherit;
   font-size: 0.82rem;
   font-weight: 700;
+  cursor: pointer;
+}
+
+.google-workspace-action button:not(:disabled):hover {
+  background: #ffffff;
 }
 
 .google-workspace-action button:disabled {
+  color: #667067;
+  background: #dfe4df;
   cursor: not-allowed;
   opacity: 1;
 }
@@ -422,6 +445,82 @@ h1 {
   color: #aebbae;
   font-size: 0.7rem;
   line-height: 1.45;
+}
+
+.google-calendar-preview {
+  min-width: 0;
+  padding-top: 26px;
+  grid-column: 1 / -1;
+  border-top: 1px solid rgba(255, 255, 255, 0.14);
+}
+
+.google-calendar-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.google-calendar-heading .eyebrow {
+  color: #bdc9bd;
+}
+
+.google-calendar-heading h3 {
+  margin-top: 4px;
+  color: #f7f4ed;
+  font-size: 1rem;
+}
+
+.calendar-state {
+  margin-top: 18px;
+  color: #cbd4c9;
+  font-size: 0.82rem;
+}
+
+.calendar-retry {
+  min-height: 38px;
+  padding: 0 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--forest);
+  background: #edf0e9;
+  border: 0;
+  border-radius: 8px;
+  font: inherit;
+  font-size: 0.76rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.calendar-event-list {
+  margin: 16px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.calendar-event-list li {
+  min-width: 0;
+  padding: 13px 0;
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  color: #dbe1d8;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.calendar-event-title {
+  color: #f7f4ed;
+  font-size: 0.84rem;
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+
+.calendar-event-list time {
+  color: #bdc9bd;
+  font-size: 0.74rem;
+  white-space: nowrap;
 }
 
 .mail-shell {
@@ -540,6 +639,19 @@ h1 {
     min-height: 0;
     grid-template-columns: 1fr;
     gap: 24px;
+  }
+
+  .google-calendar-preview {
+    padding-top: 22px;
+  }
+
+  .calendar-event-list li {
+    grid-template-columns: 22px minmax(0, 1fr);
+  }
+
+  .calendar-event-list time {
+    grid-column: 2;
+    white-space: normal;
   }
 
   .profile-inspector {
