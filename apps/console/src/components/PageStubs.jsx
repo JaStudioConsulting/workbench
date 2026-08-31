@@ -47,7 +47,7 @@ export function SettingsPage() {
         </div>
         <p>Connect Google once, then use the approved Workspace tools from the Workbench.</p>
         <p className="google-workspace-services">
-          Gmail, Calendar, Drive, Docs, Sheets, Contacts, Tasks, Chat, Meet, Forms, and Workspace Events
+          Gmail, Calendar, Drive, Docs, Sheets, Contacts, Tasks, Chat, Meet, and Forms
         </p>
       </div>
 

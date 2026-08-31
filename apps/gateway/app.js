@@ -34,6 +34,9 @@ function requireSession(auth) {
     if (!auth.enabled) return respondError(res, "AUTH_UNAVAILABLE", auth.reason);
     const session = await auth.getSession(req);
     if (!session?.session) return respondError(res, "UNAUTHORIZED", "A valid session is required", 401);
+    if (typeof auth.isApprovedEmail !== "function" || !auth.isApprovedEmail(session?.user?.email)) {
+      return respondError(res, "ACCOUNT_FORBIDDEN", "This Google account is not approved for this Workbench", 403);
+    }
     req.workbenchSession = session;
     return next();
   };
