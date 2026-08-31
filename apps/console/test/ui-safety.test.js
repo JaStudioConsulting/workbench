@@ -4,13 +4,18 @@ import { access } from "node:fs/promises";
 import test from "node:test";
 
 test("console has no local persistence or send authority", async () => {
-  const app = await readFile(new URL("../src/App.jsx", import.meta.url), "utf8");
-  assert.doesNotMatch(app, /localStorage|sessionStorage|sendEmail|candidateSubmit/i);
-  assert.match(app, /Authentication is unavailable/);
-  assert.match(app, /disabled[^>]*>Create case/);
-  assert.match(app, /Sign in with Google/);
-  assert.match(app, /Signed in/);
-  assert.match(app, /Signed out/);
+  const files = await Promise.all([
+    "../src/App.jsx",
+    "../src/components/HomeWidgets.jsx",
+    "../src/components/MailInbox.jsx",
+    "../src/components/PageStubs.jsx",
+  ].map((file) => readFile(new URL(file, import.meta.url), "utf8")));
+  const source = files.join("\n");
+  assert.doesNotMatch(source, /localStorage|sessionStorage|sendEmail|candidateSubmit/i);
+  assert.doesNotMatch(source, /Marcus|Meridian|BrightPath|Marketing Director/i);
+  assert.match(source, /No workbench data/);
+  assert.match(source, /No mail connected/);
+  assert.match(source, /selectedNode !== null/);
 });
 
 test("console entrypoint and all local static references resolve", async () => {
