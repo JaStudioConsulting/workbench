@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { request as httpRequest } from "node:http";
 import test from "node:test";
 import { createApp } from "../app.js";
-import { createConfiguredAuth, parseExactHttpsOrigins } from "../src/auth.js";
+import { createConfiguredAuth, parseAllowedGoogleEmails, parseExactHttpsOrigins } from "../src/auth.js";
 import { prepareAfterCallWorkflow } from "../src/after-call.js";
 import { createDraftOnlyMailService } from "../src/gmail.js";
 import { assertReadOnlyCypher, createReadOnlyNeo4jAdapter, stripCypherLiteralsAndComments } from "../src/neo4j.js";
@@ -15,7 +15,13 @@ const testAuthority = async () => ({ id: "recruiter", routerPath: "recruiter/SKI
 const authenticated = {
   enabled: true,
   handler: (_req, res) => res.status(404).end(),
-  getSession: async (req) => req.headers.authorization === "Bearer synthetic-review" ? { session: { id: "synthetic-session" } } : null,
+  isApprovedEmail: (email) => email === "review@example.invalid",
+  getSession: async (req) => {
+    if (req.headers.authorization === "Bearer synthetic-review") return { session: { id: "synthetic-session" }, user: { email: "review@example.invalid" } };
+    if (req.headers.authorization === "Bearer synthetic-unapproved") return { session: { id: "synthetic-session" }, user: { email: "other@example.invalid" } };
+    if (req.headers.authorization === "Bearer synthetic-missing-email") return { session: { id: "synthetic-session" }, user: {} };
+    return null;
+  },
 };
 
 async function request(app, method, path, { body, headers = {} } = {}) {
@@ -47,8 +53,14 @@ test("public routes work server-to-server while browser CORS is strict", async (
 test("auth malformed environment fails closed without throwing", async () => {
   assert.equal(parseExactHttpsOrigins("https://console.test,https://console.test").length, 1);
   assert.equal(parseExactHttpsOrigins("https://console.test/path"), null);
+  assert.deepEqual(parseAllowedGoogleEmails(" REVIEW@example.invalid,review@example.invalid, work@example.invalid "), ["review@example.invalid", "work@example.invalid"]);
+  assert.equal(parseAllowedGoogleEmails(""), null);
+  assert.equal(parseAllowedGoogleEmails("not-an-email"), null);
+  assert.equal(parseAllowedGoogleEmails("review@" + "double..example.invalid"), null);
+  assert.equal(parseAllowedGoogleEmails("review@" + "example.invalid."), null);
   assert.equal((await createConfiguredAuth({ BETTER_AUTH_URL: "not-a-url" })).enabled, false);
   assert.equal((await createConfiguredAuth({ DATABASE_URL: "configured", BETTER_AUTH_URL: browserOrigin, BETTER_AUTH_SECRET: "short", GOOGLE_CLIENT_ID: "id", GOOGLE_CLIENT_SECRET: "secret", AUTH_TRUSTED_ORIGINS: browserOrigin })).enabled, false);
+  assert.equal((await createConfiguredAuth({ DATABASE_URL: "configured", BETTER_AUTH_URL: browserOrigin, BETTER_AUTH_SECRET: "x".repeat(32), GOOGLE_CLIENT_ID: "id", GOOGLE_CLIENT_SECRET: "secret", AUTH_TRUSTED_ORIGINS: browserOrigin })).enabled, false);
 });
 
 test("every non-public API route requires Better Auth session", async () => {
@@ -57,6 +69,8 @@ test("every non-public API route requires Better Auth session", async () => {
   const app = await createApp({ env: testEnv, authorityLoader: testAuthority, authConfig: authenticated });
   assert.equal((await request(app, "GET", "/api/mcp/discovery")).status, 401);
   assert.equal((await request(app, "POST", "/mcp", { body: { jsonrpc: "2.0", id: 1, method: "initialize", params: {} } })).status, 401);
+  assert.equal((await request(app, "GET", "/api/mcp/discovery", { headers: { authorization: "Bearer synthetic-unapproved" } })).status, 403);
+  assert.equal((await request(app, "GET", "/api/mcp/discovery", { headers: { authorization: "Bearer synthetic-missing-email" } })).status, 403);
   const discovery = await request(app, "GET", "/api/mcp/discovery", { headers: { authorization: "Bearer synthetic-review" } });
   assert.equal(discovery.status, 200);
   assert.deepEqual(discovery.body.tools.map((tool) => tool.id), ["recruiter", "workspace_status"]);
