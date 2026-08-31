@@ -154,118 +154,6 @@ h1 {
   letter-spacing: -0.035em;
 }
 
-.home-layout {
-  min-width: 0;
-  display: grid;
-  gap: 18px;
-}
-
-.graph-section {
-  min-width: 0;
-  min-height: 390px;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  overflow: hidden;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 16px;
-}
-
-.graph-section.with-profile {
-  grid-template-columns: minmax(0, 1fr) minmax(300px, 35%);
-}
-
-.graph-canvas {
-  position: relative;
-  min-height: 390px;
-  background:
-    linear-gradient(rgba(39, 60, 48, 0.025) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(39, 60, 48, 0.025) 1px, transparent 1px);
-  background-size: 32px 32px;
-}
-
-.graph-lines {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  overflow: visible;
-  pointer-events: none;
-}
-
-.graph-lines line {
-  stroke: #cfc8bc;
-  stroke-width: 0.32;
-  vector-effect: non-scaling-stroke;
-}
-
-.graph-node {
-  position: absolute;
-  width: 10px;
-  height: 10px;
-  padding: 0;
-  transform: translate(-50%, -50%);
-  border: 2px solid #ffffff;
-  border-radius: 50%;
-  background: #647a6b;
-  box-shadow: 0 0 0 1px #647a6b;
-  cursor: pointer;
-  transition: transform 120ms ease, background-color 120ms ease, box-shadow 120ms ease;
-}
-
-.graph-node:hover,
-.graph-node.selected {
-  transform: translate(-50%, -50%) scale(1.4);
-  background: var(--forest);
-  box-shadow: 0 0 0 1px var(--forest);
-}
-
-.profile-inspector {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  background: #fff;
-  border-left: 1px solid var(--border);
-}
-
-.profile-inspector-header {
-  min-height: 58px;
-  padding: 16px 18px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  border-bottom: 1px solid var(--border);
-}
-
-.profile-inspector-title {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  color: var(--forest);
-}
-
-.profile-inspector-title h2 {
-  font-size: 1rem;
-  letter-spacing: -0.015em;
-}
-
-.icon-button {
-  width: 34px;
-  height: 34px;
-  display: grid;
-  place-items: center;
-  color: var(--muted);
-  background: transparent;
-  border: 0;
-  border-radius: 8px;
-  cursor: pointer;
-}
-
-.icon-button:hover {
-  color: var(--text);
-  background: var(--surface-muted);
-}
-
 .workspace-section,
 .page-panel {
   min-width: 0;
@@ -592,10 +480,6 @@ h1 {
 }
 
 @media (max-width: 920px) {
-  .graph-section.with-profile {
-    grid-template-columns: minmax(0, 1fr) 300px;
-  }
-
   .mail-shell {
     grid-template-columns: 150px minmax(240px, 1fr);
   }
@@ -623,14 +507,6 @@ h1 {
     font-size: 0.44rem;
   }
 
-  .graph-section.with-profile {
-    grid-template-columns: 1fr;
-  }
-
-  .graph-canvas {
-    min-height: 320px;
-  }
-
   .empty-state {
     padding-inline: 16px;
   }
@@ -652,12 +528,6 @@ h1 {
   .calendar-event-list time {
     grid-column: 2;
     white-space: normal;
-  }
-
-  .profile-inspector {
-    min-height: 240px;
-    border-top: 1px solid var(--border);
-    border-left: 0;
   }
 
   .mail-shell {

@@ -12,13 +12,15 @@ test("console has no local persistence or send authority", async () => {
     "../src/components/GoogleWorkspacePanel.jsx",
     "../src/components/UpcomingCalendar.jsx",
     "../src/google-workspace-client.js",
+    "../src/styles.css",
   ].map((file) => readFile(new URL(file, import.meta.url), "utf8")));
   const source = files.join("\n");
   assert.doesNotMatch(source, /localStorage|sessionStorage|sendEmail|candidateSubmit/i);
   assert.doesNotMatch(source, /Marcus|Meridian|BrightPath|Marketing Director/i);
   assert.match(source, /No workbench data/);
   assert.match(source, /No mail connected/);
-  assert.match(source, /selectedNode !== null/);
+  assert.doesNotMatch(source, /graph-node|graph-lines|selectedNode|CandidateWorkspace/);
+  await assert.rejects(access(new URL("../src/components/CandidateWorkspace.jsx", import.meta.url)));
 });
 
 test("console entrypoint and all local static references resolve", async () => {
