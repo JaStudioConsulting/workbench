@@ -97,6 +97,9 @@ test("MCP initializes and lists only recruiter plus read-only status", async () 
   const router = await request(app, "POST", "/mcp", { headers, body: { jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "recruiter", arguments: {} } } });
   assert.equal(router.status, 200);
   assert.match(router.body.result.content[0].text, /recruiter/i);
+  const material = await request(app, "POST", "/mcp", { headers, body: { jsonrpc: "2.0", id: 4, method: "tools/call", params: { name: "recruiter", arguments: { capability: "interview-prep-material" } } } });
+  assert.equal(material.status, 200);
+  assert.match(material.body.result.content[0].text, /# Interview Prep Material/);
   assert.doesNotMatch(JSON.stringify(listed.body), /gmail|loxo|submit|approve|neo4j/i);
 });
 
@@ -170,6 +173,7 @@ test("all recruiter routes fail together when MCP startup initialization fails",
 test("external package manifest and every packaged asset validate", async () => {
   const authority = await loadRecruitmentAuthority();
   assert.equal(authority.id, "recruiter");
+  assert.equal(authority.capabilities.find((item) => item.id === "interview-prep-material")?.path, "recruiter/modules/interview-prep-material/GUIDE.md");
   assert.throws(() => discoverMcp({ id: "other" }));
   assert.throws(() => validateRecruitmentManifest({ front_door: { id: "resume", path: "x" }, policies: [], capabilities: [] }));
   assert.throws(() => validateRecruitmentManifest({ front_door: { id: "recruiter", path: "x" }, policies: ["_TOOL-MAP.md"], capabilities: [] }), /mandatory Ja rules/);

@@ -43,3 +43,10 @@ test("Recruiter call returns rules, router, and only the selected guide", async 
   assert.ok(guideIndex > routerIndex, "selected guide must follow the router");
   assert.equal(output.includes("TOOL MAP"), false);
 });
+
+test("Recruiter routes candidate-facing interview prep material", async () => {
+  const called = await mcp("tools/call", { name: "recruiter", arguments: { capability: "interview-prep-material" } });
+  const output = called.result.content[0].text;
+  assert.match(output, /# Interview Prep Material/);
+  assert.match(output, /candidate-facing interview prep PDF/i);
+});

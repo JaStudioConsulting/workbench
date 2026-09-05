@@ -19,8 +19,8 @@ importers:
         specifier: 1.37.1
         version: 1.37.1(vite@8.0.13(esbuild@0.27.3))(workerd@1.20260515.1)(wrangler@4.92.0)
       '@jastudioconsulting/recruitment-skills':
-        specifier: github:JaStudioConsulting/recruitment-skills#9e9a116c2ae3f56b9aef1abff8476698da793fbb
-        version: git+https://github.com/JaStudioConsulting/recruitment-skills.git#9e9a116c2ae3f56b9aef1abff8476698da793fbb
+        specifier: github:JaStudioConsulting/recruitment-skills#bbf1bbfdc91bbdd9409c976bd5782a0fc87db0b0
+        version: git+https://github.com/JaStudioConsulting/recruitment-skills.git#bbf1bbfdc91bbdd9409c976bd5782a0fc87db0b0
       '@openai/sites-vite-plugin':
         specifier: 0.2.0
         version: 0.2.0(vite@8.0.13(esbuild@0.27.3))
@@ -65,8 +65,8 @@ importers:
         specifier: workspace:*
         version: link:../../packages/shared-types
       '@jastudioconsulting/recruitment-skills':
-        specifier: github:JaStudioConsulting/recruitment-skills#9e9a116c2ae3f56b9aef1abff8476698da793fbb
-        version: git+https://github.com/JaStudioConsulting/recruitment-skills.git#9e9a116c2ae3f56b9aef1abff8476698da793fbb
+        specifier: github:JaStudioConsulting/recruitment-skills#bbf1bbfdc91bbdd9409c976bd5782a0fc87db0b0
+        version: git+https://github.com/JaStudioConsulting/recruitment-skills.git#bbf1bbfdc91bbdd9409c976bd5782a0fc87db0b0
       '@modelcontextprotocol/sdk':
         specifier: 1.29.0
         version: 1.29.0(zod@4.4.3)
@@ -802,8 +802,8 @@ packages:
     resolution: {integrity: sha512-O8jcjabXaleOG9DQ0+ARXWZBTfnP4WNAqzuiJK7ll44AmxGKv/J2M4TPjxjY3znBCfvBXFzucm1twdyFybFqEA==}
     engines: {node: '>=12'}
 
-  '@jastudioconsulting/recruitment-skills@git+https://github.com/JaStudioConsulting/recruitment-skills.git#9e9a116c2ae3f56b9aef1abff8476698da793fbb':
-    resolution: {commit: 9e9a116c2ae3f56b9aef1abff8476698da793fbb, repo: https://github.com/JaStudioConsulting/recruitment-skills.git, type: git}
+  '@jastudioconsulting/recruitment-skills@git+https://github.com/JaStudioConsulting/recruitment-skills.git#bbf1bbfdc91bbdd9409c976bd5782a0fc87db0b0':
+    resolution: {commit: bbf1bbfdc91bbdd9409c976bd5782a0fc87db0b0, repo: https://github.com/JaStudioConsulting/recruitment-skills.git, type: git}
     version: 0.1.0
     engines: {node: '>=20'}
 
@@ -2868,7 +2868,7 @@ snapshots:
       wrap-ansi: 8.1.0
       wrap-ansi-cjs: wrap-ansi@7.0.0
 
-  '@jastudioconsulting/recruitment-skills@git+https://github.com/JaStudioConsulting/recruitment-skills.git#9e9a116c2ae3f56b9aef1abff8476698da793fbb': {}
+  '@jastudioconsulting/recruitment-skills@git+https://github.com/JaStudioConsulting/recruitment-skills.git#bbf1bbfdc91bbdd9409c976bd5782a0fc87db0b0': {}
 
   '@jridgewell/gen-mapping@0.3.13':
     dependencies:

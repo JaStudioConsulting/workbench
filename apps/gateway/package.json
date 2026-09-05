@@ -12,7 +12,7 @@
   },
   "dependencies": {
     "@ja/shared-types": "workspace:*",
-    "@jastudioconsulting/recruitment-skills": "github:JaStudioConsulting/recruitment-skills#9e9a116c2ae3f56b9aef1abff8476698da793fbb",
+    "@jastudioconsulting/recruitment-skills": "github:JaStudioConsulting/recruitment-skills#bbf1bbfdc91bbdd9409c976bd5782a0fc87db0b0",
     "@modelcontextprotocol/sdk": "1.29.0",
     "better-auth": "^1.7.1",
     "express": "^4.21.2",

@@ -10,7 +10,7 @@
     "dev:site": "vite --config sites.vite.config.js",
     "build": "pnpm -r --if-present build",
     "build:site": "vite build --config sites.vite.config.js",
-    "test": "pnpm -r --if-present test && node --test scripts/*.test.mjs",
+    "test": "pnpm -r --if-present test && node --test scripts/privacy-check.test.mjs",
     "test:site": "pnpm build:site && node --test scripts/site-worker.test.mjs",
     "typecheck": "pnpm -r --if-present typecheck",
     "audit": "pnpm audit --prod",
@@ -23,7 +23,7 @@
   },
   "devDependencies": {
     "@cloudflare/vite-plugin": "1.37.1",
-    "@jastudioconsulting/recruitment-skills": "github:JaStudioConsulting/recruitment-skills#9e9a116c2ae3f56b9aef1abff8476698da793fbb",
+    "@jastudioconsulting/recruitment-skills": "github:JaStudioConsulting/recruitment-skills#bbf1bbfdc91bbdd9409c976bd5782a0fc87db0b0",
     "@openai/sites-vite-plugin": "0.2.0",
     "@vitejs/plugin-react": "6.0.2",
     "vite": "8.0.13",
