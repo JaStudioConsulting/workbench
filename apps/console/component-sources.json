@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "shadcn": {
+    "style": "base-nova",
+    "cliCommand": "pnpm dlx shadcn@latest add alert-dialog badge card checkbox field label progress scroll-area select skeleton tabs",
+    "registryBase": "https://ui.shadcn.com/r/styles/base-nova",
+    "components": [
+      { "name": "alert-dialog", "localFile": "src/components/ui/alert-dialog.tsx", "registryUrl": "https://ui.shadcn.com/r/styles/base-nova/alert-dialog.json" },
+      { "name": "badge", "localFile": "src/components/ui/badge.tsx", "registryUrl": "https://ui.shadcn.com/r/styles/base-nova/badge.json" },
+      { "name": "card", "localFile": "src/components/ui/card.tsx", "registryUrl": "https://ui.shadcn.com/r/styles/base-nova/card.json" },
+      { "name": "checkbox", "localFile": "src/components/ui/checkbox.tsx", "registryUrl": "https://ui.shadcn.com/r/styles/base-nova/checkbox.json" },
+      { "name": "field", "localFile": "src/components/ui/field.tsx", "registryUrl": "https://ui.shadcn.com/r/styles/base-nova/field.json" },
+      { "name": "label", "localFile": "src/components/ui/label.tsx", "registryUrl": "https://ui.shadcn.com/r/styles/base-nova/label.json" },
+      { "name": "progress", "localFile": "src/components/ui/progress.tsx", "registryUrl": "https://ui.shadcn.com/r/styles/base-nova/progress.json" },
+      { "name": "scroll-area", "localFile": "src/components/ui/scroll-area.tsx", "registryUrl": "https://ui.shadcn.com/r/styles/base-nova/scroll-area.json" },
+      { "name": "select", "localFile": "src/components/ui/select.tsx", "registryUrl": "https://ui.shadcn.com/r/styles/base-nova/select.json" },
+      { "name": "skeleton", "localFile": "src/components/ui/skeleton.tsx", "registryUrl": "https://ui.shadcn.com/r/styles/base-nova/skeleton.json" },
+      { "name": "tabs", "localFile": "src/components/ui/tabs.tsx", "registryUrl": "https://ui.shadcn.com/r/styles/base-nova/tabs.json" }
+    ],
+    "originInspection": {
+      "registryUrl": "https://coss.com/ui/r/combobox.json",
+      "decision": "not-installed",
+      "reason": "The inspected Coss/Origin combobox requires Coss-specific packages and registry imports; the standard shadcn Select was sufficient without replacing existing primitives."
+    }
+  },
+  "dndKit": {
+    "packages": ["@dnd-kit/react", "@dnd-kit/helpers"],
+    "docsUrl": "https://github.com/clauderic/dnd-kit",
+    "packageSourceUrl": "https://www.npmjs.com/package/@dnd-kit/react"
+  }
+}
