@@ -2,6 +2,7 @@ import express from "express";
 import { errorEnvelope, McpDiscoverySchema, SafetyStateSchema } from "@ja/shared-types";
 import { createConfiguredAuth, parseExactHttpsOrigins } from "./src/auth.js";
 import { createGoogleWorkspaceHandlers } from "./src/google-workspace-routes.js";
+import { createGoogleApiHandlers } from "./src/google-api.js";
 import { prepareAfterCallWorkflow } from "./src/after-call.js";
 import { createMcpRequestHandler } from "./src/mcp.js";
 import { createReadOnlyNeo4jAdapter } from "./src/neo4j.js";
@@ -54,6 +55,7 @@ export async function createApp({
   authConfig,
   googleWorkspaceConfig,
   googleWorkspaceOptions,
+  googleApiHandlers,
   mcpHandlerFactory = createMcpRequestHandler,
   neo4j = createReadOnlyNeo4jAdapter(),
 } = {}) {
@@ -96,11 +98,17 @@ export async function createApp({
     }
     return googleWorkspace[name](req, res);
   };
+  const googleApi = googleApiHandlers ?? (typeof configuredAuth.getGoogleProviderAccessToken === "function"
+    ? createGoogleApiHandlers({ auth: configuredAuth })
+    : { sync: (_req, res) => respondError(res, "GOOGLE_WORKSPACE_UNAVAILABLE", "Google Workspace authorization is unavailable") });
   app.get("/api/google-workspace/status", authoritativeGoogleSession, googleWorkspaceHandler("status"));
   app.get("/api/google-workspace/calendar/upcoming", authoritativeGoogleSession, googleWorkspaceHandler("upcomingEvents"));
-  app.post("/api/google-workspace/oauth/start", authoritativeGoogleSession, googleWorkspaceHandler("start"));
-  app.get("/api/google-workspace/oauth/callback", authoritativeGoogleSession, googleWorkspaceHandler("callback"));
-  app.post("/api/google-workspace/disconnect", authoritativeGoogleSession, googleWorkspaceHandler("disconnect"));
+  if (googleWorkspace.legacyEnabled) {
+    app.post("/api/google-workspace/oauth/start", authoritativeGoogleSession, googleWorkspaceHandler("start"));
+    app.get("/api/google-workspace/oauth/callback", authoritativeGoogleSession, googleWorkspaceHandler("callback"));
+    app.post("/api/google-workspace/disconnect", authoritativeGoogleSession, googleWorkspaceHandler("disconnect"));
+  }
+  app.post("/api/gws/sync", authoritativeGoogleSession, googleApi.sync);
   app.get("/api/mcp/discovery", authenticated, async (_req, res) => {
     try { return res.json(McpDiscoverySchema.parse(discoverMcp(recruiterAuthority))); }
     catch { return respondError(res, "RECRUITER_UNAVAILABLE", "Recruitment authority is unavailable"); }

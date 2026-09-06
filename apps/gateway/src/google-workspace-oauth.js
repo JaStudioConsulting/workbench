@@ -12,6 +12,7 @@ export const GOOGLE_WORKSPACE_SCOPES = Object.freeze({
   gmail: Object.freeze(["https://www.googleapis.com/auth/gmail.readonly"]),
   calendar: Object.freeze(["https://www.googleapis.com/auth/calendar.readonly"]),
   drive: Object.freeze(["https://www.googleapis.com/auth/drive.metadata.readonly"]),
+  sheets: Object.freeze(["https://www.googleapis.com/auth/spreadsheets"]),
 });
 
 const KNOWN_STAGES = new Set(Object.keys(GOOGLE_WORKSPACE_SCOPES));

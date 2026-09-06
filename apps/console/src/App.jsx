@@ -1,52 +1,14 @@
 import { useState } from "react";
-import Navigation from "./components/Navigation.jsx";
-import HomeWidgets from "./components/HomeWidgets.jsx";
-import MailInbox from "./components/MailInbox.jsx";
-import {
-  CandidatesPage,
-  LeadsPage,
-  ProcessPage,
-  StaffPage,
-  ProfilePage,
-  SettingsPage,
-} from "./components/PageStubs.jsx";
-
-const PAGE_TITLES = {
-  home: "Home",
-  mail: "Mail",
-  candidates: "Candidates",
-  leads: "Leads",
-  process: "Process",
-  staff: "Staff",
-  profile: "Profile",
-  settings: "Settings",
-};
-
-function App() {
-  const [page, setPage] = useState("home");
-
-  return (
-    <div className="app-shell">
-      <Navigation active={page} onNavigate={setPage} />
-      <main>
-        <header className="page-header">
-          <div>
-            <span className="eyebrow">JA STUDIO CONSULTING</span>
-            <h1>{PAGE_TITLES[page]}</h1>
-          </div>
-        </header>
-
-        {page === "home" && <HomeWidgets />}
-        {page === "mail" && <MailInbox />}
-        {page === "candidates" && <CandidatesPage />}
-        {page === "leads" && <LeadsPage />}
-        {page === "process" && <ProcessPage />}
-        {page === "staff" && <StaffPage />}
-        {page === "profile" && <ProfilePage />}
-        {page === "settings" && <SettingsPage />}
-      </main>
-    </div>
-  );
-}
-
-export default App;
+import { Home, Mail, Users, Contact, GitBranch, UserCog, User, Settings, ChevronsUpDown, Check } from "lucide-react";
+import { SidebarProvider, Sidebar, SidebarHeader, SidebarContent, SidebarGroup, SidebarGroupLabel, SidebarGroupContent, SidebarMenu, SidebarMenuItem, SidebarMenuButton, SidebarInset, SidebarTrigger } from "./components/ui/sidebar.tsx";
+import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "./components/ui/resizable.tsx";
+import { Popover, PopoverContent, PopoverTrigger } from "./components/ui/popover.tsx";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "./components/ui/command.tsx";
+import { Button } from "./components/ui/button.tsx";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./components/ui/table.tsx";
+import LoginButton from "./components/LoginButton.tsx";
+import { GoogleWorkspacePanel } from "./components/GoogleWorkspacePanel.jsx";
+const areas=[["Home",Home],["Mail",Mail],["Candidates",Users],["Leads",Contact],["Process",GitBranch],["Staff",UserCog],["Profile",User],["Settings",Settings]];
+const contexts=["Independent recruiting","Lumentis","Discount Tire · 3661896"];
+function ContextPicker({value,onChange}){const [open,setOpen]=useState(false);return <Popover open={open} onOpenChange={setOpen}><PopoverTrigger render={<Button variant="outline" className="min-w-56 justify-between"/>}><span>{value}</span><ChevronsUpDown data-icon="inline-end"/></PopoverTrigger><PopoverContent className="w-64 p-0"><Command><CommandInput placeholder="Choose role or case"/><CommandList><CommandEmpty>No matching context.</CommandEmpty><CommandGroup>{contexts.map(item=><CommandItem key={item} value={item} onSelect={()=>{onChange(item);setOpen(false)}}>{item}{item===value&&<Check className="ml-auto"/>}</CommandItem>)}</CommandGroup></CommandList></Command></PopoverContent></Popover>}
+export default function App(){const [page,setPage]=useState("Home");const [context,setContext]=useState(contexts[0]);return <SidebarProvider><Sidebar><SidebarHeader><div className="px-2 py-3 text-lg font-semibold">JA <span className="text-muted-foreground">Workbench</span></div></SidebarHeader><SidebarContent><SidebarGroup><SidebarGroupLabel>Work areas</SidebarGroupLabel><SidebarGroupContent><SidebarMenu>{areas.slice(0,4).map(([label,Icon])=><SidebarMenuItem key={label}><SidebarMenuButton isActive={page===label} onClick={()=>setPage(label)}><Icon/><span>{label}</span></SidebarMenuButton></SidebarMenuItem>)}</SidebarMenu></SidebarGroupContent></SidebarGroup><SidebarGroup><SidebarGroupLabel>Supporting</SidebarGroupLabel><SidebarGroupContent><SidebarMenu>{areas.slice(4).map(([label,Icon])=><SidebarMenuItem key={label}><SidebarMenuButton isActive={page===label} onClick={()=>setPage(label)}><Icon/><span>{label}</span></SidebarMenuButton></SidebarMenuItem>)}</SidebarMenu></SidebarGroupContent></SidebarGroup></SidebarContent></Sidebar><SidebarInset><header className="flex h-16 items-center gap-3 border-b px-4"><SidebarTrigger/><div className="flex-1"><p className="text-xs text-muted-foreground">JA STUDIO CONSULTING</p><h1 className="text-xl font-semibold">{page}</h1></div><ContextPicker value={context} onChange={setContext}/><LoginButton/></header><main className="flex flex-1 flex-col gap-4 p-4 md:p-6">{page === "Settings" ? <GoogleWorkspacePanel /> : <ResizablePanelGroup orientation="horizontal" className="min-h-[520px] rounded-lg border"><ResizablePanel defaultSize={66} minSize={45}><section className="h-full p-5"><h2 className="mb-1 text-base font-semibold">{page} workspace</h2><p className="mb-5 text-sm text-muted-foreground">Verified records appear here when connected.</p><div className="rounded-md border"><Table><TableHeader><TableRow><TableHead>Record</TableHead><TableHead>Status</TableHead><TableHead>Next action</TableHead></TableRow></TableHeader><TableBody><TableRow><TableCell colSpan={3} className="h-40 text-center text-muted-foreground">No verified {page.toLowerCase()} records yet.</TableCell></TableRow></TableBody></Table></div></section></ResizablePanel><ResizableHandle withHandle/><ResizablePanel defaultSize={34} minSize={25}><section className="flex h-full items-center justify-center p-6 text-center"><div><h2 className="font-semibold">Ready for review</h2><p className="mt-2 max-w-xs text-sm text-muted-foreground">This panel stays empty until real work is available.</p></div></section></ResizablePanel></ResizablePanelGroup>}</main></SidebarInset></SidebarProvider>}

@@ -23,6 +23,7 @@
   },
   "devDependencies": {
     "@cloudflare/vite-plugin": "1.37.1",
+    "@tailwindcss/vite": "4.3.3",
     "@jastudioconsulting/recruitment-skills": "github:JaStudioConsulting/recruitment-skills#bbf1bbfdc91bbdd9409c976bd5782a0fc87db0b0",
     "@openai/sites-vite-plugin": "0.2.0",
     "@vitejs/plugin-react": "6.0.2",

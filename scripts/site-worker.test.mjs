@@ -1,7 +1,19 @@
 import assert from "node:assert/strict";
+import { readdir, readFile } from "node:fs/promises";
 import test from "node:test";
 
 const worker = (await import("../dist/server/index.js")).default;
+
+test("Sites CSS pipeline processes Tailwind imports and theme without warning artifacts", async () => {
+  const source = await readFile(new URL("../apps/console/src/styles.css", import.meta.url), "utf8");
+  const entries = await readdir(new URL("../dist/client/assets/", import.meta.url));
+  const stylesheet = entries.find((entry) => entry.endsWith(".css"));
+  assert.ok(stylesheet, "Sites build must emit a stylesheet");
+  const css = await readFile(new URL(`../dist/client/assets/${stylesheet}`, import.meta.url), "utf8");
+  assert.ok(source.indexOf('@import "tailwindcss"') < source.indexOf(":root"));
+  assert.ok(source.indexOf('@import "tw-animate-css"') < source.indexOf(":root"));
+  assert.doesNotMatch(css, /@theme/);
+});
 
 function request(path, init) {
   return worker.fetch(new Request(`https://workbench.test${path}`, init), {

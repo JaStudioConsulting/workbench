@@ -154,6 +154,7 @@ async function fixture({ identityEmail = "review@example.invalid", revokeFailure
       now,
       oauth,
       calendar,
+      legacyWorkspaceStore: true,
     },
   });
   return { app, states, credentials, observed, advance(ms) { currentTime = new Date(currentTime.getTime() + ms); } };

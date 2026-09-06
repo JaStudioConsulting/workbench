@@ -1,3 +1,5 @@
+import { GOOGLE_WORKSPACE_CONTAINER_SCOPES } from "@ja/shared-types";
+
 function exactHttpsOrigin(value) {
   try {
     const url = new URL(value);
@@ -49,7 +51,18 @@ export async function createConfiguredAuth(env = process.env) {
       baseURL: baseOrigin,
       secret,
       trustedOrigins,
-      socialProviders: { google: { clientId: env.GOOGLE_CLIENT_ID, clientSecret: env.GOOGLE_CLIENT_SECRET, requireEmailVerification: true } },
+      socialProviders: {
+        google: {
+          clientId: env.GOOGLE_CLIENT_ID,
+          clientSecret: env.GOOGLE_CLIENT_SECRET,
+          requireEmailVerification: true,
+          accessType: "offline",
+          prompt: "select_account consent",
+          includeGrantedScopes: true,
+          scope: GOOGLE_WORKSPACE_CONTAINER_SCOPES,
+        },
+      },
+      account: { encryptOAuthTokens: true },
       user: {
         validateUserInfo({ user }) {
           if (isApprovedEmail(user?.email)) return;
@@ -74,6 +87,20 @@ export async function createConfiguredAuth(env = process.env) {
             query: { disableCookieCache: true },
           });
         } catch { return null; }
+      },
+      async getGoogleProviderAccessToken(req) {
+        const headers = fromNodeHeaders(req.headers);
+        const session = await auth.api.getSession({ headers, query: { disableCookieCache: true } });
+        if (!session?.user?.id) return null;
+        const accountsResult = await auth.api.listUserAccounts({ headers });
+        const accounts = Array.isArray(accountsResult) ? accountsResult : accountsResult?.accounts;
+        const account = accounts?.find((item) => (item?.providerId === "google" || item?.provider === "google") && item?.userId === session.user.id);
+        if (!account?.id) return null;
+        const tokenResult = await auth.api.getAccessToken({ body: { accountId: account.id }, headers });
+        const accessToken = tokenResult?.accessToken || tokenResult?.access_token;
+        if (!accessToken) return null;
+        const scopes = tokenResult?.scopes ?? account.scopes ?? (typeof account.scope === "string" ? account.scope.split(",").map((scope) => scope.trim()).filter(Boolean) : []);
+        return { accessToken, scopes };
       },
     };
   } catch { return { enabled: false, reason: "Authentication could not initialize" }; }

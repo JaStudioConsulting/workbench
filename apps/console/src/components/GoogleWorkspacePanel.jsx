@@ -1,140 +1,32 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Cloud } from "lucide-react";
-import {
-  disconnectGoogleWorkspace,
-  getGoogleWorkspaceStatus,
-  startGoogleWorkspaceConnection,
-  validateGoogleAuthorizationUrl,
-} from "../google-workspace-client.js";
+import { authClient } from "../auth-client.js";
+import { getGoogleWorkspaceStatus } from "../google-workspace-client.js";
+import LoginButton from "./LoginButton.tsx";
 import { UpcomingCalendar } from "./UpcomingCalendar.jsx";
 
-const VIEW_BY_PHASE = {
-  checking: {
-    label: "Checking connection",
-    button: "Checking…",
-    helper: "Confirming the current Google Workspace connection.",
-    tone: "neutral",
-  },
-  unavailable: {
-    label: "Unavailable",
-    button: "Connect Google Calendar",
-    helper: "Google Workspace connection setup is not available yet.",
-    tone: "error",
-  },
-  unauthenticated: {
-    label: "Sign-in required",
-    button: "Connect Google Calendar",
-    helper: "Sign in to the Workbench before connecting Google Calendar.",
-    tone: "error",
-  },
-  forbidden: {
-    label: "Account not approved",
-    button: "Connect Google Calendar",
-    helper: "This Workbench account is not approved for Google Workspace.",
-    tone: "error",
-  },
-  disconnected: {
-    label: "Not connected",
-    button: "Connect Google Calendar",
-    helper: "Google will ask for read-only Calendar access.",
-    tone: "neutral",
-  },
-  starting: {
-    label: "Opening Google",
-    button: "Opening Google…",
-    helper: "Continue in the Google window to approve read-only Calendar access.",
-    tone: "neutral",
-  },
-  connected: {
-    label: "Calendar connected",
-    button: "Disconnect",
-    helper: "Read-only Calendar access is active.",
-    tone: "connected",
-  },
-  disconnecting: {
-    label: "Disconnecting",
-    button: "Disconnecting…",
-    helper: "Removing this Workbench connection.",
-    tone: "neutral",
-  },
-};
-
-function phaseForError(error) {
-  if (error?.status === 401) return "unauthenticated";
-  if (error?.status === 403) return "forbidden";
-  return "unavailable";
-}
-
-function callbackHint() {
-  if (typeof window === "undefined") return "";
-  return new URLSearchParams(window.location.search).get("googleWorkspace") === "denied"
-    ? "Google access was not approved. Nothing was connected."
-    : "";
-}
+const SERVICES = ["Calendar", "Gmail", "Drive", "Sheets"];
 
 export function GoogleWorkspacePanel() {
-  const [connection, setConnection] = useState({ phase: "checking", account: null, helper: "" });
-  const oauthHint = useMemo(callbackHint, []);
-
-  const checkStatus = useCallback(() => {
-    const controller = new AbortController();
-
-    getGoogleWorkspaceStatus({ signal: controller.signal })
-      .then((status) => {
-        if (status.connected) {
-          setConnection({ phase: "connected", account: status.account, helper: "" });
-        } else {
-          setConnection({ phase: "disconnected", account: null, helper: oauthHint });
-        }
-      })
-      .catch((error) => {
-        if (error?.name !== "AbortError") {
-          setConnection({ phase: phaseForError(error), account: null, helper: "" });
-        }
-      });
-
-    return controller;
-  }, [oauthHint]);
+  const session = authClient.useSession();
+  const pending = session.isPending;
+  const account = session.data?.user?.email;
+  const sessionError = session.error ? "The Google account connection could not be checked." : "";
+  const [calendarStatus, setCalendarStatus] = useState("checking");
 
   useEffect(() => {
-    const controller = checkStatus();
+    if (!account) {
+      setCalendarStatus("disconnected");
+      return undefined;
+    }
+    const controller = new AbortController();
+    getGoogleWorkspaceStatus({ signal: controller.signal })
+      .then((status) => setCalendarStatus(status.connected ? "connected" : "disconnected"))
+      .catch((error) => {
+        if (error?.name !== "AbortError") setCalendarStatus("unavailable");
+      });
     return () => controller.abort();
-  }, [checkStatus]);
-
-  const handleConnect = async () => {
-    setConnection({ phase: "starting", account: null, helper: "" });
-    try {
-      const result = await startGoogleWorkspaceConnection();
-      const destination = validateGoogleAuthorizationUrl(result.authorizationUrl);
-      window.location.assign(destination);
-    } catch (error) {
-      setConnection({ phase: phaseForError(error), account: null, helper: "" });
-    }
-  };
-
-  const handleDisconnect = async () => {
-    const previousAccount = connection.account;
-    setConnection({ phase: "disconnecting", account: previousAccount, helper: "" });
-    try {
-      const status = await disconnectGoogleWorkspace();
-      if (status.connected) {
-        setConnection({ phase: "connected", account: status.account, helper: "Disconnect did not complete." });
-      } else {
-        setConnection({ phase: "disconnected", account: null, helper: "Google Calendar was disconnected." });
-      }
-    } catch (error) {
-      if (error?.status === 401 || error?.status === 403) {
-        setConnection({ phase: phaseForError(error), account: null, helper: "" });
-      } else {
-        setConnection({ phase: "connected", account: previousAccount, helper: "Calendar could not be disconnected. Try again." });
-      }
-    }
-  };
-
-  const view = VIEW_BY_PHASE[connection.phase];
-  const canConnect = connection.phase === "disconnected";
-  const canDisconnect = connection.phase === "connected";
-  const helper = connection.helper || view.helper;
+  }, [account]);
 
   return (
     <section className="google-workspace-panel" aria-labelledby="google-workspace-title">
@@ -148,26 +40,23 @@ export function GoogleWorkspacePanel() {
             <h2 id="google-workspace-title">Google Workspace</h2>
           </div>
         </div>
-        <p>Connect Google Calendar to see upcoming events in the Workbench.</p>
-        <p className="google-workspace-scope">Calendar is read-only. Gmail, Drive, Docs, Sheets, and other Workspace tools remain disconnected.</p>
+        <p>Connect one Google account to use Calendar, Gmail, Drive, and Sheets in the Workbench.</p>
+        <p className="google-workspace-scope">Access is managed by Better Auth. The Workbench never handles or stores Google tokens in the browser.</p>
       </div>
 
       <div className="google-workspace-action">
-        <span className={`connection-status is-${view.tone}`} aria-live="polite">
-          <span aria-hidden="true" />{view.label}
+        <span className={`connection-status is-${pending ? "neutral" : account ? "connected" : "error"}`} aria-live="polite">
+          <span aria-hidden="true" />{pending ? "Checking session" : account ? "Google account linked" : "Sign-in required"}
         </span>
-        {connection.account?.email ? <strong className="connected-account">{connection.account.email}</strong> : null}
-        <button
-          type="button"
-          onClick={canDisconnect ? handleDisconnect : handleConnect}
-          disabled={!canConnect && !canDisconnect}
-        >
-          {view.button}
-        </button>
-        <small>{helper}</small>
+        {account ? <strong className="connected-account">{account}</strong> : null}
+        {pending ? <small>Confirming the current Better Auth session.</small> : <LoginButton />}
+        {sessionError ? <small role="alert">{sessionError}</small> : null}
       </div>
 
-      {connection.phase === "connected" ? <UpcomingCalendar /> : null}
+      <div aria-label="Google Workspace services">
+        {SERVICES.map((service) => <span key={service}>{service}</span>)}
+      </div>
+      {calendarStatus === "connected" ? <UpcomingCalendar /> : null}
     </section>
   );
 }

@@ -48,7 +48,7 @@ test("Better Auth and Workspace clients use gateway or same-origin without local
   assert.match(vite, /"\/mcp"/);
 });
 
-test("Calendar-first Settings UI is status-gated and contains no fake event data or service grid", async () => {
+test("Settings uses one Better Auth Google connection for Workspace services", async () => {
   const [panel, calendar, stubs] = await Promise.all([
     readFile(new URL("../src/components/GoogleWorkspacePanel.jsx", import.meta.url), "utf8"),
     readFile(new URL("../src/components/UpcomingCalendar.jsx", import.meta.url), "utf8"),
@@ -56,12 +56,18 @@ test("Calendar-first Settings UI is status-gated and contains no fake event data
   ]);
   const source = `${panel}\n${calendar}\n${stubs}`;
 
-  assert.match(panel, /canConnect = connection\.phase === "disconnected"/);
-  assert.match(panel, /connection\.phase === "connected" \? <UpcomingCalendar/);
-  assert.match(panel, /Sign-in required/);
-  assert.match(panel, /Account not approved/);
-  assert.match(panel, /Unavailable/);
-  assert.match(calendar, /result\.events\.slice\(0, 10\)/);
-  assert.doesNotMatch(source, /service-grid|google-workspace-services|dangerouslySetInnerHTML/);
+  assert.match(panel, /authClient\.useSession\(\)/);
+  assert.match(panel, /getGoogleWorkspaceStatus/);
+  assert.match(panel, /calendarStatus === "connected" \? <UpcomingCalendar/);
+  assert.match(panel, /<LoginButton \/>/);
+  assert.match(panel, /Calendar, Gmail, Drive, and Sheets/);
+  assert.doesNotMatch(panel, /startGoogleWorkspaceConnection|disconnectGoogleWorkspace|validateGoogleAuthorizationUrl/);
+  assert.doesNotMatch(source, /service-grid|dangerouslySetInnerHTML/);
   assert.doesNotMatch(source, /Team sync|Candidate interview|Client meeting/i);
+});
+
+test("Settings navigation can reach the Google Workspace panel", async () => {
+  const app = await readFile(new URL("../src/App.jsx", import.meta.url), "utf8");
+  assert.match(app, /GoogleWorkspacePanel/);
+  assert.match(app, /page === "Settings" \? <GoogleWorkspacePanel \/>/);
 });
