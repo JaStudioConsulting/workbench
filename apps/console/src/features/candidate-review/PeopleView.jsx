@@ -5,6 +5,7 @@ import { Button } from "../../components/ui/button.tsx";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "../../components/ui/select.tsx";
 import { LOXO_PIPELINE_STAGES, RESUME_INDICATOR_STATES } from "./constants.js";
 import { getOwnershipStatus, openBrandedResume } from "./brandResume.js";
+import { createCandidateDraft } from "./candidateReviewService.js";
 import CandidateWriteUpDialog from "./CandidateWriteUpDialog.jsx";
 
 const LOXO_PEOPLE_BASE_URL = "https://app.loxo.co/people/";
@@ -81,6 +82,18 @@ export default function PeopleView({ candidates, currentJob, jobs, submissionHis
 
   const overrideOwnership = (candidateId) => setOwnershipOverrides((current) => new Set([...current, candidateId]));
 
+  const brandResume = async (candidate) => {
+    setActionError("");
+    try {
+      if (!candidate.fullResumeText?.trim()) throw new Error("No source resume is stored for this candidate.");
+      await createCandidateDraft({ job: currentJob, candidate, kind: "resume_pdf", body: candidate.fullResumeText });
+      const result = openBrandedResume(candidate);
+      if (!result.ok) throw new Error(result.error);
+    } catch (error) {
+      setActionError(error.message || "The branded resume could not be opened.");
+    }
+  };
+
   return (
     <div className="flex flex-1 min-h-0 flex-col gap-3 overflow-hidden" data-testid="people-view">
       <div className="rounded-lg border bg-card p-3 shadow-sm shrink-0 space-y-3">
@@ -152,7 +165,7 @@ export default function PeopleView({ candidates, currentJob, jobs, submissionHis
                       <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-foreground text-background text-sm font-bold">{candidate.initials}</div>
                       <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-2">
-                          <a href={`${LOXO_PEOPLE_BASE_URL}${candidate.id}`} target="_blank" rel="noopener noreferrer" onClick={(event) => event.stopPropagation()} className="flex items-center gap-1 text-sm font-bold hover:underline">{candidate.name}<ExternalLink size={12} className="text-muted-foreground" /></a>
+                          {candidate.profileUrl || candidate.loxoPersonId ? <a href={candidate.profileUrl || `${LOXO_PEOPLE_BASE_URL}${candidate.loxoPersonId}`} target="_blank" rel="noopener noreferrer" onClick={(event) => event.stopPropagation()} className="flex items-center gap-1 text-sm font-bold hover:underline">{candidate.name}<ExternalLink size={12} className="text-muted-foreground" /></a> : <span className="text-sm font-bold">{candidate.name}</span>}
                           <Badge variant="outline" className="text-[11px] py-0">{candidate.stage}</Badge>
                           <span className="text-[10.5px] text-muted-foreground">{resumeInfo.symbol} {resumeInfo.label}</span>
                         </div>
@@ -180,7 +193,7 @@ export default function PeopleView({ candidates, currentJob, jobs, submissionHis
                       ) : (
                         <>
                           <a href={candidate.phone ? `tel:${candidate.phone.replace(/\s/g, "")}` : undefined} aria-disabled={!candidate.phone} className={`inline-flex h-8 items-center rounded-md border bg-background px-3 text-xs font-semibold ${!candidate.phone ? "pointer-events-none opacity-50" : "hover:bg-muted"}`}><Phone size={13} className="mr-1.5" />Call</a>
-                          <Button type="button" size="sm" variant="outline" className="h-8 text-xs" onClick={() => { const result = openBrandedResume(candidate); if (!result.ok) setActionError(result.error); }}><FileText size={13} className="mr-1.5" />Brand resume</Button>
+                          <Button type="button" size="sm" variant="outline" className="h-8 text-xs" onClick={() => brandResume(candidate)}><FileText size={13} className="mr-1.5" />Brand resume</Button>
                           <Button type="button" size="sm" variant="outline" className="h-8 text-xs" onClick={() => setWriteUpCandidate(candidate)}><NotebookText size={13} className="mr-1.5" />Write-up</Button>
                           <Button type="button" size="sm" className="h-8 bg-blue-700 text-xs text-white hover:bg-blue-800" disabled={submittingId === candidate.id} onClick={() => markSubmitted(candidate)}>{submittingId === candidate.id ? <Loader2 size={13} className="mr-1.5 animate-spin" /> : <Send size={13} className="mr-1.5" />}Mark submitted</Button>
                         </>
@@ -194,7 +207,7 @@ export default function PeopleView({ candidates, currentJob, jobs, submissionHis
         )}
       </div>
 
-      {writeUpCandidate ? <CandidateWriteUpDialog candidate={writeUpCandidate} open onOpenChange={(open) => !open && setWriteUpCandidate(null)} /> : null}
+      {writeUpCandidate ? <CandidateWriteUpDialog candidate={writeUpCandidate} currentJob={currentJob} open onOpenChange={(open) => !open && setWriteUpCandidate(null)} /> : null}
     </div>
   );
 }

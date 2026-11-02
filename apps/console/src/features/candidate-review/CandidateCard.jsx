@@ -9,11 +9,13 @@ import LogActivityForm from "./LogActivityForm.jsx";
 import AlsoFitsDialog from "./AlsoFitsDialog.jsx";
 import CandidateWriteUpDialog from "./CandidateWriteUpDialog.jsx";
 import { getOwnershipStatus, openBrandedResume } from "./brandResume.js";
+import { createCandidateDraft } from "./candidateReviewService.js";
 
 const LOXO_PEOPLE_BASE_URL = "https://app.loxo.co/people/";
 
 export default function CandidateCard({
   candidate,
+  currentJob,
   onPass,
   onWant,
   onLogActivity,
@@ -88,10 +90,23 @@ export default function CandidateCard({
     }
   };
 
-  const handleBrandResume = () => {
+  const handleBrandResume = async () => {
     setBrandError("");
-    const result = openBrandedResume(candidate);
-    if (!result.ok) setBrandError(result.error);
+    try {
+      if (!candidate.fullResumeText?.trim()) {
+        throw new Error("No source resume is stored for this candidate.");
+      }
+      await createCandidateDraft({
+        job: currentJob,
+        candidate,
+        kind: "resume_pdf",
+        body: candidate.fullResumeText,
+      });
+      const result = openBrandedResume(candidate);
+      if (!result.ok) throw new Error(result.error);
+    } catch (error) {
+      setBrandError(error.message || "The branded resume could not be opened.");
+    }
   };
 
   // Drag overlay stamps
@@ -134,8 +149,8 @@ export default function CandidateCard({
           <div className="min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
               {/* Candidate NAME link opens Loxo profile in a new tab */}
-              <a
-                href={`${LOXO_PEOPLE_BASE_URL}${candidate.id}`}
+              {candidate.profileUrl || candidate.loxoPersonId ? <a
+                href={candidate.profileUrl || `${LOXO_PEOPLE_BASE_URL}${candidate.loxoPersonId}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 onClick={(e) => e.stopPropagation()}
@@ -144,7 +159,7 @@ export default function CandidateCard({
               >
                 <span>{candidate.name}</span>
                 <ExternalLink size={14} className="text-muted-foreground" />
-              </a>
+              </a> : <span className="text-lg font-bold leading-snug">{candidate.name}</span>}
 
               {/* Pipeline Stage Pill (exact Loxo name) */}
               <Badge variant="outline" className="font-semibold text-xs border-foreground/30 bg-background">
@@ -312,6 +327,7 @@ export default function CandidateCard({
       />
       <CandidateWriteUpDialog
         candidate={candidate}
+        currentJob={currentJob}
         open={showWriteUp}
         onOpenChange={setShowWriteUp}
       />

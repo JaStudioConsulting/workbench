@@ -3,6 +3,7 @@
 
 import { SAMPLE_JOBS, SAMPLE_CANDIDATES } from "./sampleReviewData.js";
 import { PIPELINE_STAGE_ORDER } from "./constants.js";
+import { supabase } from "../../supabase-client.js";
 
 // In-memory local stores (in-memory only, no persistent browser storage)
 // Keyed strictly by composite key: jobId + "::" + loxoPersonId
@@ -10,6 +11,156 @@ const candidateDecisions = new Map(); // compositeKey -> "want" | "pass" | null
 const loggedActivities = new Map(); // compositeKey -> Array<Activity>
 const activityOutbox = new Map(); // idempotencyKey -> ActivityRecord
 const candidateSubmissions = new Map(); // compositeKey -> session-only submission record
+let runtimeJobs = [];
+const runtimeCandidatesByJob = new Map();
+
+function sourceIdentity(candidateId) {
+  const [source, rawId] = String(candidateId || "").split(":");
+  const sourceId = Number(rawId);
+  if (!["sourcing", "submission"].includes(source) || !Number.isInteger(sourceId)) return null;
+  return { source, sourceId };
+}
+
+function initials(name) {
+  return String(name || "?")
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join("")
+    .toUpperCase();
+}
+
+function displayDate(value) {
+  if (!value) return "Recent";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value);
+  return date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+
+function mapLiveCandidate(row, actions = []) {
+  const decision = actions.find((item) => item.action_type === "decision")?.decision || null;
+  const activityTrail = actions
+    .filter((item) => item.action_type === "activity")
+    .map((item) => ({
+      id: `db-act-${item.id}`,
+      type: item.activity_type,
+      actor: "Ja Maralit",
+      isJa: true,
+      actorUnknown: false,
+      date: displayDate(item.created_at),
+      note: item.note || "",
+      status: item.status === "waiting_for_loxo" ? "Waiting for Loxo" : "Saved",
+      targetStage: item.target_stage || "No automatic stage change",
+    }));
+
+  const sourceSummary = row.profile_summary || row.fit_evidence || "";
+  const workHistory = sourceSummary
+    ? [{
+        id: `source-${row.candidate_source}-${row.candidate_source_id}`,
+        title: row.current_title || "Source profile",
+        company: row.current_company || "Company not recorded",
+        location: row.location || "Location not recorded",
+        dates: "Source record",
+        bullets: [sourceSummary],
+      }]
+    : [];
+  const resumeText = row.resume_text || "";
+
+  return {
+    id: `${row.candidate_source}:${row.candidate_source_id}`,
+    candidateId: row.candidate_key || `${row.candidate_source}-${row.candidate_source_id}`,
+    candidateSource: row.candidate_source,
+    candidateSourceId: row.candidate_source_id,
+    jobId: String(row.job_id),
+    name: row.candidate_name || "Unnamed candidate",
+    initials: initials(row.candidate_name),
+    title: row.current_title || "Title not recorded",
+    employer: row.current_company || "Company not recorded",
+    location: row.location || "",
+    email: row.email || "",
+    phone: row.phone || "",
+    stage: row.stage || "Needs checking",
+    resumeStatus: resumeText ? "resume_on_file" : row.profile_url ? "profile_only" : "no_resume_data",
+    fullResumeText: resumeText,
+    workHistory,
+    education: [],
+    skills: [],
+    certifications: [],
+    profileSummary: row.profile_summary || "",
+    additionalNotes: row.additional_notes || "",
+    fitEvidence: row.fit_evidence || "",
+    gaps: row.gaps || "",
+    profileUrl: row.profile_url || "",
+    trackerRow: row.tracker_row,
+    sourceVerifiedDate: row.source_verified_date || null,
+    decision,
+    activityTrail,
+    otherContactsCount: 0,
+    alsoFits: [],
+    submissionHistory: [],
+  };
+}
+
+export async function loadLiveReviewJobs() {
+  const [{ data, error }, { data: linkedRows, error: linkedError }] = await Promise.all([
+    supabase
+      .from("tracker_jobs")
+      .select("job_id,job_title,company,location,compensation,status,date_opened,owners,loxo_link")
+      .eq("status", "Active")
+      .order("date_opened", { ascending: false, nullsFirst: false }),
+    supabase.from("candidate_review_feed").select("job_id").limit(1000),
+  ]);
+  if (error) throw new Error("Supabase could not load Tracker jobs");
+  if (linkedError) throw new Error("Supabase could not load candidate job links");
+
+  const linkedJobIds = new Set((linkedRows || []).map((row) => String(row.job_id)));
+
+  runtimeJobs = (data || []).map((job) => ({
+    id: String(job.job_id),
+    loxoJobId: String(job.job_id),
+    title: job.job_title,
+    company: job.company || "Company not recorded",
+    location: job.location || "",
+    compensation: job.compensation || "",
+    status: job.status || "",
+    openedOn: job.date_opened || null,
+    owners: job.owners || "",
+    loxoLink: job.loxo_link || "",
+  })).sort((a, b) => Number(linkedJobIds.has(b.id)) - Number(linkedJobIds.has(a.id)));
+  return runtimeJobs;
+}
+
+export async function loadLiveCandidatesForJob(jobId) {
+  const { data: rows, error } = await supabase
+    .from("candidate_review_feed")
+    .select("*")
+    .eq("job_id", Number(jobId))
+    .limit(500);
+  if (error) throw new Error("Supabase could not load candidates for this job");
+
+  const { data: actions, error: actionsError } = await supabase
+    .from("candidate_review_actions")
+    .select("*")
+    .eq("job_id", Number(jobId))
+    .order("created_at", { ascending: false });
+  if (actionsError) throw new Error("Supabase could not load saved review actions");
+
+  const actionMap = new Map();
+  for (const item of actions || []) {
+    const key = `${item.candidate_source}:${item.candidate_source_id}`;
+    const list = actionMap.get(key) || [];
+    list.push(item);
+    actionMap.set(key, list);
+  }
+
+  const candidates = (rows || []).map((row) => {
+    const key = `${row.candidate_source}:${row.candidate_source_id}`;
+    return mapLiveCandidate(row, actionMap.get(key) || []);
+  });
+  runtimeCandidatesByJob.set(String(jobId), candidates);
+  return candidates;
+}
 
 export function makeCompositeKey(jobId, personId) {
   if (!jobId || !personId) return "";
@@ -17,17 +168,17 @@ export function makeCompositeKey(jobId, personId) {
 }
 
 export function isSampleData() {
-  return true;
+  return runtimeJobs.length === 0;
 }
 
 export function getReviewJobs() {
-  return SAMPLE_JOBS;
+  return runtimeJobs.length > 0 ? runtimeJobs : SAMPLE_JOBS;
 }
 
 export function getJobById(jobId) {
   if (!jobId) return null;
   // Match ONLY by immutable job ID. Zero title matching. Zero jobs[0] fallback.
-  return SAMPLE_JOBS.find((j) => String(j.id) === String(jobId)) || null;
+  return getReviewJobs().find((j) => String(j.id) === String(jobId)) || null;
 }
 
 export function getCandidatesForJob(jobId) {
@@ -36,13 +187,16 @@ export function getCandidatesForJob(jobId) {
   const job = getJobById(jobId);
   if (!job) return []; // Unmatched job yields empty array
 
-  const matches = SAMPLE_CANDIDATES.filter(
+  const source = runtimeJobs.length > 0
+    ? (runtimeCandidatesByJob.get(String(jobId)) || [])
+    : SAMPLE_CANDIDATES;
+  const matches = source.filter(
     (cand) => String(cand.jobId) === String(jobId)
   );
 
   const enriched = matches.map((cand) => {
     const key = makeCompositeKey(jobId, cand.id);
-    const decision = candidateDecisions.get(key) || null;
+    const decision = candidateDecisions.has(key) ? candidateDecisions.get(key) : (cand.decision || null);
     const sessionSubmission = candidateSubmissions.get(key) || null;
     const importedSubmission = cand.submissionHistory?.[0] || null;
     const stageIsSubmitted = (PIPELINE_STAGE_ORDER[cand.stage] ?? -1) >= PIPELINE_STAGE_ORDER.Submitted;
@@ -74,8 +228,11 @@ export function getCandidatesForJob(jobId) {
 
 export function getSubmissionHistory() {
   const records = [];
+  const candidateSource = runtimeJobs.length > 0
+    ? [...runtimeCandidatesByJob.values()].flat()
+    : SAMPLE_CANDIDATES;
 
-  for (const candidate of SAMPLE_CANDIDATES) {
+  for (const candidate of candidateSource) {
     const job = getJobById(candidate.jobId);
     for (const submission of candidate.submissionHistory || []) {
       records.push({
@@ -95,7 +252,7 @@ export function getSubmissionHistory() {
   for (const [key, submission] of candidateSubmissions.entries()) {
     const [jobId, personId] = key.split("::");
     const job = getJobById(jobId);
-    const candidate = SAMPLE_CANDIDATES.find(
+    const candidate = candidateSource.find(
       (item) => String(item.jobId) === jobId && String(item.id) === personId
     );
     if (!candidate) continue;
@@ -134,8 +291,41 @@ export async function recordCandidateDecision(jobId, personId, decision, options
     throw new Error("Cannot record decision without valid jobId and personId");
   }
 
+  const source = sourceIdentity(personId);
+  if (source) {
+    const { data: existing, error: lookupError } = await supabase
+      .from("candidate_review_actions")
+      .select("id")
+      .eq("job_id", Number(jobId))
+      .eq("candidate_source", source.source)
+      .eq("candidate_source_id", source.sourceId)
+      .eq("action_type", "decision")
+      .maybeSingle();
+    if (lookupError) throw new Error("Could not check the saved decision");
+
+    if (decision === null && existing) {
+      const { error } = await supabase.from("candidate_review_actions").delete().eq("id", existing.id);
+      if (error) throw new Error("Could not clear the saved decision");
+    } else if (decision === "want" || decision === "pass") {
+      const payload = { decision, updated_at: new Date().toISOString() };
+      const result = existing
+        ? await supabase.from("candidate_review_actions").update(payload).eq("id", existing.id)
+        : await supabase.from("candidate_review_actions").insert({
+            job_id: Number(jobId),
+            candidate_source: source.source,
+            candidate_source_id: source.sourceId,
+            action_type: "decision",
+            decision,
+          });
+      if (result.error) throw new Error("Could not save the candidate decision");
+    }
+  }
+
   if (decision === "want" || decision === "pass" || decision === null) {
     candidateDecisions.set(key, decision);
+    const candidates = runtimeCandidatesByJob.get(String(jobId));
+    const candidate = candidates?.find((item) => item.id === personId);
+    if (candidate) candidate.decision = decision;
   }
 
   return { ok: true, jobId, personId, decision };
@@ -151,7 +341,10 @@ export async function recordCandidateSubmission(jobId, personId, details = {}, o
     throw new Error("Cannot record submission without valid jobId and personId");
   }
 
-  const candidate = SAMPLE_CANDIDATES.find(
+  const candidateSource = runtimeJobs.length > 0
+    ? (runtimeCandidatesByJob.get(String(jobId)) || [])
+    : SAMPLE_CANDIDATES;
+  const candidate = candidateSource.find(
     (item) => String(item.jobId) === String(jobId) && String(item.id) === String(personId)
   );
   const job = getJobById(jobId);
@@ -167,8 +360,26 @@ export async function recordCandidateSubmission(jobId, personId, details = {}, o
     note: (details.note || "").trim(),
     status: "Session only",
   };
+
+  const source = sourceIdentity(personId);
+  if (source) {
+    const idempotencyKey = `submission-${jobId}-${source.source}-${source.sourceId}-${submission.submittedAt}`;
+    const { error } = await supabase.from("candidate_review_actions").insert({
+      job_id: Number(jobId),
+      candidate_source: source.source,
+      candidate_source_id: source.sourceId,
+      action_type: "activity",
+      activity_type: "Submitted",
+      note: submission.note,
+      target_stage: "Submitted",
+      status: "waiting_for_loxo",
+      idempotency_key: idempotencyKey,
+    });
+    if (error) throw new Error("Could not save the submission draft");
+    submission.status = "Waiting for Loxo";
+  }
   candidateSubmissions.set(key, submission);
-  return { ok: true, jobId, personId, submission, persisted: false };
+  return { ok: true, jobId, personId, submission, persisted: Boolean(source) };
 }
 
 export async function logCandidateActivity(
@@ -187,10 +398,8 @@ export async function logCandidateActivity(
     throw new Error("Cannot log activity without valid jobId and personId");
   }
 
-  if (!idempotencyKey) {
-    throw new Error("An idempotency key is required for activity retries");
-  }
-  const resolvedIdempotencyKey = idempotencyKey;
+  const resolvedIdempotencyKey = idempotencyKey ||
+    `activity-${jobId}-${personId}-${type}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 
   // Idempotency boundary: return existing record if already queued
   if (activityOutbox.has(resolvedIdempotencyKey)) {
@@ -219,6 +428,28 @@ export async function logCandidateActivity(
     targetStage: targetStage || "No automatic stage change",
   };
 
+  const source = sourceIdentity(personId);
+  if (source) {
+    const { data, error } = await supabase
+      .from("candidate_review_actions")
+      .insert({
+        job_id: Number(jobId),
+        candidate_source: source.source,
+        candidate_source_id: source.sourceId,
+        action_type: "activity",
+        activity_type: type,
+        note: (note || "").trim(),
+        target_stage: targetStage || null,
+        status: "waiting_for_loxo",
+        idempotency_key: resolvedIdempotencyKey,
+      })
+      .select("id,created_at")
+      .single();
+    if (error) throw new Error("Could not save the activity draft");
+    newActivity.id = `db-act-${data.id}`;
+    newActivity.date = displayDate(data.created_at);
+  }
+
   activityOutbox.set(resolvedIdempotencyKey, newActivity);
 
   const list = loggedActivities.get(key) || [];
@@ -228,9 +459,40 @@ export async function logCandidateActivity(
   return { ok: true, activity: newActivity };
 }
 
+export async function createCandidateDraft({ job, candidate, kind, body }) {
+  const source = sourceIdentity(candidate?.id);
+  const cleanBody = String(body || "").trim();
+  if (!source || !job?.id) throw new Error("Candidate source is not available");
+  if (!cleanBody) throw new Error("The draft has no source-backed content");
+  if (!["resume_pdf", "write_up"].includes(kind)) throw new Error("Unsupported draft type");
+
+  const { data, error } = await supabase
+    .from("review_drafts")
+    .insert({
+      person_id: null,
+      job_id: Number(job.id),
+      candidate_source: source.source,
+      candidate_source_id: source.sourceId,
+      kind,
+      status: "ready",
+      body: cleanBody,
+      source_snapshot: {
+        trackerRow: candidate.trackerRow || null,
+        candidateKey: candidate.candidateId || null,
+        sourceVerifiedDate: candidate.sourceVerifiedDate || null,
+      },
+    })
+    .select("id,kind,status,body,created_at")
+    .single();
+  if (error) throw new Error("Could not save the draft");
+  return data;
+}
+
 export function _resetStoreForTesting() {
   candidateDecisions.clear();
   loggedActivities.clear();
   activityOutbox.clear();
   candidateSubmissions.clear();
+  runtimeJobs = [];
+  runtimeCandidatesByJob.clear();
 }

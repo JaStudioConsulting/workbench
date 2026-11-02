@@ -9,7 +9,7 @@ import { ScrollArea } from "../../components/ui/scroll-area.tsx";
 import { calculateDistance, expandAndEnrichJobs } from "./geo-utils.js";
 import { createJobMarkerHtml, createSearchCandidateMarkerHtml } from "./map-markers.js";
 import { copyJobPitchToClipboard, generateJobPitch } from "./pitch-formatter.js";
-import { INITIAL_JOBS_DATA } from "./sample-jobs.js";
+import { supabase } from "../../supabase-client.js";
 
 const DEFAULT_CENTER = [43.6532, -79.3832]; // Toronto, ON
 const DEFAULT_ZOOM = 10;
@@ -17,7 +17,7 @@ const DEFAULT_ZOOM = 10;
 export default function JobsMapView({ onSelectJobForWorkflow }) {
   const [jobs, setJobs] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [dataSource, setDataSource] = useState("demo"); // "live" | "demo"
+  const [dataSource, setDataSource] = useState("loading"); // "live" | "unavailable"
   const [searchQuery, setSearchQuery] = useState("");
   const [searchCoords, setSearchCoords] = useState(null);
   const [searchAddressName, setSearchAddressName] = useState("");
@@ -73,12 +73,37 @@ export default function JobsMapView({ onSelectJobForWorkflow }) {
         }
       }
     } catch {
-      // Fall through to honest demonstration mode
+      // Fall through to the authenticated Supabase snapshot.
     }
 
-    // Fail-safe demonstration mode with clean initial dataset
-    setJobs(expandAndEnrichJobs(INITIAL_JOBS_DATA));
-    setDataSource("demo");
+    const { data: trackerJobs, error: trackerError } = await supabase
+      .from("tracker_jobs")
+      .select("job_id,job_title,company,location,compensation,date_opened,owners,status,job_description,loxo_link")
+      .eq("status", "Active")
+      .order("date_opened", { ascending: false, nullsFirst: false });
+
+    if (!trackerError && trackerJobs?.length) {
+      const sourceRows = trackerJobs.map((job) => ({
+        "Job ID": String(job.job_id),
+        "Job Title": job.job_title,
+        Company: job.company || "",
+        Location: job.location || "",
+        Compensation: job.compensation || "",
+        "Date Opened": job.date_opened || "",
+        Owners: job.owners || "",
+        Status: job.status || "",
+        "Job Description": job.job_description || "",
+        "Loxo Link": job.loxo_link || "",
+      }));
+      setJobs(expandAndEnrichJobs(sourceRows));
+      setDataSource("live");
+      setLoading(false);
+      return;
+    }
+
+    // Honest empty state. Never replace unavailable live data with fixtures.
+    setJobs([]);
+    setDataSource("unavailable");
     setLoading(false);
   };
 
@@ -358,8 +383,8 @@ export default function JobsMapView({ onSelectJobForWorkflow }) {
 
         <div className="flex items-center gap-2">
           <Badge variant={dataSource === "live" ? "secondary" : "outline"} className="flex items-center gap-1.5 text-xs">
-            <span className={`h-2 w-2 rounded-full ${dataSource === "live" ? "bg-emerald-500" : "bg-amber-500"}`} />
-            {dataSource === "live" ? "Google Workspace: Live Sheets" : "Demonstration Data (Sign-in for Live Sync)"}
+            <span className={`h-2 w-2 rounded-full ${dataSource === "live" ? "bg-emerald-500" : dataSource === "loading" ? "bg-amber-500" : "bg-rose-500"}`} />
+            {dataSource === "live" ? "Tracker via Supabase" : dataSource === "loading" ? "Loading Tracker" : "Tracker unavailable"}
           </Badge>
 
           <Button size="sm" variant="outline" onClick={loadJobs} disabled={loading} title="Refresh jobs data">

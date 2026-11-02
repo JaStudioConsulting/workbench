@@ -6,39 +6,56 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger } from ".
 import SwipeView from "./SwipeView.jsx";
 import PeopleView from "./PeopleView.jsx";
 import {
-  getReviewJobs,
   getCandidatesForJob,
   getSubmissionHistory,
   recordCandidateDecision,
   recordCandidateSubmission,
   logCandidateActivity,
   isSampleData,
+  loadLiveReviewJobs,
+  loadLiveCandidatesForJob,
 } from "./candidateReviewService.js";
 
-export default function CandidateReview({ selectedJob, onSelectJob, onNavigateJobsMap }) {
-  const jobs = useMemo(() => getReviewJobs(), []);
+export default function CandidateReview({ selectedJob, onSelectJob, onNavigateJobsMap, initialView = "swipe" }) {
+  const [jobs, setJobs] = useState([]);
+  const [dataLoading, setDataLoading] = useState(true);
+  const [dataError, setDataError] = useState("");
 
   // Match selected jobs ONLY by immutable job ID.
   // Zero title matching. Zero jobs[0] fallback.
-  const initialJobId = useMemo(() => {
-    if (selectedJob) {
-      const targetId = selectedJob.loxoJobId || selectedJob.originalJobId || selectedJob.id;
-      if (targetId) {
-        const match = jobs.find((j) => String(j.id) === String(targetId));
-        return match ? match.id : String(targetId);
-      }
-    }
-    return "";
-  }, [jobs, selectedJob]);
-
-  const [activeJobId, setActiveJobId] = useState(initialJobId);
-  const [activeView, setActiveView] = useState("swipe"); // "swipe" | "people"
+  const [activeJobId, setActiveJobId] = useState("");
+  const [activeView, setActiveView] = useState(initialView); // "swipe" | "people"
   const [currentIndex, setCurrentIndex] = useState(0);
   const [refreshKey, setRefreshKey] = useState(0);
 
+  useEffect(() => {
+    let active = true;
+    loadLiveReviewJobs()
+      .then((loadedJobs) => {
+        if (!active) return;
+        setJobs(loadedJobs);
+        const targetId = selectedJob?.loxoJobId || selectedJob?.originalJobId || selectedJob?.id;
+        const matched = targetId
+          ? loadedJobs.find((job) => String(job.id) === String(targetId))
+          : null;
+        const nextJob = matched || loadedJobs[0] || null;
+        setActiveJobId(nextJob ? String(nextJob.id) : "");
+        if (nextJob && onSelectJob) onSelectJob(nextJob);
+        setDataError("");
+      })
+      .catch((error) => {
+        if (!active) return;
+        setDataError(error.message || "Could not load Tracker jobs");
+      })
+      .finally(() => {
+        if (active) setDataLoading(false);
+      });
+    return () => { active = false; };
+  }, []);
+
   // Sync if selectedJob prop changes from outside (e.g. from Jobs Map)
   useEffect(() => {
-    if (selectedJob) {
+    if (selectedJob && jobs.length > 0) {
       const targetId = selectedJob.loxoJobId || selectedJob.originalJobId || selectedJob.id;
       if (targetId) {
         const match = jobs.find((j) => String(j.id) === String(targetId));
@@ -50,6 +67,26 @@ export default function CandidateReview({ selectedJob, onSelectJob, onNavigateJo
       }
     }
   }, [selectedJob, jobs]);
+
+  useEffect(() => {
+    if (!activeJobId) return;
+    let active = true;
+    setDataLoading(true);
+    loadLiveCandidatesForJob(activeJobId)
+      .then(() => {
+        if (!active) return;
+        setDataError("");
+        setRefreshKey((key) => key + 1);
+      })
+      .catch((error) => {
+        if (!active) return;
+        setDataError(error.message || "Could not load candidates for this job");
+      })
+      .finally(() => {
+        if (active) setDataLoading(false);
+      });
+    return () => { active = false; };
+  }, [activeJobId]);
 
   // Current job resolved strictly by immutable ID (no fallback to jobs[0])
   const currentJob = useMemo(() => {
@@ -133,6 +170,12 @@ export default function CandidateReview({ selectedJob, onSelectJob, onNavigateJo
       style={{ fontFamily: "Arial, Calibri, sans-serif" }}
       data-testid="candidate-review-feature"
     >
+      {dataError ? (
+        <div className="flex items-center gap-2 rounded-lg border border-rose-300 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-800" role="alert">
+          <AlertCircle size={14} />
+          {dataError}
+        </div>
+      ) : null}
       {/* 1. Top Header Bar */}
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-card p-3 shadow-sm shrink-0">
         <div className="flex items-center gap-3">
@@ -151,7 +194,7 @@ export default function CandidateReview({ selectedJob, onSelectJob, onNavigateJo
                 </Badge>
               )}
               <Badge variant="outline" className="text-[11px] py-0 px-2">
-                Session-only decisions
+                {dataLoading ? "Loading Supabase" : "Saved to Supabase"}
               </Badge>
             </div>
             <p className="text-xs text-muted-foreground">
@@ -188,14 +231,11 @@ export default function CandidateReview({ selectedJob, onSelectJob, onNavigateJo
               </SelectTrigger>
               <SelectContent>
                 <SelectGroup>
-                  {jobs.map((j) => {
-                    const count = getCandidatesForJob(j.id).length;
-                    return (
-                      <SelectItem key={j.id} value={String(j.id)} className="text-xs">
-                        {j.title} ({count} {count === 1 ? "candidate" : "candidates"})
-                      </SelectItem>
-                    );
-                  })}
+                  {jobs.map((j) => (
+                    <SelectItem key={j.id} value={String(j.id)} className="text-xs">
+                      {j.title}
+                    </SelectItem>
+                  ))}
                 </SelectGroup>
               </SelectContent>
             </Select>
@@ -266,6 +306,7 @@ export default function CandidateReview({ selectedJob, onSelectJob, onNavigateJo
           {activeView === "swipe" ? (
             <SwipeView
               candidates={swipeCandidates}
+              currentJob={currentJob}
               currentIndex={currentIndex}
               onNavigateIndex={setCurrentIndex}
               onPass={handlePass}
