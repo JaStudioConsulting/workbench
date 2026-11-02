@@ -19,3 +19,13 @@ test("privacy validator rejects symlinks, credential config, and data assets", a
     assert.match(findings.join("\n"), /symlinks are forbidden/);
   } finally { await rm(fixture, { recursive: true, force: true }); }
 });
+
+test("privacy validator ignores generated Swift build trees", async () => {
+  const fixture = await mkdtemp(path.join(os.tmpdir(), "workbench-privacy-"));
+  try {
+    const swiftBuild = path.join(fixture, "native", ".build");
+    await mkdir(swiftBuild, { recursive: true });
+    await writeFile(path.join(swiftBuild, "machine.bin"), Buffer.from([0, 1, 2, 3]));
+    assert.deepEqual(await validateRepository(fixture), []);
+  } finally { await rm(fixture, { recursive: true, force: true }); }
+});

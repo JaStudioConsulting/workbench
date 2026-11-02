@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { createMeetingDraft, groupCalendarEvents, safeJoinUrl } from "../src/features/meetings/meetingModel.js";
 import { transcribeMeetingAudio } from "../src/features/meetings/meetingGatewayClient.js";
-import { encodePcm16Wav, meetingRecordingFilename, selectMuesliRecordingFormat, startBrowserRecording } from "../src/features/meetings/browserRecorder.js";
+import { encodePcm16Wav, meetingRecordingFilename, selectWorkbenchRecordingFormat, startBrowserRecording } from "../src/features/meetings/browserRecorder.js";
 
 function event(title, value, joinUrl = null) {
   return {
@@ -53,18 +53,18 @@ test("browser audio is sent only to the authenticated Workbench gateway", async 
     baseURL: "https://gateway.example.invalid",
     fetchImpl: async (url, options) => {
       request = { url: url.toString(), options };
-      return { ok: true, json: async () => ({ transcript: "Source audio words.", source: "muesli_cli" }) };
+      return { ok: true, json: async () => ({ transcript: "Source audio words.", source: "workbench_native" }) };
     },
   });
-  assert.deepEqual(result, { transcript: "Source audio words.", source: "muesli_cli" });
+  assert.deepEqual(result, { transcript: "Source audio words.", source: "workbench_native" });
   assert.equal(request.url, "https://gateway.example.invalid/api/meetings/transcribe");
   assert.equal(request.options.credentials, "include");
   assert.equal(request.options.headers["Content-Type"], "audio/mp4");
 });
 
-test("meeting recorder prefers Muesli-compatible MP4 and never selects WebM", () => {
+test("meeting recorder prefers Workbench-compatible MP4 and never selects WebM", () => {
   const checked = [];
-  const format = selectMuesliRecordingFormat({
+  const format = selectWorkbenchRecordingFormat({
     isTypeSupported(type) {
       checked.push(type);
       return type === "audio/mp4" || type === "audio/webm";

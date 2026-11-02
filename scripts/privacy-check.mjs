@@ -2,7 +2,7 @@ import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-const ignored = new Set([".git", "node_modules", "dist", "coverage", ".vercel"]);
+const ignored = new Set([".git", "node_modules", "dist", "coverage", ".vercel", ".build", ".swiftpm"]);
 const forbiddenAssets = /\.(avif|gif|heic|jpe?g|pdf|png|svg|webp|docx|xlsx|csv)$/i;
 const credentialFiles = new Set([".npmrc", ".netrc", ".pypirc", ".env"]);
 const unsafe = /(?:["']\/api\/(?:gmail\/send|loxo)|["'](?:gmail_send|candidate_submit|loxo_write|approval_decide|neo4j_write|external_delete)["'])/i;

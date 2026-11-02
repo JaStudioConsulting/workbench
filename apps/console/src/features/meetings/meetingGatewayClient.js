@@ -22,5 +22,5 @@ export async function transcribeMeetingAudio(blob, {
   if (!response.ok || typeof payload?.transcript !== "string") {
     throw new Error(payload?.error?.message || "Meeting transcription failed.");
   }
-  return { transcript: payload.transcript, source: payload.source || "muesli_cli" };
+  return { transcript: payload.transcript, source: payload.source || "workbench_native" };
 }

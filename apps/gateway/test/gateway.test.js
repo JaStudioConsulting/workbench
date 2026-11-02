@@ -99,7 +99,7 @@ test("meeting transcription stays authenticated and uses the injected local adap
       available: async () => true,
       transcribe: async (input) => {
         calls.push(input);
-        return { transcript: "Source audio words.", source: "muesli_cli" };
+        return { transcript: "Source audio words.", source: "workbench_native" };
       },
     },
   });
@@ -108,7 +108,7 @@ test("meeting transcription stays authenticated and uses the injected local adap
     headers: { authorization: "Bearer synthetic-review", "content-type": "audio/mp4" },
   });
   assert.equal(response.status, 200);
-  assert.deepEqual(response.body, { ok: true, transcript: "Source audio words.", source: "muesli_cli" });
+  assert.deepEqual(response.body, { ok: true, transcript: "Source audio words.", source: "workbench_native" });
   assert.equal(calls.length, 1);
   assert.equal(calls[0].contentType, "audio/mp4");
   assert.deepEqual(calls[0].audio, Buffer.from("synthetic-audio"));
@@ -121,7 +121,7 @@ test("explicit local trusted mode bypasses login only for meeting transcription"
     authConfig: { enabled: false, reason: "Authentication unavailable" },
     transcriptionAdapter: {
       available: async () => true,
-      transcribe: async () => ({ transcript: "Local source audio.", source: "muesli_cli" }),
+      transcribe: async () => ({ transcript: "Local source audio.", source: "workbench_native" }),
     },
   });
   const transcription = await request(app, "POST", "/api/meetings/transcribe", {

@@ -1,11 +1,12 @@
 import { execFile } from "node:child_process";
 import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
-const DEFAULT_CLI = "/Applications/Muesli.app/Contents/MacOS/muesli-cli";
+const DEFAULT_CLI = resolve(process.cwd(), "../../native/bin/workbench-transcribe");
+const DEFAULT_SUPPORT_DIR = resolve(process.cwd(), "../../native/support");
 const CONTENT_EXTENSIONS = new Map([
   ["audio/wav", ".wav"],
   ["audio/x-wav", ".wav"],
@@ -25,8 +26,15 @@ function transcriptFromJson(value) {
   return "";
 }
 
-async function defaultRunner(cliPath, inputPath) {
-  const { stdout } = await execFileAsync(cliPath, ["transcribe", inputPath, "--format", "json"], {
+async function defaultRunner(cliPath, inputPath, supportDir) {
+  const { stdout } = await execFileAsync(cliPath, [
+    "transcribe",
+    inputPath,
+    "--format",
+    "json",
+    "--support-dir",
+    supportDir,
+  ], {
     encoding: "utf8",
     timeout: 15 * 60 * 1000,
     maxBuffer: 16 * 1024 * 1024,
@@ -36,7 +44,8 @@ async function defaultRunner(cliPath, inputPath) {
 }
 
 export function createLocalTranscriptionAdapter({
-  cliPath = process.env.MUESLI_CLI_PATH || DEFAULT_CLI,
+  cliPath = process.env.WORKBENCH_TRANSCRIBE_PATH || DEFAULT_CLI,
+  supportDir = DEFAULT_SUPPORT_DIR,
   runner = defaultRunner,
 } = {}) {
   return {
@@ -57,18 +66,18 @@ export function createLocalTranscriptionAdapter({
       const inputPath = join(directory, `recording${extension}`);
       try {
         await writeFile(inputPath, audio, { flag: "wx", mode: 0o600 });
-        const output = await runner(cliPath, inputPath);
+        const output = await runner(cliPath, inputPath, supportDir);
         let parsed;
         try {
           parsed = typeof output === "string" ? JSON.parse(output) : output;
         } catch {
           const sidecar = await readFile(`${inputPath}.json`, "utf8").catch(() => "");
-          if (!sidecar) throw new Error("Muesli returned invalid transcription data");
+          if (!sidecar) throw new Error("Workbench transcription returned invalid data");
           parsed = JSON.parse(sidecar);
         }
         const transcript = transcriptFromJson(parsed);
-        if (!transcript) throw new Error("Muesli returned an empty transcript");
-        return { transcript, source: "muesli_cli" };
+        if (!transcript) throw new Error("Workbench transcription returned an empty transcript");
+        return { transcript, source: "workbench_native" };
       } finally {
         await rm(directory, { recursive: true, force: true });
       }

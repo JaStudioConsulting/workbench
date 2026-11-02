@@ -1,4 +1,4 @@
-const MUESLI_MEDIA_FORMATS = [
+const WORKBENCH_MEDIA_FORMATS = [
   { mimeType: "audio/mp4;codecs=mp4a.40.2", extension: "m4a" },
   { mimeType: "audio/mp4", extension: "m4a" },
   { mimeType: "audio/mpeg", extension: "mp3" },
@@ -12,9 +12,9 @@ function writeAscii(view, offset, value) {
   for (let index = 0; index < value.length; index += 1) view.setUint8(offset + index, value.charCodeAt(index));
 }
 
-export function selectMuesliRecordingFormat(MediaRecorderImpl = globalThis.MediaRecorder) {
+export function selectWorkbenchRecordingFormat(MediaRecorderImpl = globalThis.MediaRecorder) {
   if (typeof MediaRecorderImpl?.isTypeSupported !== "function") return null;
-  return MUESLI_MEDIA_FORMATS.find(({ mimeType }) => MediaRecorderImpl.isTypeSupported(mimeType)) || null;
+  return WORKBENCH_MEDIA_FORMATS.find(({ mimeType }) => MediaRecorderImpl.isTypeSupported(mimeType)) || null;
 }
 
 export function encodePcm16Wav(chunks, sampleRate) {
@@ -116,7 +116,7 @@ export async function startBrowserRecording({
   AudioContextImpl = globalThis.AudioContext || globalThis.webkitAudioContext,
 } = {}) {
   if (!mediaDevices?.getUserMedia) throw new Error("This browser cannot record meetings.");
-  const format = selectMuesliRecordingFormat(MediaRecorderImpl);
+  const format = selectWorkbenchRecordingFormat(MediaRecorderImpl);
   const canRecordWav = typeof AudioContextImpl === "function"
     && typeof AudioContextImpl.prototype?.createScriptProcessor === "function";
   if ((!format || typeof MediaStreamImpl !== "function") && !canRecordWav) {

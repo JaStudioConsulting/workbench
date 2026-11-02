@@ -1,0 +1,14 @@
+Parakeet Unified EN 0.6B - CoreML
+
+Source: https://huggingface.co/FluidInference/parakeet-unified-en-0.6b-coreml
+Reviewed revision: d32e972dd4315f1dc3f6be28fb2aab0ab3e80358
+License: Creative Commons Attribution 4.0 International (CC BY 4.0)
+License text: https://creativecommons.org/licenses/by/4.0/legalcode
+
+This CoreML conversion and Swift integration were published by the
+FluidInference team and are based on NVIDIA's Parakeet
+(FastConformer-RNNT) model.
+
+Workbench uses the model for private, on-device English speech transcription.
+The model weights are downloaded at runtime and are not stored in this
+repository.

@@ -21,6 +21,7 @@ the repository.
 - `apps/console` - React/Vite review console.
 - `apps/gateway` - Express/Vercel gateway with disabled-by-default integrations.
 - `packages/shared-types` - Zod request, output, safety, discovery, and error contracts.
+- `packages/workbench-transcription-native` - Workbench-owned macOS transcription helper.
 
 ## Safe local verification
 
@@ -51,6 +52,15 @@ pnpm start:local
 ```
 
 Meeting transcription normally requires the authenticated Workbench session. On a controlled local Mac, `LOCAL_TRUSTED_MODE=1 pnpm start:local` bypasses login for the transcription endpoint only, and only for loopback, private-network, or Tailscale client addresses. The default listener remains loopback-only. Set `HOST=0.0.0.0` only when private-network or Tailscale access is intended.
+
+Build the internal macOS helper with:
+
+```sh
+packages/workbench-transcription-native/scripts/build-release.sh
+```
+
+Deploy the resulting `workbench-transcribe` binary under the Workbench runtime's
+`native/bin/` directory. Meeting transcription does not require another app.
 
 See `docs/` for the current architecture, authentication, deployment status,
 rollback steps, integrations, and UI boundaries.

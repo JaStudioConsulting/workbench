@@ -10,12 +10,17 @@ Browser
        ├─ Supabase read: Tracker jobs and candidates
        ├─ Supabase write: review actions and drafts
        ├─ Google Calendar: approved read-only connection
-       ├─ Meetings: browser capture to local transcription
+       ├─ Meetings: browser capture to Workbench native transcription
        └─ Resume/write-up: source-grounded drafts only
 ```
 
 The M1 launch agent serves the built console and same-origin gateway together.
 The Tailscale address is private network access, not a public deployment.
+
+The gateway invokes the Workbench-owned `native/bin/workbench-transcribe`
+helper. Its local model files live under `native/support`. The helper is built
+from `packages/workbench-transcription-native`; no separate transcription app
+or nested source repository is part of the runtime.
 
 Supabase project `abnfffkmxqixrwzackjf` is the only approved project for this
 app. Browser code uses the publishable key; privileged keys are never committed.
