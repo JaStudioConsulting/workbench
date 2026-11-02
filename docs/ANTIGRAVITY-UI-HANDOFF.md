@@ -1,5 +1,9 @@
 # Antigravity UI handoff
 
+> **Historical record only — do not execute.** Antigravity is no longer part of
+> the Workbench workflow. Current product and deployment truth lives in
+> `README.md`, `ARCHITECTURE.md`, and `READINESS.md`.
+
 ## What Ja wants
 
 Build the Workbench around the recruiting work Ja actually does. This is a frontend and layout task first. Do not let authentication, storage, integrations, or deployment take over the work.

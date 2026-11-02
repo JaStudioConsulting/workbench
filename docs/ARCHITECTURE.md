@@ -1,18 +1,34 @@
 # Architecture
 
-The Workbench is split so the console does not own recruitment logic or integration credentials.
+The Workbench is split so the browser console does not own privileged
+integration credentials.
 
 ```text
-React console ──HTTPS──> Express gateway / Vercel API
-                              ├─ Better Auth + hosted PostgreSQL (optional, fail closed)
-                              ├─ external recruitment authority package (router only)
-                              ├─ Gmail draft abstraction (no send API)
-                              ├─ Neo4j read adapter (optional, no write API)
-                              └─ durable case storage interface (not configured here)
+Browser
+  └─ React console + Express gateway :8092
+       ├─ Supabase Auth: email magic link
+       ├─ Supabase read: Tracker jobs and candidates
+       ├─ Supabase write: review actions and drafts
+       ├─ Google Calendar: approved read-only connection
+       ├─ Meetings: browser capture to local transcription
+       └─ Resume/write-up: source-grounded drafts only
 ```
+
+The M1 launch agent serves the built console and same-origin gateway together.
+The Tailscale address is private network access, not a public deployment.
+
+Supabase project `abnfffkmxqixrwzackjf` is the only approved project for this
+app. Browser code uses the publishable key; privileged keys are never committed.
+RLS keeps Tracker imports read-only while allowing approved review and draft
+writes.
 
 `@jastudioconsulting/recruitment-skills` is an external dependency pinned to an immutable Git commit. The gateway loads its exported authority API; it never reaches into `node_modules`, a relative skills directory, or a copied skill tree.
 
 The MCP discovery surface is deliberately small: `$recruiter` is the only authority/tool that routes recruiting capabilities. `workspace_status` is read-only. The stateless Streamable HTTP endpoint creates a fresh server and transport per request. Send, submit, Loxo write, approvals, deletes, Neo4j writes, and standalone internal capabilities are absent.
 
-No production case data is retained by this repository. `createMemoryTestStorage()` exists only for tests; any production flow that asks for storage must reject until a durable hosted adapter is supplied.
+Synthetic fixtures remain test-only. The production console does not replace a
+failed live query with fixture records.
+
+Adzuna is a future manual connector, not a background data source. Its frozen
+workflow and activation gates are in
+[`ADZUNA-MARKET-CANDIDATE.md`](ADZUNA-MARKET-CANDIDATE.md).

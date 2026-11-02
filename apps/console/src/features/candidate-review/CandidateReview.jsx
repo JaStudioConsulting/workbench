@@ -107,6 +107,12 @@ export default function CandidateReview({ selectedJob, onSelectJob, onNavigateJo
 
   const submissionHistory = useMemo(() => getSubmissionHistory(), [refreshKey]);
 
+  const supabaseStatus = dataLoading
+    ? "Loading Supabase"
+    : dataError
+      ? "Supabase unavailable"
+      : "Connected to Supabase";
+
   const handleJobChange = (newJobId) => {
     setActiveJobId(newJobId);
     setCurrentIndex(0);
@@ -194,7 +200,7 @@ export default function CandidateReview({ selectedJob, onSelectJob, onNavigateJo
                 </Badge>
               )}
               <Badge variant="outline" className="text-[11px] py-0 px-2">
-                {dataLoading ? "Loading Supabase" : "Saved to Supabase"}
+                {supabaseStatus}
               </Badge>
             </div>
             <p className="text-xs text-muted-foreground">

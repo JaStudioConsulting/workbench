@@ -29,6 +29,9 @@ test("Jobs and candidates use authenticated live data instead of browser fixture
   assert.doesNotMatch(jobsMap, /INITIAL_JOBS_DATA/);
   assert.match(review, /loadLiveReviewJobs/);
   assert.match(review, /loadLiveCandidatesForJob/);
+  assert.match(review, /dataError\s*\?\s*"Supabase unavailable"/);
+  assert.match(review, /"Connected to Supabase"/);
+  assert.doesNotMatch(review, /dataLoading\s*\?\s*"Loading Supabase"\s*:\s*"Saved to Supabase"/);
   assert.match(service, /from\("candidate_review_feed"\)/);
   assert.match(app, /initialView=\{page === "Candidates" \? "people" : "swipe"\}/);
 });

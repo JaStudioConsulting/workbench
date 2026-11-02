@@ -1,17 +1,27 @@
 # Deployment readiness
 
-## Verified current state
+## Live deployment
 
-- GitHub `main` contains a React/Vite console and a separate Express gateway.
-- Current GitHub `main` is not compatible with ChatGPT Sites as-is.
-- Hosting the console on Sites does not host or connect the authenticated gateway.
-- No deployment of this current repository has been proven.
-- No live OAuth, durable case storage, or real recruiting workflow has been proven.
+- Host: MacBook Air M1 launch agent.
+- Local URL: `http://localhost:8092/`.
+- Private Tailscale URL: `http://100.121.104.40:8092/`.
+- Health endpoint: `/healthz`.
+- Authentication: Supabase email magic link.
+- Data project: Supabase `abnfffkmxqixrwzackjf`.
+- Source tables: read-only Tracker imports.
+- Writable records: candidate review actions and drafts under RLS.
 
-## Remaining proof gates
+## Proven
 
-- Supply and verify durable hosted case storage.
-- Connect the hosted console to the authenticated gateway.
-- Implement and verify real source intake and execution through the sole `$recruiter` authority.
-- Verify each intended AI host exposes `$recruiter` without standalone internal capabilities.
-- Complete private sign-in, OAuth, privacy, responsive-browser, and end-to-end checks with synthetic data before any real candidate use.
+- The console and gateway are served on one port.
+- Live Tracker jobs and linked candidates load from Supabase.
+- Candidate decisions, activity drafts, and write-up drafts persist.
+- Missing source resumes block resume generation instead of inventing content.
+- The full repository check passes before release.
+
+## Not active
+
+- Adzuna search and candidate marketing. See
+  [`ADZUNA-MARKET-CANDIDATE.md`](ADZUNA-MARKET-CANDIDATE.md).
+- Automatic outreach or automatic Leads creation.
+- Public internet hosting. The current URL is private-network only.

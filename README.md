@@ -1,13 +1,20 @@
 # Recruiting Workbench
 
-Clean, privacy-first recruiting console and gateway. It has no local runtime persistence, no live recruitment writes, and no credentials in the repository.
+Private recruiting console and one-port gateway for Ja Studio Consulting. The
+deployed M1 runtime reads Tracker data from Supabase and writes review actions
+and drafts through Supabase RLS. Credentials and service-role keys stay outside
+the repository.
 
 ## Current status
 
-- `main` is the only active source-of-truth branch.
-- The rejected `today-ui` and fixed synthetic-preview experiments are preserved only as dated archive tags; they are not approved product UI.
-- New UI work starts from `main`. Do not restore hard-coded metrics, fake operational records, or generic recruiting dashboards.
-- The recruiting authority is pinned to `JaStudioConsulting/recruitment-skills` commit `bbf1bbfdc91bbdd9409c976bd5782a0fc87db0b0`.
+- `main` is the source of truth.
+- The private M1 deployment is served on port `8092`.
+- Supabase provides authenticated jobs, candidates, submissions, review actions,
+  and draft storage. Tracker source tables remain read-only.
+- Candidate facts must come from source records. Missing resume, transcript, or
+  notes stay visibly missing and are never invented.
+- Adzuna is not active. Its approved future workflow is documented in
+  [`docs/ADZUNA-MARKET-CANDIDATE.md`](docs/ADZUNA-MARKET-CANDIDATE.md).
 
 ## Packages
 
@@ -45,5 +52,5 @@ pnpm start:local
 
 Meeting transcription normally requires the authenticated Workbench session. On a controlled local Mac, `LOCAL_TRUSTED_MODE=1 pnpm start:local` bypasses login for the transcription endpoint only, and only for loopback, private-network, or Tailscale client addresses. The default listener remains loopback-only. Set `HOST=0.0.0.0` only when private-network or Tailscale access is intended.
 
-See `docs/` for the current architecture, authentication, readiness, cutover,
-host-compatibility, private-package, and UI boundaries.
+See `docs/` for the current architecture, authentication, deployment status,
+rollback steps, integrations, and UI boundaries.
