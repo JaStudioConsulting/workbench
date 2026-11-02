@@ -564,6 +564,15 @@
     opacity: 1;
   }
 
+  .pdf-exporting .inline-tools,
+  .pdf-exporting .logo-lock-tag {
+    display: none !important;
+  }
+
+  .pdf-exporting [contenteditable="true"]:empty::before {
+    content: "" !important;
+  }
+
   /* ================= EXACT PDF PRINT RULES ================= */
   @page {
     size: Letter;
@@ -834,6 +843,7 @@
 
 <div id="toast" class="toast"></div>
 
+<script type="module" src="/src/resume-brander-export.js"></script>
 <script>
   const candNameEl = document.getElementById("candName");
   const docFilenameEl = document.getElementById("docFilename");
@@ -1404,9 +1414,23 @@
     showToast("Copied candidate.json to clipboard!");
   }
 
-  function downloadNamedPdf() {
+  async function downloadNamedPdf() {
     syncTitleAndRules();
-    window.print();
+    if (typeof window.downloadBrandedResumePdf !== "function") {
+      showToast("PDF download is loading. Try again.");
+      return;
+    }
+
+    const filename = `${getPdfTitle()}.pdf`;
+    try {
+      showToast("Building named PDF…");
+      await window.downloadBrandedResumePdf({ data: extractCandidateJson(), filename });
+      showToast(`Downloaded ${filename}`);
+    } catch (error) {
+      console.error("Direct PDF download failed", error);
+      showToast("Download failed. Opening print fallback.");
+      window.print();
+    }
   }
 
   function showToast(msg) {

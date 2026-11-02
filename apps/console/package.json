@@ -21,6 +21,7 @@
     "cn": "^0.2.5",
     "leaflet": "^1.9.4",
     "lucide-react": "^0.468.0",
+    "pdfmake": "0.2.20",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-resizable-panels": "^4.12.3",
