@@ -9,6 +9,7 @@ import { PIPELINE_STAGE_ORDER } from "./constants.js";
 const candidateDecisions = new Map(); // compositeKey -> "want" | "pass" | null
 const loggedActivities = new Map(); // compositeKey -> Array<Activity>
 const activityOutbox = new Map(); // idempotencyKey -> ActivityRecord
+const candidateSubmissions = new Map(); // compositeKey -> session-only submission record
 
 export function makeCompositeKey(jobId, personId) {
   if (!jobId || !personId) return "";
@@ -42,6 +43,9 @@ export function getCandidatesForJob(jobId) {
   const enriched = matches.map((cand) => {
     const key = makeCompositeKey(jobId, cand.id);
     const decision = candidateDecisions.get(key) || null;
+    const sessionSubmission = candidateSubmissions.get(key) || null;
+    const importedSubmission = cand.submissionHistory?.[0] || null;
+    const stageIsSubmitted = (PIPELINE_STAGE_ORDER[cand.stage] ?? -1) >= PIPELINE_STAGE_ORDER.Submitted;
     const additional = loggedActivities.get(key) || [];
     const fullTrail = [...additional, ...cand.activityTrail];
 
@@ -53,6 +57,8 @@ export function getCandidatesForJob(jobId) {
     return {
       ...cand,
       decision,
+      submission: sessionSubmission || importedSubmission,
+      isSubmitted: Boolean(sessionSubmission || importedSubmission || stageIsSubmitted),
       activityTrail: fullTrail,
       otherContactsCount,
     };
@@ -64,6 +70,49 @@ export function getCandidatesForJob(jobId) {
     const orderB = PIPELINE_STAGE_ORDER[b.stage] ?? 999;
     return orderA - orderB;
   });
+}
+
+export function getSubmissionHistory() {
+  const records = [];
+
+  for (const candidate of SAMPLE_CANDIDATES) {
+    const job = getJobById(candidate.jobId);
+    for (const submission of candidate.submissionHistory || []) {
+      records.push({
+        id: submission.id || `${candidate.jobId}::${candidate.id}::${submission.submittedAt}`,
+        jobId: candidate.jobId,
+        personId: candidate.id,
+        jobTitle: job?.title || "Unknown job",
+        client: submission.client || job?.company || "",
+        location: submission.location || job?.location || candidate.location || "",
+        submittedAt: submission.submittedAt,
+        source: "imported",
+        candidate: { ...candidate, decision: null, submission, isSubmitted: true },
+      });
+    }
+  }
+
+  for (const [key, submission] of candidateSubmissions.entries()) {
+    const [jobId, personId] = key.split("::");
+    const job = getJobById(jobId);
+    const candidate = SAMPLE_CANDIDATES.find(
+      (item) => String(item.jobId) === jobId && String(item.id) === personId
+    );
+    if (!candidate) continue;
+    records.push({
+      id: submission.id,
+      jobId,
+      personId,
+      jobTitle: job?.title || "Unknown job",
+      client: submission.client || job?.company || "",
+      location: submission.location || job?.location || candidate.location || "",
+      submittedAt: submission.submittedAt,
+      source: "session",
+      candidate: { ...candidate, decision: candidateDecisions.get(key) || null, submission, isSubmitted: true },
+    });
+  }
+
+  return records.sort((a, b) => String(b.submittedAt).localeCompare(String(a.submittedAt)));
 }
 
 export function getCandidateSessionState(jobId, personId) {
@@ -90,6 +139,36 @@ export async function recordCandidateDecision(jobId, personId, decision, options
   }
 
   return { ok: true, jobId, personId, decision };
+}
+
+export async function recordCandidateSubmission(jobId, personId, details = {}, options = {}) {
+  if (options.simulateFailure) {
+    throw new Error(options.errorMessage || "Failed to record candidate submission");
+  }
+
+  const key = makeCompositeKey(jobId, personId);
+  if (!key) {
+    throw new Error("Cannot record submission without valid jobId and personId");
+  }
+
+  const candidate = SAMPLE_CANDIDATES.find(
+    (item) => String(item.jobId) === String(jobId) && String(item.id) === String(personId)
+  );
+  const job = getJobById(jobId);
+  if (!candidate || !job) {
+    throw new Error("Cannot record submission for an unknown candidate or job");
+  }
+
+  const submission = {
+    id: `session-submission-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    submittedAt: details.submittedAt || new Date().toISOString(),
+    client: details.client || job.company || "",
+    location: details.location || job.location || candidate.location || "",
+    note: (details.note || "").trim(),
+    status: "Session only",
+  };
+  candidateSubmissions.set(key, submission);
+  return { ok: true, jobId, personId, submission, persisted: false };
 }
 
 export async function logCandidateActivity(
@@ -153,4 +232,5 @@ export function _resetStoreForTesting() {
   candidateDecisions.clear();
   loggedActivities.clear();
   activityOutbox.clear();
+  candidateSubmissions.clear();
 }

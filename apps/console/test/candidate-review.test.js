@@ -15,8 +15,10 @@ import {
   getReviewJobs,
   getJobById,
   getCandidatesForJob,
+  getSubmissionHistory,
   getCandidateSessionState,
   recordCandidateDecision,
+  recordCandidateSubmission,
   logCandidateActivity,
   makeCompositeKey,
   _resetStoreForTesting,
@@ -142,6 +144,29 @@ test("candidate review data layer returns sorted candidates and handles async de
   const matchedAfterLog = candidatesAfterLog.find((c) => c.id === testCandidate.id);
   assert.equal(matchedAfterLog.activityTrail[0].status, "Waiting for Loxo");
   assert.equal(matchedAfterLog.activityTrail[0].note, "Spoke to candidate, interested in robotics role");
+});
+
+test("submission history is explicit, filterable, and session writes stay marked non-persistent", async () => {
+  const imported = getSubmissionHistory();
+  assert.ok(imported.some((record) => record.source === "imported"));
+  assert.ok(imported.every((record) => record.jobId && record.personId && record.submittedAt));
+
+  const result = await recordCandidateSubmission("DEMO-JOB-ROBOTICS", "DEMO-PERSON-001", {
+    client: "Synthetic Client",
+    location: "Toronto, ON",
+    submittedAt: "2026-11-02T08:00:00.000Z",
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.persisted, false);
+  assert.equal(result.submission.status, "Session only");
+
+  const history = getSubmissionHistory();
+  const sessionRecord = history.find((record) => record.personId === "DEMO-PERSON-001");
+  assert.equal(sessionRecord.source, "session");
+  assert.equal(sessionRecord.client, "Synthetic Client");
+
+  const candidate = getCandidatesForJob("DEMO-JOB-ROBOTICS").find((item) => item.id === "DEMO-PERSON-001");
+  assert.equal(candidate.isSubmitted, true);
 });
 
 test("match selected jobs only by immutable ID with zero title fallback and explicit empty state", () => {
@@ -301,6 +326,28 @@ test("windowed candidate dots enforce bounded display and maintain navigation", 
   const swipeSource = fs.readFileSync(path.join(featureDir, "SwipeView.jsx"), "utf8");
   assert.match(swipeSource, /data-testid="windowed-dots-container"/);
   assert.match(swipeSource, /getWindowedIndices/);
+});
+
+test("people view exposes fast queues and wanted actions while swipe stays unreviewed-only", () => {
+  const reviewSource = fs.readFileSync(path.join(featureDir, "CandidateReview.jsx"), "utf8");
+  const peopleSource = fs.readFileSync(path.join(featureDir, "PeopleView.jsx"), "utf8");
+  const swipeSource = fs.readFileSync(path.join(featureDir, "SwipeView.jsx"), "utf8");
+
+  assert.match(reviewSource, /candidate\.decision && !candidate\.isSubmitted/);
+  assert.match(reviewSource, /candidates=\{swipeCandidates\}/);
+  assert.match(peopleSource, /people-tab-\$\{key\}/);
+  for (const label of ["All", "Unreviewed", "Wanted", "Passed", "Submitted"]) {
+    assert.match(peopleSource, new RegExp(`\\[\\"[^\\"]+\\", \\"${label}\\"\\]`));
+  }
+  assert.match(peopleSource, /data-testid="people-search"/);
+  assert.match(peopleSource, /data-testid="wanted-actions"/);
+  assert.match(peopleSource, />Call</);
+  assert.match(peopleSource, />Brand resume</);
+  assert.match(peopleSource, />Write-up</);
+  assert.match(peopleSource, /Mark submitted/);
+  assert.match(peopleSource, /data-testid="submission-filters"/);
+  assert.match(peopleSource, /Reach out anyway/);
+  assert.equal([...swipeSource.matchAll(/onNavigateIndex\(safeIndex \+ 1\)/g)].length, 1);
 });
 
 test("screenshot feedback: LoginButton removed from shell, navigation cleaned, eyebrow removed, buttons concise", () => {

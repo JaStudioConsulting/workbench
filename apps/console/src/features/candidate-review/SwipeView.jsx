@@ -17,10 +17,10 @@ export default function SwipeView({
       <div className="flex flex-1 flex-col items-center justify-center rounded-xl border border-dashed bg-card p-8 text-center text-muted-foreground">
         <Users size={32} className="mb-2 opacity-50" />
         <p className="text-sm font-semibold text-foreground">
-          No candidates in this pipeline
+          Unreviewed queue is clear
         </p>
         <p className="text-xs text-muted-foreground mt-1 max-w-sm">
-          Select another job from the job selector above to review candidate profiles.
+          Reviewed and previously submitted candidates remain available in People view.
         </p>
       </div>
     );
@@ -107,17 +107,11 @@ export default function SwipeView({
           onPass={async (id) => {
             const result = await onPass(id);
             if (result?.ok === false) return result;
-            if (safeIndex < candidates.length - 1) {
-              onNavigateIndex(safeIndex + 1);
-            }
             return result || { ok: true };
           }}
           onWant={async (id) => {
             const result = await onWant(id);
             if (result?.ok === false) return result;
-            if (safeIndex < candidates.length - 1) {
-              onNavigateIndex(safeIndex + 1);
-            }
             return result || { ok: true };
           }}
           onLogActivity={onLogActivity}

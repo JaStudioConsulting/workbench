@@ -8,7 +8,9 @@ import PeopleView from "./PeopleView.jsx";
 import {
   getReviewJobs,
   getCandidatesForJob,
+  getSubmissionHistory,
   recordCandidateDecision,
+  recordCandidateSubmission,
   logCandidateActivity,
   isSampleData,
 } from "./candidateReviewService.js";
@@ -61,6 +63,13 @@ export default function CandidateReview({ selectedJob, onSelectJob, onNavigateJo
     return getCandidatesForJob(currentJob.id);
   }, [currentJob, refreshKey]);
 
+  const swipeCandidates = useMemo(
+    () => candidates.filter((candidate) => !candidate.decision && !candidate.isSubmitted),
+    [candidates]
+  );
+
+  const submissionHistory = useMemo(() => getSubmissionHistory(), [refreshKey]);
+
   const handleJobChange = (newJobId) => {
     setActiveJobId(newJobId);
     setCurrentIndex(0);
@@ -99,8 +108,19 @@ export default function CandidateReview({ selectedJob, onSelectJob, onNavigateJo
     return res;
   };
 
+  const handleMarkSubmitted = async (candidateId, details = {}) => {
+    if (!currentJob) return { ok: false, error: "No active job selected" };
+    try {
+      const result = await recordCandidateSubmission(currentJob.id, candidateId, details);
+      setRefreshKey((k) => k + 1);
+      return result;
+    } catch (error) {
+      return { ok: false, error: error.message || "Failed to save submission" };
+    }
+  };
+
   const handleSelectCandidateToSwipe = (candidateId) => {
-    const idx = candidates.findIndex((c) => c.id === candidateId);
+    const idx = swipeCandidates.findIndex((c) => c.id === candidateId);
     if (idx !== -1) {
       setCurrentIndex(idx);
     }
@@ -245,7 +265,7 @@ export default function CandidateReview({ selectedJob, onSelectJob, onNavigateJo
         <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
           {activeView === "swipe" ? (
             <SwipeView
-              candidates={candidates}
+              candidates={swipeCandidates}
               currentIndex={currentIndex}
               onNavigateIndex={setCurrentIndex}
               onPass={handlePass}
@@ -256,7 +276,11 @@ export default function CandidateReview({ selectedJob, onSelectJob, onNavigateJo
           ) : (
             <PeopleView
               candidates={candidates}
+              currentJob={currentJob}
+              jobs={jobs}
+              submissionHistory={submissionHistory}
               onSelectCandidateToSwipe={handleSelectCandidateToSwipe}
+              onMarkSubmitted={handleMarkSubmitted}
             />
           )}
         </div>
