@@ -28,16 +28,35 @@ function normalizedEventTime(value) {
   return null;
 }
 
+const JOIN_HOSTS = ["meet.google.com", "zoom.us", "teams.microsoft.com", "teams.live.com", "ringcentral.com", "webex.com"];
+
+function normalizedJoinUrl(value) {
+  if (typeof value !== "string") return null;
+  try {
+    const url = new URL(value);
+    if (url.protocol !== "https:") return null;
+    return JOIN_HOSTS.some((host) => url.hostname === host || url.hostname.endsWith(`.${host}`))
+      ? url.toString()
+      : null;
+  } catch {
+    return null;
+  }
+}
+
 function normalizedEvent(value) {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const start = normalizedEventTime(value.start);
   const end = normalizedEventTime(value.end);
   if (!start || !end || start.kind !== end.kind || end.value <= start.value) return null;
+  const conferenceUrl = Array.isArray(value.conferenceData?.entryPoints)
+    ? value.conferenceData.entryPoints.find((entry) => entry?.entryPointType === "video")?.uri
+    : null;
   return Object.freeze({
     title: normalizedText(value.summary, 200),
     start,
     end,
     allDay: start.kind === "date",
+    joinUrl: normalizedJoinUrl(value.hangoutLink || conferenceUrl),
   });
 }
 
@@ -85,7 +104,7 @@ export async function readUpcomingGoogleCalendarEvents({
       singleEvents: true,
       orderBy: "startTime",
       showDeleted: false,
-      fields: "items(summary,start,end)",
+      fields: "items(summary,start,end,hangoutLink,conferenceData(entryPoints(entryPointType,uri)))",
     }, { timeout: PROVIDER_TIMEOUT_MS });
   } catch (error) {
     providerError = error;

@@ -34,12 +34,12 @@ const authenticated = {
 };
 authenticated.getAuthoritativeSession = authenticated.getSession;
 
-async function request(app, method, path, { body, headers = {} } = {}) {
+async function request(app, method, path, { body, rawBody, headers = {} } = {}) {
   const server = await new Promise((resolve) => { const value = app.listen(0, () => resolve(value)); });
   try {
-    const payload = body === undefined ? undefined : JSON.stringify(body);
+    const payload = rawBody ?? (body === undefined ? undefined : JSON.stringify(body));
     return await new Promise((resolve, reject) => {
-      const req = httpRequest({ port: server.address().port, path, method, headers: { ...headers, ...(payload ? { "content-type": "application/json", "content-length": Buffer.byteLength(payload) } : {}) } }, (res) => {
+      const req = httpRequest({ port: server.address().port, path, method, headers: { ...headers, ...(payload ? { ...(!headers["content-type"] ? { "content-type": "application/json" } : {}), "content-length": Buffer.byteLength(payload) } : {}) } }, (res) => {
         let data = "";
         res.on("data", (chunk) => { data += chunk; });
         res.on("end", () => resolve({ status: res.statusCode, headers: res.headers, body: data ? JSON.parse(data) : null }));
@@ -78,12 +78,38 @@ test("every non-public API route requires Better Auth session", async () => {
   assert.equal((await request(noAuth, "GET", "/api/mcp/discovery")).status, 503);
   const app = await createApp({ env: testEnv, recruitmentContextLoader: testRecruitmentContext, authConfig: authenticated });
   assert.equal((await request(app, "GET", "/api/mcp/discovery")).status, 401);
+  assert.equal((await request(app, "POST", "/api/meetings/transcribe", { rawBody: Buffer.from("audio"), headers: { "content-type": "audio/webm" } })).status, 401);
   assert.equal((await request(app, "POST", "/mcp", { body: { jsonrpc: "2.0", id: 1, method: "initialize", params: {} } })).status, 401);
   assert.equal((await request(app, "GET", "/api/mcp/discovery", { headers: { authorization: "Bearer synthetic-unapproved" } })).status, 403);
   assert.equal((await request(app, "GET", "/api/mcp/discovery", { headers: { authorization: "Bearer synthetic-missing-email" } })).status, 403);
   const discovery = await request(app, "GET", "/api/mcp/discovery", { headers: { authorization: "Bearer synthetic-review" } });
   assert.equal(discovery.status, 200);
   assert.deepEqual(discovery.body.tools.map((tool) => tool.id), ["recruiter", "workspace_status"]);
+});
+
+test("meeting transcription stays authenticated and uses the injected local adapter", async () => {
+  const calls = [];
+  const app = await createApp({
+    env: testEnv,
+    recruitmentContextLoader: testRecruitmentContext,
+    authConfig: authenticated,
+    transcriptionAdapter: {
+      available: async () => true,
+      transcribe: async (input) => {
+        calls.push(input);
+        return { transcript: "Source audio words.", source: "muesli_cli" };
+      },
+    },
+  });
+  const response = await request(app, "POST", "/api/meetings/transcribe", {
+    rawBody: Buffer.from("synthetic-audio"),
+    headers: { authorization: "Bearer synthetic-review", "content-type": "audio/webm" },
+  });
+  assert.equal(response.status, 200);
+  assert.deepEqual(response.body, { ok: true, transcript: "Source audio words.", source: "muesli_cli" });
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].contentType, "audio/webm");
+  assert.deepEqual(calls[0].audio, Buffer.from("synthetic-audio"));
 });
 
 test("MCP initializes and lists only recruiter plus read-only status", async () => {

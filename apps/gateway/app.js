@@ -7,6 +7,7 @@ import { prepareAfterCallWorkflow } from "./src/after-call.js";
 import { createMcpRequestHandler } from "./src/mcp.js";
 import { createReadOnlyNeo4jAdapter } from "./src/neo4j.js";
 import { discoverMcp, loadRecruitmentContext } from "./src/recruitment-package.js";
+import { createLocalTranscriptionAdapter, meetingAudioBody } from "./src/local-transcription.js";
 
 function respondError(res, code, message, status = 503) {
   return res.status(status).json(errorEnvelope(code, message));
@@ -56,6 +57,7 @@ export async function createApp({
   googleWorkspaceConfig,
   googleWorkspaceOptions,
   googleApiHandlers,
+  transcriptionAdapter = createLocalTranscriptionAdapter(),
   mcpHandlerFactory = createMcpRequestHandler,
   neo4j = createReadOnlyNeo4jAdapter(),
 } = {}) {
@@ -90,6 +92,24 @@ export async function createApp({
 
   const authenticated = requireSession(configuredAuth);
   const authoritativeGoogleSession = requireSession(configuredAuth, { authoritative: true, requireStableUser: true });
+  app.post("/api/meetings/transcribe", authenticated, express.raw(meetingAudioBody), async (req, res) => {
+    if (!Buffer.isBuffer(req.body) || req.body.length === 0) {
+      return respondError(res, "INVALID_INPUT", "Meeting audio is required", 400);
+    }
+    if (!await transcriptionAdapter.available()) {
+      return respondError(res, "TRANSCRIPTION_UNAVAILABLE", "Local transcription is unavailable");
+    }
+    try {
+      return res.json({ ok: true, ...await transcriptionAdapter.transcribe({
+        audio: req.body,
+        contentType: req.get("content-type"),
+      }) });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Meeting transcription failed";
+      const status = /unsupported|empty|required/i.test(message) ? 400 : 502;
+      return respondError(res, "TRANSCRIPTION_FAILED", message, status);
+    }
+  });
   const googleWorkspace = googleWorkspaceConfig ?? createGoogleWorkspaceHandlers({ env, auth: configuredAuth, ...googleWorkspaceOptions });
   const googleWorkspaceHandler = (name) => async (req, res) => {
     if (!googleWorkspace.enabled || typeof googleWorkspace[name] !== "function") {

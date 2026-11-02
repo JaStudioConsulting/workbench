@@ -90,6 +90,7 @@ export const GoogleCalendarUpcomingSchema = z.object({
     start: GoogleCalendarEventTimeSchema,
     end: GoogleCalendarEventTimeSchema,
     allDay: z.boolean(),
+    joinUrl: z.string().url().nullable().optional(),
   }).strict()).max(10),
 }).strict();
 

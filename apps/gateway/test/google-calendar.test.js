@@ -49,7 +49,7 @@ test("upcoming Calendar read is one bounded official-client call and sanitizes p
       singleEvents: true,
       orderBy: "startTime",
       showDeleted: false,
-      fields: "items(summary,start,end)",
+      fields: "items(summary,start,end,hangoutLink,conferenceData(entryPoints(entryPointType,uri)))",
     },
     options: { timeout: 10_000 },
   });
@@ -60,10 +60,28 @@ test("upcoming Calendar read is one bounded official-client call and sanitizes p
     start: { kind: "dateTime", value: "2026-09-01T13:00:00.000Z" },
     end: { kind: "dateTime", value: "2026-09-01T13:30:00.000Z" },
     allDay: false,
+    joinUrl: null,
   });
   assert.equal(result.events[1].title, null);
   assert.equal(result.events[1].allDay, true);
   assert.doesNotMatch(JSON.stringify(result), /private detail|hidden@example|meet\.example|raw-provider-id|description|attendees/i);
+});
+
+test("upcoming Calendar exposes only approved meeting join hosts", async () => {
+  const fx = clientFixture({
+    items: [{
+      summary: "Candidate call",
+      start: { dateTime: "2026-09-01T09:00:00-04:00" },
+      end: { dateTime: "2026-09-01T09:30:00-04:00" },
+      hangoutLink: "https://meet.google.com/abc-defg-hij",
+    }],
+  });
+  const result = await readUpcomingGoogleCalendarEvents({
+    credentials: { refresh_token: "durable-refresh" },
+    now: fixedNow,
+    createApiClients: fx.createApiClients,
+  });
+  assert.equal(result.events[0].joinUrl, "https://meet.google.com/abc-defg-hij");
 });
 
 test("empty Calendar is connected and a refreshed token is persisted before success", async () => {
