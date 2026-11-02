@@ -8,6 +8,7 @@ import { createMcpRequestHandler } from "./src/mcp.js";
 import { createReadOnlyNeo4jAdapter } from "./src/neo4j.js";
 import { discoverMcp, loadRecruitmentContext } from "./src/recruitment-package.js";
 import { createLocalTranscriptionAdapter, meetingAudioBody } from "./src/local-transcription.js";
+import { createMeetingTranscriptionAccess } from "./src/local-trust.js";
 
 function respondError(res, code, message, status = 503) {
   return res.status(status).json(errorEnvelope(code, message));
@@ -18,7 +19,8 @@ export function createCorsGuard(env) {
   return (req, res, next) => {
     const origin = req.get("origin");
     if (!origin) return next();
-    if (!origins.includes(origin)) return respondError(res, "ORIGIN_FORBIDDEN", "Browser origin is not trusted", 403);
+    const sameOrigin = origin === `${req.protocol}://${req.get("host")}`;
+    if (!sameOrigin && !origins.includes(origin)) return respondError(res, "ORIGIN_FORBIDDEN", "Browser origin is not trusted", 403);
     res.set({
       "Access-Control-Allow-Origin": origin,
       "Access-Control-Allow-Credentials": "true",
@@ -92,7 +94,8 @@ export async function createApp({
 
   const authenticated = requireSession(configuredAuth);
   const authoritativeGoogleSession = requireSession(configuredAuth, { authoritative: true, requireStableUser: true });
-  app.post("/api/meetings/transcribe", authenticated, express.raw(meetingAudioBody), async (req, res) => {
+  const meetingTranscriptionAccess = createMeetingTranscriptionAccess({ env, authenticated });
+  app.post("/api/meetings/transcribe", meetingTranscriptionAccess, express.raw(meetingAudioBody), async (req, res) => {
     if (!Buffer.isBuffer(req.body) || req.body.length === 0) {
       return respondError(res, "INVALID_INPUT", "Meeting audio is required", 400);
     }

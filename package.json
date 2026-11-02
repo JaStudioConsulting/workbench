@@ -7,6 +7,7 @@
   "engines": { "node": ">=20" },
   "scripts": {
     "dev": "pnpm --filter @ja/workbench-console dev",
+    "start:local": "pnpm --prefix apps/gateway start:local",
     "dev:site": "vite --config sites.vite.config.js",
     "build": "pnpm -r --if-present build",
     "build:site": "vite build --config sites.vite.config.js",

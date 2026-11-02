@@ -6,7 +6,8 @@
   "main": "app.js",
   "scripts": {
     "dev": "node server.js",
-    "build": "node --check app.js && node --check api/index.js",
+    "start:local": "node local-server.js",
+    "build": "node --check app.js && node --check api/index.js && node --check local-server.js",
     "typecheck": "node --check app.js && node --check src/*.js",
     "test": "node --test test/*.test.js"
   },

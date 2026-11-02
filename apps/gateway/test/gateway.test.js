@@ -39,7 +39,9 @@ async function request(app, method, path, { body, rawBody, headers = {} } = {}) 
   try {
     const payload = rawBody ?? (body === undefined ? undefined : JSON.stringify(body));
     return await new Promise((resolve, reject) => {
-      const req = httpRequest({ port: server.address().port, path, method, headers: { ...headers, ...(payload ? { ...(!headers["content-type"] ? { "content-type": "application/json" } : {}), "content-length": Buffer.byteLength(payload) } : {}) } }, (res) => {
+      const resolvedHeaders = { ...headers };
+      if (resolvedHeaders.origin === "__same__") resolvedHeaders.origin = `http://localhost:${server.address().port}`;
+      const req = httpRequest({ port: server.address().port, path, method, headers: { ...resolvedHeaders, ...(payload ? { ...(!headers["content-type"] ? { "content-type": "application/json" } : {}), "content-length": Buffer.byteLength(payload) } : {}) } }, (res) => {
         let data = "";
         res.on("data", (chunk) => { data += chunk; });
         res.on("end", () => resolve({ status: res.statusCode, headers: res.headers, body: data ? JSON.parse(data) : null }));
@@ -110,6 +112,35 @@ test("meeting transcription stays authenticated and uses the injected local adap
   assert.equal(calls.length, 1);
   assert.equal(calls[0].contentType, "audio/webm");
   assert.deepEqual(calls[0].audio, Buffer.from("synthetic-audio"));
+});
+
+test("explicit local trusted mode bypasses login only for meeting transcription", async () => {
+  const app = await createApp({
+    env: { LOCAL_TRUSTED_MODE: "1" },
+    recruitmentContextLoader: testRecruitmentContext,
+    authConfig: { enabled: false, reason: "Authentication unavailable" },
+    transcriptionAdapter: {
+      available: async () => true,
+      transcribe: async () => ({ transcript: "Local source audio.", source: "muesli_cli" }),
+    },
+  });
+  const transcription = await request(app, "POST", "/api/meetings/transcribe", {
+    rawBody: Buffer.from("synthetic-audio"),
+    headers: { "content-type": "audio/webm", origin: "__same__" },
+  });
+  assert.equal(transcription.status, 200);
+  assert.equal(transcription.body.transcript, "Local source audio.");
+  assert.equal((await request(app, "GET", "/api/mcp/discovery")).status, 503);
+
+  const wrongFlag = await createApp({
+    env: { LOCAL_TRUSTED_MODE: "true" },
+    recruitmentContextLoader: testRecruitmentContext,
+    authConfig: { enabled: false, reason: "Authentication unavailable" },
+  });
+  assert.equal((await request(wrongFlag, "POST", "/api/meetings/transcribe", {
+    rawBody: Buffer.from("synthetic-audio"),
+    headers: { "content-type": "audio/webm" },
+  })).status, 503);
 });
 
 test("MCP initializes and lists only recruiter plus read-only status", async () => {

@@ -34,5 +34,16 @@ The Site exposes the Recruiter as the sole recruiting front door. Google Workspa
 
 The recruitment authority is an external private package pinned to a verified Git commit. It is not copied into this repository.
 
+## One-port local runtime
+
+Build the console, then serve the console and gateway together on `http://127.0.0.1:8092`:
+
+```sh
+pnpm --prefix apps/console build
+pnpm start:local
+```
+
+Meeting transcription normally requires the authenticated Workbench session. On a controlled local Mac, `LOCAL_TRUSTED_MODE=1 pnpm start:local` bypasses login for the transcription endpoint only, and only for loopback, private-network, or Tailscale client addresses. The default listener remains loopback-only. Set `HOST=0.0.0.0` only when private-network or Tailscale access is intended.
+
 See `docs/` for the current architecture, authentication, readiness, cutover,
 host-compatibility, private-package, and UI boundaries.
