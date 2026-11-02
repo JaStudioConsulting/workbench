@@ -18,6 +18,7 @@ const CONTENT_EXTENSIONS = new Map([
 function transcriptFromJson(value) {
   if (typeof value?.text === "string") return value.text.trim();
   if (typeof value?.transcript === "string") return value.transcript.trim();
+  if (typeof value?.data?.transcript === "string") return value.data.transcript.trim();
   if (Array.isArray(value?.segments)) {
     return value.segments.map((segment) => segment?.text).filter((text) => typeof text === "string").join(" ").trim();
   }
