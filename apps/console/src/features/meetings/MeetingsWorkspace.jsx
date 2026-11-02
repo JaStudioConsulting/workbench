@@ -8,7 +8,7 @@ import { Input } from "../../components/ui/input.tsx";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../components/ui/tabs.tsx";
 import { Textarea } from "../../components/ui/textarea.tsx";
 import { getUpcomingGoogleCalendar } from "../../google-workspace-client.js";
-import { startBrowserRecording } from "./browserRecorder.js";
+import { meetingRecordingFilename, startBrowserRecording } from "./browserRecorder.js";
 import { createMeetingAdapter } from "./meetingAdapter.js";
 import { createMeetingDraft, groupCalendarEvents, safeJoinUrl } from "./meetingModel.js";
 
@@ -84,7 +84,7 @@ export default function MeetingsWorkspace({ adapter = defaultAdapter }) {
       const blob = await recording.stop();
       if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current);
       objectUrlRef.current = URL.createObjectURL(blob);
-      setRecordedAudio({ blob, url: objectUrlRef.current });
+      setRecordedAudio({ blob, url: objectUrlRef.current, filename: meetingRecordingFilename(blob) });
       setRecording(null);
       setTranscribing(true);
       try {
@@ -96,6 +96,7 @@ export default function MeetingsWorkspace({ adapter = defaultAdapter }) {
         setTranscribing(false);
       }
     } catch (recordError) {
+      setRecording(null);
       setError(recordError.message || "Meeting recording could not stop.");
     }
   };
@@ -149,7 +150,7 @@ export default function MeetingsWorkspace({ adapter = defaultAdapter }) {
           <label className="flex items-center gap-2 text-sm"><Checkbox checked={includeSharedAudio} onCheckedChange={(value) => setIncludeSharedAudio(Boolean(value))} disabled={Boolean(recording)} />Include shared call audio</label>
           <div className="flex flex-wrap gap-2">
             {!recording ? <Button onClick={() => beginRecording(selectedEvent)}><Mic size={14} /> Start recording</Button> : <Button variant="destructive" onClick={finishRecording}><Square size={14} /> Stop recording</Button>}
-            {recordedAudio ? <Button variant="outline" render={<a href={recordedAudio.url} download="meeting-recording.webm" />}><Link2 size={14} /> Download recording</Button> : null}
+            {recordedAudio ? <Button variant="outline" render={<a href={recordedAudio.url} download={recordedAudio.filename} />}><Link2 size={14} /> Download recording</Button> : null}
           </div>
           {selectedEvent ? <p className="text-sm text-muted-foreground"><CalendarDays size={14} className="inline" /> Linked event: {selectedEvent.title || "Untitled meeting"}</p> : null}
         </div>

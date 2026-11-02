@@ -7,12 +7,12 @@ import { promisify } from "node:util";
 const execFileAsync = promisify(execFile);
 const DEFAULT_CLI = "/Applications/Muesli.app/Contents/MacOS/muesli-cli";
 const CONTENT_EXTENSIONS = new Map([
-  ["audio/webm", ".webm"],
   ["audio/wav", ".wav"],
   ["audio/x-wav", ".wav"],
   ["audio/mp4", ".m4a"],
+  ["audio/m4a", ".m4a"],
+  ["audio/x-m4a", ".m4a"],
   ["audio/mpeg", ".mp3"],
-  ["audio/ogg", ".ogg"],
 ]);
 
 function transcriptFromJson(value) {

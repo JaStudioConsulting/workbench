@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { createMeetingDraft, groupCalendarEvents, safeJoinUrl } from "../src/features/meetings/meetingModel.js";
 import { transcribeMeetingAudio } from "../src/features/meetings/meetingGatewayClient.js";
+import { encodePcm16Wav, meetingRecordingFilename, selectMuesliRecordingFormat, startBrowserRecording } from "../src/features/meetings/browserRecorder.js";
 
 function event(title, value, joinUrl = null) {
   return {
@@ -48,7 +49,7 @@ test("meeting draft never invents a transcript", () => {
 
 test("browser audio is sent only to the authenticated Workbench gateway", async () => {
   let request;
-  const result = await transcribeMeetingAudio(new Blob(["audio"], { type: "audio/webm" }), {
+  const result = await transcribeMeetingAudio(new Blob(["audio"], { type: "audio/mp4" }), {
     baseURL: "https://gateway.example.invalid",
     fetchImpl: async (url, options) => {
       request = { url: url.toString(), options };
@@ -58,7 +59,80 @@ test("browser audio is sent only to the authenticated Workbench gateway", async 
   assert.deepEqual(result, { transcript: "Source audio words.", source: "muesli_cli" });
   assert.equal(request.url, "https://gateway.example.invalid/api/meetings/transcribe");
   assert.equal(request.options.credentials, "include");
-  assert.equal(request.options.headers["Content-Type"], "audio/webm");
+  assert.equal(request.options.headers["Content-Type"], "audio/mp4");
+});
+
+test("meeting recorder prefers Muesli-compatible MP4 and never selects WebM", () => {
+  const checked = [];
+  const format = selectMuesliRecordingFormat({
+    isTypeSupported(type) {
+      checked.push(type);
+      return type === "audio/mp4" || type === "audio/webm";
+    },
+  });
+  assert.deepEqual(format, { mimeType: "audio/mp4", extension: "m4a" });
+  assert.equal(checked.includes("audio/webm"), false);
+  assert.equal(meetingRecordingFilename(new Blob(["audio"], { type: "audio/mp4" })), "meeting-recording.m4a");
+  assert.throws(() => meetingRecordingFilename(new Blob(["audio"], { type: "audio/webm" })), /not supported/i);
+});
+
+test("WAV fallback emits a valid PCM file accepted by local transcription", async () => {
+  const wav = encodePcm16Wav([new Float32Array([-1, 0, 1])], 48_000);
+  const bytes = new Uint8Array(await wav.arrayBuffer());
+  assert.equal(wav.type, "audio/wav");
+  assert.equal(new TextDecoder().decode(bytes.slice(0, 4)), "RIFF");
+  assert.equal(new TextDecoder().decode(bytes.slice(8, 12)), "WAVE");
+  assert.equal(bytes.length, 50);
+});
+
+test("gateway client rejects WebM before making a transcription request", async () => {
+  let calls = 0;
+  await assert.rejects(() => transcribeMeetingAudio(new Blob(["audio"], { type: "audio/webm" }), {
+    fetchImpl: async () => { calls += 1; },
+  }), /MP4, MP3, or WAV/);
+  assert.equal(calls, 0);
+});
+
+test("unsupported browsers fail before requesting microphone access", async () => {
+  let microphoneRequests = 0;
+  await assert.rejects(() => startBrowserRecording({
+    mediaDevices: { getUserMedia: async () => { microphoneRequests += 1; } },
+    MediaRecorderImpl: { isTypeSupported: (type) => type === "audio/webm" },
+    MediaStreamImpl: class {},
+    AudioContextImpl: null,
+  }), /cannot create MP4, MP3, or WAV/);
+  assert.equal(microphoneRequests, 0);
+});
+
+test("browser recording falls back to PCM WAV when MP4 is unavailable", async () => {
+  let processor;
+  let stopped = false;
+  const track = { stop() { stopped = true; } };
+  const microphone = {
+    getAudioTracks: () => [track],
+    getTracks: () => [track],
+  };
+  class FakeAudioContext {
+    constructor() { this.sampleRate = 48_000; this.destination = {}; }
+    createScriptProcessor() {
+      processor = { onaudioprocess: null, connect() {}, disconnect() {} };
+      return processor;
+    }
+    createMediaStreamSource() { return { connect() {}, disconnect() {} }; }
+    async resume() {}
+    async close() {}
+  }
+  const recording = await startBrowserRecording({
+    mediaDevices: { getUserMedia: async () => microphone },
+    MediaRecorderImpl: { isTypeSupported: () => false },
+    MediaStreamImpl: class {},
+    AudioContextImpl: FakeAudioContext,
+  });
+  processor.onaudioprocess({ inputBuffer: { getChannelData: () => new Float32Array([0, 0.5]) } });
+  const blob = await recording.stop();
+  assert.equal(blob.type, "audio/wav");
+  assert.equal(meetingRecordingFilename(blob), "meeting-recording.wav");
+  assert.equal(stopped, true);
 });
 
 test("Meetings workspace uses browser recording and the existing Calendar client", async () => {

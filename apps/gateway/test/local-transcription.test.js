@@ -14,7 +14,7 @@ test("local adapter invokes the CLI contract and removes temporary audio", async
     },
   });
 
-  const result = await adapter.transcribe({ audio: Buffer.from("audio"), contentType: "audio/webm;codecs=opus" });
+  const result = await adapter.transcribe({ audio: Buffer.from("audio"), contentType: "audio/mp4;codecs=mp4a.40.2" });
   assert.deepEqual(result, { transcript: "Verified words only.", source: "muesli_cli" });
   assert.equal(received.cliPath, "/Applications/Muesli.app/Contents/MacOS/muesli-cli");
   await assert.rejects(access(received.inputPath));
@@ -23,7 +23,8 @@ test("local adapter invokes the CLI contract and removes temporary audio", async
 test("local adapter rejects unsupported or empty audio", async () => {
   const adapter = createLocalTranscriptionAdapter({ runner: async () => "{}" });
   await assert.rejects(adapter.transcribe({ audio: Buffer.from("audio"), contentType: "text/plain" }), /unsupported/i);
-  await assert.rejects(adapter.transcribe({ audio: Buffer.alloc(0), contentType: "audio/webm" }), /empty/i);
+  await assert.rejects(adapter.transcribe({ audio: Buffer.alloc(0), contentType: "audio/wav" }), /empty/i);
+  await assert.rejects(adapter.transcribe({ audio: Buffer.from("audio"), contentType: "audio/webm" }), /unsupported/i);
 });
 
 test("local adapter reads the nested transcript returned by the real Muesli CLI", async () => {
@@ -34,7 +35,7 @@ test("local adapter reads the nested transcript returned by the real Muesli CLI"
       },
     }),
   });
-  const result = await adapter.transcribe({ audio: Buffer.from("audio"), contentType: "audio/webm" });
+  const result = await adapter.transcribe({ audio: Buffer.from("audio"), contentType: "audio/wav" });
   assert.deepEqual(result, {
     transcript: "Exact words returned by the M1 CLI.",
     source: "muesli_cli",
