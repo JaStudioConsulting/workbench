@@ -22,8 +22,8 @@ test("LoginButton reuses the shared Google Workspace scope container", async () 
   assert.doesNotMatch(source, /localStorage|sessionStorage|accessToken|refreshToken|gmail|drive|spreadsheets/);
 });
 
-test("App mounts LoginButton in the existing header", async () => {
+test("App does not mount LoginButton in the shell header per screenshot feedback", async () => {
   const source = await readFile(new URL("../src/App.jsx", import.meta.url), "utf8");
-  assert.match(source, /import LoginButton from "\.\/components\/LoginButton\.tsx"/);
-  assert.match(source, /<LoginButton\/>/);
+  assert.doesNotMatch(source, /import LoginButton from/);
+  assert.doesNotMatch(source, /<LoginButton\s*\/>/);
 });

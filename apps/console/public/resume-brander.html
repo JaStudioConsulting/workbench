@@ -1,0 +1,1420 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Candidate Name - Top Tier Talent Group</title>
+<style>
+  :root {
+    --docs-bg: #f0f2f5;
+    --bar-bg: #f9fbfd;
+    --toolbar-bg: #edf2fa;
+    --border: #dadce0;
+    --ink: #1f1f1f;
+    --muted: #5f6368;
+    --blue: #0b57d0;
+    --blue-hover: #0842a0;
+    --blue-tint: #d3e3fd;
+    --ok-bg: #e6f4ea;
+    --ok-ink: #137333;
+    --warn-bg: #fce8e6;
+    --warn-ink: #c5221f;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--docs-bg);
+    color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ================= GOOGLE DOCS TOP CHROME ================= */
+  .docs-chrome {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: var(--bar-bg);
+    border-bottom: 1px solid var(--border);
+    user-select: none;
+  }
+
+  .docs-titlebar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 16px 4px 16px;
+    gap: 12px;
+  }
+
+  .docs-title-left {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+  }
+
+  .docs-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    background: #1a73e8;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    font-weight: 700;
+    font-size: 13px;
+    letter-spacing: 0.5px;
+    flex-shrink: 0;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.12);
+  }
+
+  .docs-meta {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+
+  .docs-filename-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .docs-filename {
+    font-size: 16px;
+    font-weight: 500;
+    color: var(--ink);
+    padding: 2px 6px;
+    border-radius: 4px;
+    border: 1px solid transparent;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .pdf-badge {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--muted);
+    background: #e8eaed;
+    padding: 2px 7px;
+    border-radius: 4px;
+  }
+
+  .docs-menubar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding-left: 6px;
+    font-size: 12px;
+    color: var(--muted);
+  }
+
+  .cursor-inspector {
+    color: var(--blue);
+    font-weight: 500;
+  }
+
+  .guard-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 11.5px;
+    font-weight: 600;
+    background: var(--ok-bg);
+    color: var(--ok-ink);
+  }
+  .guard-pill.warn {
+    background: var(--warn-bg);
+    color: var(--warn-ink);
+  }
+
+  .docs-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+
+  .btn {
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 500;
+    border-radius: 999px;
+    padding: 7px 14px;
+    border: 1px solid var(--border);
+    background: #fff;
+    color: var(--ink);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    transition: background 0.15s, border-color 0.15s;
+  }
+  .btn:hover {
+    background: #f1f3f4;
+  }
+  .btn-primary {
+    background: var(--blue);
+    border-color: var(--blue);
+    color: #fff;
+    font-weight: 600;
+    padding: 8px 18px;
+    box-shadow: 0 1px 2px rgba(11, 87, 208, 0.25);
+  }
+  .btn-primary:hover {
+    background: var(--blue-hover);
+    border-color: var(--blue-hover);
+  }
+
+  /* ================= GOOGLE DOCS PILL TOOLBAR ================= */
+  .docs-toolbar-wrap {
+    padding: 4px 16px 8px 16px;
+  }
+
+  .docs-toolbar {
+    background: var(--toolbar-bg);
+    border-radius: 999px;
+    padding: 4px 14px;
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 3px;
+    min-height: 38px;
+  }
+
+  .tb-btn {
+    border: none;
+    background: transparent;
+    color: #444746;
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 500;
+    min-width: 28px;
+    height: 28px;
+    padding: 0 7px;
+    border-radius: 6px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    transition: background 0.1s, color 0.1s;
+  }
+  .tb-btn:hover {
+    background: rgba(68, 71, 70, 0.08);
+  }
+  .tb-btn.active {
+    background: var(--blue-tint);
+    color: #041e49;
+    font-weight: 600;
+  }
+  .tb-btn b { font-weight: 700; font-size: 14px; }
+  .tb-btn i { font-style: italic; font-family: Georgia, serif; font-size: 14px; }
+  .tb-btn u { text-decoration: underline; font-size: 14px; }
+
+  .tb-sep {
+    width: 1px;
+    height: 18px;
+    background: #c7c7c7;
+    margin: 0 4px;
+  }
+
+  .tb-select {
+    border: 1px solid transparent;
+    background: transparent;
+    font-family: inherit;
+    font-size: 12.5px;
+    color: #1f1f1f;
+    font-weight: 500;
+    height: 28px;
+    padding: 0 6px;
+    border-radius: 6px;
+    cursor: pointer;
+  }
+  .tb-select:hover {
+    background: rgba(68, 71, 70, 0.08);
+  }
+  .tb-select:focus {
+    outline: none;
+    border-color: var(--blue);
+    background: #fff;
+  }
+
+  .size-stepper {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+  }
+  .size-input {
+    width: 42px;
+    height: 24px;
+    border: 1px solid #c7c7c7;
+    border-radius: 4px;
+    background: #fff;
+    text-align: center;
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 500;
+    color: #1f1f1f;
+    padding: 0 2px;
+  }
+  .size-input:focus {
+    outline: none;
+    border-color: var(--blue);
+  }
+
+  /* ================= RULER ================= */
+  .docs-ruler-bar {
+    background: #f9fbfd;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    justify-content: center;
+    height: 20px;
+    overflow: hidden;
+  }
+
+  .docs-ruler {
+    width: 816px;
+    position: relative;
+    display: flex;
+    align-items: flex-end;
+    font-size: 9px;
+    color: #5f6368;
+    padding: 0 64px;
+    justify-content: space-between;
+  }
+
+  .docs-ruler::before,
+  .docs-ruler::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 64px;
+    background: #e8eaed;
+  }
+  .docs-ruler::before { left: 0; border-right: 1px solid #bdc1c6; }
+  .docs-ruler::after { right: 0; border-left: 1px solid #bdc1c6; }
+
+  /* ================= CANVAS & US-LETTER PAPER ================= */
+  .docs-canvas {
+    padding: 24px 16px 64px 16px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .paper-zoom-wrap {
+    transform-origin: top center;
+    transition: transform 0.15s ease;
+  }
+
+  .paper {
+    width: 816px;              /* 8.5 in at 96 DPI */
+    min-height: 1056px;        /* 11 in at 96 DPI */
+    background: #ffffff;
+    box-shadow: 0 1px 3px rgba(60, 64, 67, 0.3), 0 4px 8px 3px rgba(60, 64, 67, 0.15);
+    padding: 1.6cm 1.7cm;      /* Exact TTTG build_resume.py margins */
+    font-family: Arial, Helvetica, sans-serif;
+    color: #000000;
+    font-size: 10.5pt;
+    line-height: 1.34;
+    position: relative;
+  }
+
+  /* ================= LOCKED TTTG RESUME STYLING ================= */
+  .logo-header {
+    text-align: center;
+    margin: 0 auto 10px auto;
+    user-select: none;
+    position: relative;
+  }
+
+  .logo-header img.logo {
+    width: 235px;
+    height: auto;
+    display: block;
+    margin: 0 auto;
+    pointer-events: none;
+  }
+
+  .logo-wordmark {
+    color: #1f1f1f;
+    font-family: Arial, sans-serif;
+    font-size: 15px;
+    font-weight: 800;
+    letter-spacing: 0.16em;
+  }
+
+  .logo-lock-tag {
+    position: absolute;
+    right: 0;
+    top: 0;
+    font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+    font-size: 10px;
+    color: #5f6368;
+    background: #f1f3f4;
+    padding: 2px 7px;
+    border-radius: 4px;
+    opacity: 0;
+    transition: opacity 0.15s;
+  }
+  .logo-header:hover .logo-lock-tag {
+    opacity: 1;
+  }
+
+  /* Editable zones behave just like Google Docs text */
+  [contenteditable="true"] {
+    outline: none;
+    border-radius: 2px;
+    min-height: 1.2em;
+    transition: background-color 0.12s, box-shadow 0.12s;
+  }
+  [contenteditable="true"]:hover {
+    background-color: rgba(11, 87, 208, 0.03);
+  }
+  [contenteditable="true"]:focus {
+    background-color: rgba(11, 87, 208, 0.045);
+    box-shadow: 0 0 0 1px rgba(11, 87, 208, 0.25);
+  }
+  [contenteditable="true"]:empty::before {
+    content: attr(data-placeholder);
+    color: #9aa0a6;
+    font-weight: normal;
+    font-style: normal;
+    pointer-events: none;
+  }
+
+  h1.cand-name {
+    font-size: 17pt;
+    font-weight: bold;
+    margin: 0 0 2px 0;
+    color: #000;
+  }
+
+  .headline {
+    font-weight: bold;
+    font-size: 11.5pt;
+    margin: 0 0 12px 0;
+    color: #000;
+  }
+
+  .section-block {
+    position: relative;
+  }
+
+  h2.sec-heading {
+    font-size: 11pt;
+    font-weight: bold;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    margin: 14px 0 6px 0;
+    padding-bottom: 3px;
+    border-bottom: 1.2px solid #000;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  p.summary {
+    margin: 0;
+    text-align: justify;
+  }
+
+  /* ================= TRUE 2-COLUMN BULLET LIST (CORE SKILLS) ================= */
+  /* Real <ul> with CSS Grid 2-column layout and outside disc bullets
+     so both columns have identical 18px hanging indents to Experience bullets */
+  ul.skills-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    column-gap: 26px;
+    row-gap: 3px;
+    margin: 4px 0 0 0;
+    padding-left: 18px;
+    list-style-type: disc;
+    list-style-position: outside;
+  }
+  ul.skills-grid.single-col {
+    grid-template-columns: 1fr;
+  }
+
+  ul.skills-grid li {
+    margin: 0;
+    padding-left: 2px;
+    text-align: left;
+  }
+
+  /* ================= EXPERIENCE BLOCKS ================= */
+  .job {
+    margin-bottom: 11px;
+    position: relative;
+  }
+
+  .row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 12px;
+  }
+
+  .row .l {
+    text-align: left;
+    flex: 1 1 auto;
+    min-width: 120px;
+  }
+
+  .row .r {
+    text-align: right;
+    white-space: nowrap;
+    flex: 0 0 auto;
+    min-width: 110px;
+  }
+
+  .b { font-weight: bold; }
+  .i { font-style: italic; }
+
+  ul.exp-bullets {
+    margin: 4px 0 0 0;
+    padding-left: 18px;
+    list-style-type: disc;
+    list-style-position: outside;
+  }
+
+  ul.exp-bullets li {
+    margin: 0 0 2px 0;
+    padding-left: 2px;
+    text-align: justify;
+  }
+
+  /* ================= EDUCATION & EXTRA SECTIONS ================= */
+  .edu-list {
+    margin: 0;
+    padding: 0;
+  }
+
+  .edu-item {
+    margin: 0 0 3px 0;
+  }
+
+  /* Inline hover helper buttons on the paper (hidden on PDF export) */
+  .inline-tools {
+    display: inline-flex;
+    gap: 4px;
+    opacity: 0;
+    transition: opacity 0.15s;
+    font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+    font-size: 10.5px;
+    font-weight: 500;
+    text-transform: none;
+    letter-spacing: 0;
+  }
+  .section-block:hover .inline-tools,
+  .job:hover .inline-tools {
+    opacity: 1;
+  }
+
+  .mini-btn {
+    border: 1px solid #dadce0;
+    background: #fff;
+    color: #3c4043;
+    border-radius: 4px;
+    padding: 1px 6px;
+    font-size: 10.5px;
+    cursor: pointer;
+  }
+  .mini-btn:hover {
+    background: #f1f3f4;
+    border-color: #bdc1c6;
+  }
+  .mini-btn.danger:hover {
+    background: #fce8e6;
+    color: #c5221f;
+    border-color: #f6aea9;
+  }
+
+  .job-floating-tools {
+    position: absolute;
+    left: -58px;
+    top: 0;
+  }
+
+  .toast {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    background: #323232;
+    color: #fff;
+    padding: 10px 16px;
+    border-radius: 8px;
+    font-size: 13px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s;
+    z-index: 200;
+  }
+  .toast.show {
+    opacity: 1;
+  }
+
+  /* ================= EXACT PDF PRINT RULES ================= */
+  @page {
+    size: Letter;
+    margin: 1.6cm 1.7cm;
+  }
+
+  @media print {
+    body {
+      background: #ffffff !important;
+    }
+    .docs-chrome,
+    .docs-ruler-bar,
+    .inline-tools,
+    .logo-lock-tag,
+    .toast {
+      display: none !important;
+    }
+    .docs-canvas {
+      padding: 0 !important;
+      display: block !important;
+    }
+    .paper-zoom-wrap {
+      transform: none !important;
+    }
+    .paper {
+      width: 100% !important;
+      min-height: 0 !important;
+      box-shadow: none !important;
+      padding: 0 !important;
+      margin: 0 !important;
+    }
+    [contenteditable="true"]:hover,
+    [contenteditable="true"]:focus {
+      background: transparent !important;
+      box-shadow: none !important;
+    }
+    /* Hide unfilled placeholder lines when exporting to PDF */
+    [contenteditable="true"]:empty::before {
+      content: "" !important;
+    }
+  }
+</style>
+</head>
+<body>
+
+<!-- ================= GOOGLE DOCS TOP BAR & LIVE TOOLBAR ================= -->
+<header class="docs-chrome">
+  <div class="docs-titlebar">
+    <div class="docs-title-left">
+      <div class="docs-icon" title="TTTG Branded Resume Docs">TTTG</div>
+      <div class="docs-meta">
+        <div class="docs-filename-row">
+          <span id="docFilename" class="docs-filename">Candidate Name - Top Tier Talent Group</span>
+          <span class="pdf-badge">.pdf</span>
+          <span id="guardPill" class="guard-pill">✓ TTTG House Rules OK</span>
+        </div>
+        <div class="docs-menubar">
+          <span id="cursorStatus" class="cursor-inspector">Click any field on the page to start typing</span>
+          <span>•</span>
+          <span>Press <b>Enter</b> in any bullet to add another</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="docs-actions">
+      <button class="btn" type="button" onclick="loadCandidateJsonPrompt()" title="Load from a candidate.json payload">
+        Load JSON
+      </button>
+      <button class="btn" type="button" onclick="copyCandidateJson()" title="Copy structured JSON for build_resume.py">
+        Copy JSON
+      </button>
+      <button class="btn btn-primary" type="button" onclick="downloadNamedPdf()">
+        ⬇ Download PDF
+      </button>
+    </div>
+  </div>
+
+  <!-- onmousedown="event.preventDefault()" keeps text selection alive on the paper when clicking toolbar buttons -->
+  <div class="docs-toolbar-wrap">
+    <div class="docs-toolbar">
+      <button class="tb-btn" type="button" onmousedown="event.preventDefault()" onclick="execCmd('undo')" title="Undo (⌘Z)">↶</button>
+      <button class="tb-btn" type="button" onmousedown="event.preventDefault()" onclick="execCmd('redo')" title="Redo (⌘⇧Z)">↷</button>
+      <button class="tb-btn" type="button" onmousedown="event.preventDefault()" onclick="downloadNamedPdf()" title="Print / Save PDF (⌘P)">🖨</button>
+
+      <div class="tb-sep"></div>
+
+      <select class="tb-select" id="zoomSelect" onchange="setZoom(this.value)" title="Zoom">
+        <option value="0.9">90%</option>
+        <option value="1" selected>100%</option>
+        <option value="1.15">115%</option>
+        <option value="1.25">125%</option>
+      </select>
+
+      <div class="tb-sep"></div>
+
+      <select class="tb-select" id="blockStyleSelect" onchange="applyBlockPreset(this.value)" title="Text Style">
+        <option value="body">Normal text (10.5pt)</option>
+        <option value="name">Candidate Name (17pt Bold)</option>
+        <option value="headline">Role Headline (11.5pt Bold)</option>
+        <option value="heading">Section Heading (11pt Upper)</option>
+        <option value="job-title">Job Title (10.5pt Bold)</option>
+        <option value="job-company">Company (10.5pt Italic)</option>
+      </select>
+
+      <div class="tb-sep"></div>
+
+      <select class="tb-select" id="fontFamilySelect" onchange="applyFontFamily(this.value)" title="Font">
+        <option value="Arial">Arial (TTTG Default)</option>
+        <option value="Helvetica">Helvetica</option>
+        <option value="Calibri">Calibri</option>
+        <option value="Georgia">Georgia</option>
+        <option value="Times New Roman">Times New Roman</option>
+        <option value="Verdana">Verdana</option>
+      </select>
+
+      <div class="tb-sep"></div>
+
+      <div class="size-stepper" title="Font size (pt)">
+        <button class="tb-btn" type="button" onmousedown="event.preventDefault()" onclick="stepFontSize(-0.5)">−</button>
+        <input
+          type="text"
+          id="fontSizeInput"
+          class="size-input"
+          value="10.5"
+          onchange="applyFontSizePt(this.value)"
+          onkeydown="if(event.key==='Enter'){event.preventDefault();applyFontSizePt(this.value);}"
+        />
+        <button class="tb-btn" type="button" onmousedown="event.preventDefault()" onclick="stepFontSize(0.5)">+</button>
+      </div>
+
+      <div class="tb-sep"></div>
+
+      <button class="tb-btn" id="btnBold" type="button" onmousedown="event.preventDefault()" onclick="toggleInlineFormat('bold')" title="Bold (⌘B)"><b>B</b></button>
+      <button class="tb-btn" id="btnItalic" type="button" onmousedown="event.preventDefault()" onclick="toggleInlineFormat('italic')" title="Italic (⌘I)"><i>I</i></button>
+      <button class="tb-btn" id="btnUnderline" type="button" onmousedown="event.preventDefault()" onclick="toggleInlineFormat('underline')" title="Underline (⌘U)"><u>U</u></button>
+
+      <div class="tb-sep"></div>
+
+      <button class="tb-btn" id="btnAlignLeft" type="button" onmousedown="event.preventDefault()" onclick="applyAlignment('left')" title="Align Left">⇤</button>
+      <button class="tb-btn" id="btnAlignCenter" type="button" onmousedown="event.preventDefault()" onclick="applyAlignment('center')" title="Align Center">⇔</button>
+      <button class="tb-btn" id="btnAlignRight" type="button" onmousedown="event.preventDefault()" onclick="applyAlignment('right')" title="Align Right">⇥</button>
+      <button class="tb-btn" id="btnAlignJustify" type="button" onmousedown="event.preventDefault()" onclick="applyAlignment('justify')" title="Justify">☰</button>
+
+      <div class="tb-sep"></div>
+
+      <button class="tb-btn active" id="btnTwoColSkills" type="button" onmousedown="event.preventDefault()" onclick="toggleTwoColSkills()" title="Toggle 2-Column vs 1-Column Core Skills">⚏ 2-Col Skills</button>
+      <button class="tb-btn" type="button" onmousedown="event.preventDefault()" onclick="addSkillBullet()" title="Add a bullet to Core Skills">+ Skill</button>
+      <button class="tb-btn" type="button" onmousedown="event.preventDefault()" onclick="addJobBlock()" title="Add another role under Professional Experience">+ Role</button>
+      <button class="tb-btn" type="button" onmousedown="event.preventDefault()" onclick="addExtraSection()" title="Add Certifications / Additional Info section">+ Section</button>
+    </div>
+  </div>
+</header>
+
+<!-- ================= GOOGLE DOCS RULER ================= -->
+<div class="docs-ruler-bar">
+  <div class="docs-ruler">
+    <span>1</span><span>2</span><span>3</span><span>4</span><span>5</span><span>6</span><span>7</span>
+  </div>
+</div>
+
+<!-- ================= GOOGLE DOCS PAPER WORKSPACE (EMPTY TEMPLATE) ================= -->
+<main class="docs-canvas">
+  <div class="paper-zoom-wrap" id="paperZoomWrap">
+    <article class="paper" id="resumePaper">
+
+      <!-- PRESET CENTERED TTTG LOGO (LOCKED) -->
+      <div class="logo-header" contenteditable="false">
+        <div class="logo-wordmark">TOP TIER TALENT GROUP</div>
+        <span class="logo-lock-tag">🔒 Preset Logo</span>
+      </div>
+
+      <!-- CANDIDATE NAME & SINGLE HEADLINE (EMPTY PLACEHOLDERS) -->
+      <h1
+        id="candName"
+        class="cand-name"
+        contenteditable="true"
+        data-placeholder="Candidate Full Name"
+      ></h1>
+
+      <div
+        id="candHeadline"
+        class="headline"
+        contenteditable="true"
+        data-placeholder="One Current or Target Role Title"
+      ></div>
+
+      <!-- SUMMARY -->
+      <section class="section-block">
+        <h2 class="sec-heading" contenteditable="false">
+          <span contenteditable="true">Summary</span>
+        </h2>
+        <p
+          id="candSummary"
+          class="summary"
+          contenteditable="true"
+          data-placeholder="Write 2 to 4 concise sentences positioning the candidate for the role..."
+        ></p>
+      </section>
+
+      <!-- CORE SKILLS (TRUE 2-COLUMN BULLET LIST WITH HANGING INDENT) -->
+      <section class="section-block">
+        <h2 class="sec-heading" contenteditable="false">
+          <span contenteditable="true">Core Skills</span>
+          <span class="inline-tools">
+            <button class="mini-btn" type="button" onclick="addSkillBullet()">+ Add Skill</button>
+          </span>
+        </h2>
+        <ul id="skillsList" class="skills-grid">
+          <li contenteditable="true" data-placeholder="Core skill 1"></li>
+          <li contenteditable="true" data-placeholder="Core skill 2"></li>
+          <li contenteditable="true" data-placeholder="Core skill 3"></li>
+          <li contenteditable="true" data-placeholder="Core skill 4"></li>
+          <li contenteditable="true" data-placeholder="Core skill 5"></li>
+          <li contenteditable="true" data-placeholder="Core skill 6"></li>
+        </ul>
+      </section>
+
+      <!-- PROFESSIONAL EXPERIENCE -->
+      <section class="section-block">
+        <h2 class="sec-heading" contenteditable="false">
+          <span contenteditable="true">Professional Experience</span>
+          <span class="inline-tools">
+            <button class="mini-btn" type="button" onclick="addJobBlock()">+ Add Role</button>
+          </span>
+        </h2>
+
+        <div id="experienceList">
+          <div class="job">
+            <div class="inline-tools job-floating-tools" contenteditable="false">
+              <button class="mini-btn" type="button" onclick="addBulletToJob(this)" title="Add bullet">+•</button>
+              <button class="mini-btn danger" type="button" onclick="removeJob(this)" title="Remove role">✕</button>
+            </div>
+            <div class="row">
+              <span class="l b job-title" contenteditable="true" data-placeholder="Job Title"></span>
+              <span class="r job-dates" contenteditable="true" data-placeholder="Mmm-YYYY - Present"></span>
+            </div>
+            <div class="row">
+              <span class="l i job-company" contenteditable="true" data-placeholder="Company Name"></span>
+              <span class="r job-location" contenteditable="true" data-placeholder="City, ST, Country"></span>
+            </div>
+            <ul class="exp-bullets">
+              <li contenteditable="true" data-placeholder="Action + proof point bullet (press Enter for next bullet)..."></li>
+              <li contenteditable="true" data-placeholder="Action + proof point bullet..."></li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <!-- EDUCATION & CERTIFICATIONS -->
+      <section class="section-block" id="educationSection">
+        <h2 class="sec-heading" contenteditable="false">
+          <span id="eduHeading" contenteditable="true">Education &amp; Certifications</span>
+          <span class="inline-tools">
+            <button class="mini-btn" type="button" onclick="addEducationItem()">+ Add Line</button>
+          </span>
+        </h2>
+        <div id="educationList" class="edu-list">
+          <div class="edu-item" contenteditable="true" data-placeholder="Degree / Credential - Institution"></div>
+        </div>
+      </section>
+
+      <!-- EXTRA SECTIONS (OPTIONAL) -->
+      <div id="extraSections"></div>
+
+    </article>
+  </div>
+</main>
+
+<div id="toast" class="toast"></div>
+
+<script>
+  const candNameEl = document.getElementById("candName");
+  const docFilenameEl = document.getElementById("docFilename");
+  const guardPillEl = document.getElementById("guardPill");
+  const resumePaperEl = document.getElementById("resumePaper");
+  const cursorStatusEl = document.getElementById("cursorStatus");
+
+  const blockStyleSelect = document.getElementById("blockStyleSelect");
+  const fontFamilySelect = document.getElementById("fontFamilySelect");
+  const fontSizeInput = document.getElementById("fontSizeInput");
+  const btnBold = document.getElementById("btnBold");
+  const btnItalic = document.getElementById("btnItalic");
+  const btnUnderline = document.getElementById("btnUnderline");
+  const btnAlignLeft = document.getElementById("btnAlignLeft");
+  const btnAlignCenter = document.getElementById("btnAlignCenter");
+  const btnAlignRight = document.getElementById("btnAlignRight");
+  const btnAlignJustify = document.getElementById("btnAlignJustify");
+  const btnTwoColSkills = document.getElementById("btnTwoColSkills");
+
+  let lastActiveEditable = null;
+  let lastSelectionNode = null;
+
+  function getPdfTitle() {
+    const rawName = (candNameEl.textContent || "").trim() || "Candidate Name";
+    return `${rawName} - Top Tier Talent Group`;
+  }
+
+  function syncTitleAndRules() {
+    const title = getPdfTitle();
+    docFilenameEl.textContent = title;
+    document.title = title;
+
+    const fullText = resumePaperEl.innerText || "";
+    const issues = [];
+    if (/[—–]/.test(fullText) || /--/.test(fullText)) issues.push("dash");
+    if (/;/.test(fullText)) issues.push("semicolon");
+    if (/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/.test(fullText)) issues.push("email");
+
+    if (issues.length > 0) {
+      guardPillEl.className = "guard-pill warn";
+      guardPillEl.textContent = "⚠ Check House Rules: " + issues.join(", ");
+    } else {
+      guardPillEl.className = "guard-pill";
+      guardPillEl.textContent = "✓ TTTG House Rules OK";
+    }
+  }
+
+  // ================= LIVE TOOLBAR STATE SYNC (LIKE GOOGLE DOCS) =================
+  function pxToPt(pxStr) {
+    const px = parseFloat(pxStr);
+    if (isNaN(px)) return 10.5;
+    return Math.round((px * 72 / 96) * 2) / 2;
+  }
+
+  function detectBlockRole(el) {
+    if (!el) return { key: "body", label: "Normal text" };
+    if (el.closest(".cand-name")) return { key: "name", label: "Candidate Name (17pt Bold)" };
+    if (el.closest(".headline")) return { key: "headline", label: "Role Headline (11.5pt Bold)" };
+    if (el.closest(".sec-heading")) return { key: "heading", label: "Section Heading (11pt Upper)" };
+    if (el.closest(".job-title")) return { key: "job-title", label: "Job Title (Bold Left)" };
+    if (el.closest(".job-dates")) return { key: "body", label: "Job Dates (Flush Right)" };
+    if (el.closest(".job-company")) return { key: "job-company", label: "Company (Italic Left)" };
+    if (el.closest(".job-location")) return { key: "body", label: "Location (Flush Right)" };
+    if (el.closest("#skillsList")) return { key: "body", label: "Core Skills (2-Col Hanging Bullet)" };
+    if (el.closest(".exp-bullets")) return { key: "body", label: "Experience Bullet (Hanging Indent)" };
+    if (el.closest(".summary")) return { key: "body", label: "Summary Paragraph" };
+    return { key: "body", label: "Normal text" };
+  }
+
+  function updateToolbarFromCursor() {
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0) return;
+
+    let node = sel.anchorNode;
+    if (!node) return;
+    if (node.nodeType === Node.TEXT_NODE) node = node.parentElement;
+    if (!node || !resumePaperEl.contains(node)) return;
+
+    const editable = node.closest('[contenteditable="true"]');
+    if (!editable) return;
+
+    lastActiveEditable = editable;
+    lastSelectionNode = node;
+
+    const cs = window.getComputedStyle(node);
+
+    const pt = pxToPt(cs.fontSize);
+    if (document.activeElement !== fontSizeInput) {
+      fontSizeInput.value = String(pt);
+    }
+
+    const familyRaw = (cs.fontFamily || "Arial").split(",")[0].replace(/['"]/g, "").trim();
+    const matchedOption = Array.from(fontFamilySelect.options).find(
+      (opt) => opt.value.toLowerCase() === familyRaw.toLowerCase()
+    );
+    if (matchedOption) {
+      fontFamilySelect.value = matchedOption.value;
+    }
+
+    const weight = parseInt(cs.fontWeight, 10) || 400;
+    const isBold = weight >= 600 || cs.fontWeight === "bold" || document.queryCommandState("bold");
+    const isItalic = cs.fontStyle === "italic" || document.queryCommandState("italic");
+    const isUnderline = (cs.textDecorationLine || "").includes("underline") || document.queryCommandState("underline");
+
+    btnBold.classList.toggle("active", Boolean(isBold));
+    btnItalic.classList.toggle("active", Boolean(isItalic));
+    btnUnderline.classList.toggle("active", Boolean(isUnderline));
+
+    const align = cs.textAlign || "left";
+    btnAlignLeft.classList.toggle("active", align === "left" || align === "start");
+    btnAlignCenter.classList.toggle("active", align === "center");
+    btnAlignRight.classList.toggle("active", align === "right" || align === "end");
+    btnAlignJustify.classList.toggle("active", align === "justify");
+
+    const role = detectBlockRole(node);
+    blockStyleSelect.value = role.key;
+    cursorStatusEl.textContent = `${role.label} • ${familyRaw} ${pt}pt${isBold ? " • Bold" : ""}${isItalic ? " • Italic" : ""}`;
+  }
+
+  document.addEventListener("selectionchange", updateToolbarFromCursor);
+  resumePaperEl.addEventListener("keyup", updateToolbarFromCursor);
+  resumePaperEl.addEventListener("mouseup", updateToolbarFromCursor);
+  resumePaperEl.addEventListener("input", () => {
+    syncTitleAndRules();
+    updateToolbarFromCursor();
+  });
+
+  // ================= TOOLBAR ACTIONS =================
+  function execCmd(cmd, val = null) {
+    document.execCommand(cmd, false, val);
+    updateToolbarFromCursor();
+    syncTitleAndRules();
+  }
+
+  function toggleInlineFormat(type) {
+    const sel = window.getSelection();
+    const hasRange = sel && sel.rangeCount > 0 && !sel.isCollapsed;
+
+    if (hasRange) {
+      document.execCommand(type, false, null);
+    } else if (lastActiveEditable) {
+      const cs = window.getComputedStyle(lastSelectionNode || lastActiveEditable);
+      if (type === "bold") {
+        const weight = parseInt(cs.fontWeight, 10) || 400;
+        const currentlyBold = weight >= 600 || cs.fontWeight === "bold";
+        const bTag = (lastSelectionNode || lastActiveEditable).closest("b, strong");
+        if (bTag && lastActiveEditable.contains(bTag)) {
+          document.execCommand("bold", false, null);
+        } else {
+          lastActiveEditable.style.fontWeight = currentlyBold ? "normal" : "bold";
+        }
+      } else if (type === "italic") {
+        const currentlyItalic = cs.fontStyle === "italic";
+        lastActiveEditable.style.fontStyle = currentlyItalic ? "normal" : "italic";
+      } else if (type === "underline") {
+        const currentlyUnder = (cs.textDecorationLine || "").includes("underline");
+        lastActiveEditable.style.textDecoration = currentlyUnder ? "none" : "underline";
+      }
+    }
+    updateToolbarFromCursor();
+  }
+
+  function applyFontFamily(fontName) {
+    const sel = window.getSelection();
+    if (sel && sel.rangeCount > 0 && !sel.isCollapsed) {
+      document.execCommand("fontName", false, fontName);
+    } else if (lastActiveEditable) {
+      lastActiveEditable.style.fontFamily = `${fontName}, Arial, sans-serif`;
+    } else {
+      resumePaperEl.style.fontFamily = `${fontName}, Arial, sans-serif`;
+    }
+    updateToolbarFromCursor();
+  }
+
+  function applyFontSizePt(ptValue) {
+    const pt = parseFloat(ptValue);
+    if (isNaN(pt) || pt < 6 || pt > 48) return;
+    fontSizeInput.value = String(pt);
+
+    const sel = window.getSelection();
+    if (sel && sel.rangeCount > 0 && !sel.isCollapsed) {
+      const range = sel.getRangeAt(0);
+      const span = document.createElement("span");
+      span.style.fontSize = `${pt}pt`;
+      range.surroundContents(span);
+    } else if (lastActiveEditable) {
+      lastActiveEditable.style.fontSize = `${pt}pt`;
+    }
+    updateToolbarFromCursor();
+  }
+
+  function stepFontSize(delta) {
+    const current = parseFloat(fontSizeInput.value) || 10.5;
+    const next = Math.max(7, Math.min(36, Math.round((current + delta) * 2) / 2));
+    applyFontSizePt(next);
+  }
+
+  function applyAlignment(align) {
+    if (!lastActiveEditable) return;
+    lastActiveEditable.style.textAlign = align;
+    updateToolbarFromCursor();
+  }
+
+  function applyBlockPreset(preset) {
+    if (!lastActiveEditable) return;
+    if (preset === "name") {
+      lastActiveEditable.style.fontSize = "17pt";
+      lastActiveEditable.style.fontWeight = "bold";
+      lastActiveEditable.style.fontStyle = "normal";
+    } else if (preset === "headline") {
+      lastActiveEditable.style.fontSize = "11.5pt";
+      lastActiveEditable.style.fontWeight = "bold";
+      lastActiveEditable.style.fontStyle = "normal";
+    } else if (preset === "heading") {
+      lastActiveEditable.style.fontSize = "11pt";
+      lastActiveEditable.style.fontWeight = "bold";
+      lastActiveEditable.style.textTransform = "uppercase";
+    } else if (preset === "job-title") {
+      lastActiveEditable.style.fontSize = "10.5pt";
+      lastActiveEditable.style.fontWeight = "bold";
+      lastActiveEditable.style.fontStyle = "normal";
+    } else if (preset === "job-company") {
+      lastActiveEditable.style.fontSize = "10.5pt";
+      lastActiveEditable.style.fontWeight = "normal";
+      lastActiveEditable.style.fontStyle = "italic";
+    } else {
+      lastActiveEditable.style.fontSize = "10.5pt";
+      lastActiveEditable.style.fontWeight = "normal";
+      lastActiveEditable.style.fontStyle = "normal";
+      lastActiveEditable.style.textTransform = "none";
+    }
+    updateToolbarFromCursor();
+  }
+
+  function toggleTwoColSkills() {
+    const ul = document.getElementById("skillsList");
+    ul.classList.toggle("single-col");
+    const isTwoCol = !ul.classList.contains("single-col");
+    btnTwoColSkills.classList.toggle("active", isTwoCol);
+    btnTwoColSkills.textContent = isTwoCol ? "⚏ 2-Col Skills" : "☰ 1-Col Skills";
+  }
+
+  // Google-Docs-like Enter & Backspace behavior inside bullets and line items
+  resumePaperEl.addEventListener("keydown", (e) => {
+    const target = e.target;
+    if (!target || !target.isContentEditable) return;
+
+    if (e.key === "Enter" && !e.shiftKey && (target.tagName === "LI" || target.classList.contains("edu-item"))) {
+      e.preventDefault();
+      const clone = document.createElement(target.tagName);
+      clone.className = target.className;
+      clone.contentEditable = "true";
+      clone.setAttribute("data-placeholder", target.getAttribute("data-placeholder") || "");
+      target.after(clone);
+      clone.focus();
+      syncTitleAndRules();
+      updateToolbarFromCursor();
+      return;
+    }
+
+    if (e.key === "Backspace" && (target.tagName === "LI" || target.classList.contains("edu-item"))) {
+      const text = (target.textContent || "").trim();
+      const parent = target.parentElement;
+      if (text === "" && parent && parent.children.length > 1) {
+        e.preventDefault();
+        const prev = target.previousElementSibling || target.nextElementSibling;
+        target.remove();
+        if (prev) {
+          prev.focus();
+          placeCaretAtEnd(prev);
+        }
+        syncTitleAndRules();
+        updateToolbarFromCursor();
+      }
+    }
+  });
+
+  function placeCaretAtEnd(el) {
+    const range = document.createRange();
+    range.selectNodeContents(el);
+    range.collapse(false);
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+  }
+
+  function addSkillBullet() {
+    const ul = document.getElementById("skillsList");
+    const li = document.createElement("li");
+    li.contentEditable = "true";
+    li.setAttribute("data-placeholder", "Core skill");
+    ul.appendChild(li);
+    li.focus();
+    updateToolbarFromCursor();
+  }
+
+  function addBulletToJob(btn) {
+    const job = btn.closest(".job");
+    const ul = job.querySelector(".exp-bullets");
+    const li = document.createElement("li");
+    li.contentEditable = "true";
+    li.setAttribute("data-placeholder", "Action + proof point bullet...");
+    ul.appendChild(li);
+    li.focus();
+    updateToolbarFromCursor();
+  }
+
+  function removeJob(btn) {
+    const list = document.getElementById("experienceList");
+    if (list.children.length <= 1) {
+      showToast("Keep at least one experience role.");
+      return;
+    }
+    btn.closest(".job").remove();
+    syncTitleAndRules();
+  }
+
+  function addJobBlock() {
+    const list = document.getElementById("experienceList");
+    const div = document.createElement("div");
+    div.className = "job";
+    div.innerHTML = `
+      <div class="inline-tools job-floating-tools" contenteditable="false">
+        <button class="mini-btn" type="button" onclick="addBulletToJob(this)" title="Add bullet">+•</button>
+        <button class="mini-btn danger" type="button" onclick="removeJob(this)" title="Remove role">✕</button>
+      </div>
+      <div class="row">
+        <span class="l b job-title" contenteditable="true" data-placeholder="Job Title"></span>
+        <span class="r job-dates" contenteditable="true" data-placeholder="Mmm-YYYY - Mmm-YYYY"></span>
+      </div>
+      <div class="row">
+        <span class="l i job-company" contenteditable="true" data-placeholder="Company Name"></span>
+        <span class="r job-location" contenteditable="true" data-placeholder="City, ST, Country"></span>
+      </div>
+      <ul class="exp-bullets">
+        <li contenteditable="true" data-placeholder="Action + proof point bullet..."></li>
+      </ul>
+    `;
+    list.appendChild(div);
+    div.querySelector(".job-title").focus();
+    updateToolbarFromCursor();
+  }
+
+  function addEducationItem() {
+    const list = document.getElementById("educationList");
+    const item = document.createElement("div");
+    item.className = "edu-item";
+    item.contentEditable = "true";
+    item.setAttribute("data-placeholder", "Degree / Credential - Institution");
+    list.appendChild(item);
+    item.focus();
+    updateToolbarFromCursor();
+  }
+
+  function addItemToExtra(btn) {
+    const sec = btn.closest(".extra-sec");
+    const list = sec.querySelector(".extra-items");
+    const item = document.createElement("div");
+    item.className = "edu-item";
+    item.contentEditable = "true";
+    item.setAttribute("data-placeholder", "Line item");
+    list.appendChild(item);
+    item.focus();
+    updateToolbarFromCursor();
+  }
+
+  function addExtraSection() {
+    const wrap = document.getElementById("extraSections");
+    const sec = document.createElement("section");
+    sec.className = "section-block extra-sec";
+    sec.innerHTML = `
+      <h2 class="sec-heading" contenteditable="false">
+        <span class="extra-heading" contenteditable="true" data-placeholder="Section Heading">Certifications</span>
+        <span class="inline-tools">
+          <button class="mini-btn" type="button" onclick="addItemToExtra(this)">+ Add Line</button>
+          <button class="mini-btn danger" type="button" onclick="this.closest('.extra-sec').remove()">✕ Section</button>
+        </span>
+      </h2>
+      <div class="edu-list extra-items">
+        <div class="edu-item" contenteditable="true" data-placeholder="Line item"></div>
+      </div>
+    `;
+    wrap.appendChild(sec);
+    sec.querySelector(".extra-heading").focus();
+    updateToolbarFromCursor();
+  }
+
+  function setZoom(scale) {
+    document.getElementById("paperZoomWrap").style.transform = `scale(${scale})`;
+  }
+
+  function htmlToMarkdownBold(el) {
+    const clone = el.cloneNode(true);
+    clone.querySelectorAll("b, strong").forEach((b) => {
+      b.replaceWith(`**${b.textContent}**`);
+    });
+    return (clone.textContent || "").trim();
+  }
+
+  function markdownBoldToHtml(text) {
+    const escaped = String(text || "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;");
+    return escaped.replace(/\*\*(.+?)\*\*/g, "<b>$1</b>");
+  }
+
+  // Programmatic API: window.loadCandidateData(data) can be called by your local app
+  window.loadCandidateData = function(data) {
+    if (!data || typeof data !== "object") return;
+    candNameEl.textContent = data.name || "";
+    document.getElementById("candHeadline").textContent = data.headline || "";
+    document.getElementById("candSummary").textContent = data.summary || "";
+
+    const skillsUl = document.getElementById("skillsList");
+    skillsUl.innerHTML = "";
+    const skills = Array.isArray(data.skills) && data.skills.length ? data.skills : ["", "", "", "", "", ""];
+    skills.forEach((s) => {
+      const li = document.createElement("li");
+      li.contentEditable = "true";
+      li.setAttribute("data-placeholder", "Core skill");
+      li.innerHTML = markdownBoldToHtml(s);
+      skillsUl.appendChild(li);
+    });
+
+    const expWrap = document.getElementById("experienceList");
+    expWrap.innerHTML = "";
+    const jobs = Array.isArray(data.experience) && data.experience.length ? data.experience : [{}];
+    jobs.forEach((j) => {
+      const div = document.createElement("div");
+      div.className = "job";
+      const bullets = Array.isArray(j.bullets) && j.bullets.length ? j.bullets : [""];
+      div.innerHTML = `
+        <div class="inline-tools job-floating-tools" contenteditable="false">
+          <button class="mini-btn" type="button" onclick="addBulletToJob(this)" title="Add bullet">+•</button>
+          <button class="mini-btn danger" type="button" onclick="removeJob(this)" title="Remove role">✕</button>
+        </div>
+        <div class="row">
+          <span class="l b job-title" contenteditable="true" data-placeholder="Job Title"></span>
+          <span class="r job-dates" contenteditable="true" data-placeholder="Mmm-YYYY - Mmm-YYYY"></span>
+        </div>
+        <div class="row">
+          <span class="l i job-company" contenteditable="true" data-placeholder="Company Name"></span>
+          <span class="r job-location" contenteditable="true" data-placeholder="City, ST, Country"></span>
+        </div>
+        <ul class="exp-bullets"></ul>
+      `;
+      div.querySelector(".job-title").textContent = j.title || "";
+      div.querySelector(".job-dates").textContent = j.dates || "";
+      div.querySelector(".job-company").textContent = j.company || "";
+      div.querySelector(".job-location").textContent = j.location || "";
+      const ul = div.querySelector(".exp-bullets");
+      bullets.forEach((b) => {
+        const li = document.createElement("li");
+        li.contentEditable = "true";
+        li.setAttribute("data-placeholder", "Action + proof point bullet...");
+        li.innerHTML = markdownBoldToHtml(b);
+        ul.appendChild(li);
+      });
+      expWrap.appendChild(div);
+    });
+
+    document.getElementById("eduHeading").textContent = data.education_heading || "Education & Certifications";
+    const eduWrap = document.getElementById("educationList");
+    eduWrap.innerHTML = "";
+    const eduItems = Array.isArray(data.education) && data.education.length ? data.education : [""];
+    eduItems.forEach((e) => {
+      const item = document.createElement("div");
+      item.className = "edu-item";
+      item.contentEditable = "true";
+      item.setAttribute("data-placeholder", "Degree / Credential - Institution");
+      item.innerHTML = markdownBoldToHtml(e);
+      eduWrap.appendChild(item);
+    });
+
+    const extraWrap = document.getElementById("extraSections");
+    extraWrap.innerHTML = "";
+    if (Array.isArray(data.sections)) {
+      data.sections.forEach((s) => {
+        const sec = document.createElement("section");
+        sec.className = "section-block extra-sec";
+        sec.innerHTML = `
+          <h2 class="sec-heading" contenteditable="false">
+            <span class="extra-heading" contenteditable="true"></span>
+            <span class="inline-tools">
+              <button class="mini-btn" type="button" onclick="addItemToExtra(this)">+ Add Line</button>
+              <button class="mini-btn danger" type="button" onclick="this.closest('.extra-sec').remove()">✕ Section</button>
+            </span>
+          </h2>
+          <div class="edu-list extra-items"></div>
+        `;
+        sec.querySelector(".extra-heading").textContent = s.heading || "Section";
+        const itemsWrap = sec.querySelector(".extra-items");
+        (Array.isArray(s.items) ? s.items : [""]).forEach((it) => {
+          const item = document.createElement("div");
+          item.className = "edu-item";
+          item.contentEditable = "true";
+          item.setAttribute("data-placeholder", "Line item");
+          item.innerHTML = markdownBoldToHtml(it);
+          itemsWrap.appendChild(item);
+        });
+        extraWrap.appendChild(sec);
+      });
+    }
+    syncTitleAndRules();
+  };
+
+  window.addEventListener("message", (event) => {
+    if (event.origin !== window.location.origin) return;
+    if (event.data?.type !== "tttg-load-candidate") return;
+    window.loadCandidateData(event.data.payload);
+    showToast("Candidate sources loaded");
+  });
+
+  function loadCandidateJsonPrompt() {
+    const raw = window.prompt("Paste candidate.json content here:");
+    if (!raw) return;
+    try {
+      const parsed = JSON.parse(raw);
+      window.loadCandidateData(parsed);
+      showToast("Loaded candidate data onto paper!");
+    } catch (err) {
+      showToast("Invalid JSON: " + err.message);
+    }
+  }
+
+  function extractCandidateJson() {
+    const skills = Array.from(document.querySelectorAll("#skillsList li"))
+      .map((li) => (li.textContent || "").trim())
+      .filter(Boolean);
+
+    const experience = Array.from(document.querySelectorAll("#experienceList .job")).map((job) => ({
+      title: (job.querySelector(".job-title")?.textContent || "").trim(),
+      dates: (job.querySelector(".job-dates")?.textContent || "").trim(),
+      company: (job.querySelector(".job-company")?.textContent || "").trim(),
+      location: (job.querySelector(".job-location")?.textContent || "").trim(),
+      bullets: Array.from(job.querySelectorAll(".exp-bullets li"))
+        .map((li) => htmlToMarkdownBold(li))
+        .filter(Boolean),
+    }));
+
+    const education = Array.from(document.querySelectorAll("#educationList .edu-item"))
+      .map((el) => htmlToMarkdownBold(el))
+      .filter(Boolean);
+
+    const sections = Array.from(document.querySelectorAll("#extraSections .extra-sec")).map((sec) => ({
+      heading: (sec.querySelector(".extra-heading")?.textContent || "").trim(),
+      items: Array.from(sec.querySelectorAll(".extra-items .edu-item"))
+        .map((el) => htmlToMarkdownBold(el))
+        .filter(Boolean),
+    }));
+
+    return {
+      name: (document.getElementById("candName").textContent || "").trim(),
+      headline: (document.getElementById("candHeadline").textContent || "").trim(),
+      summary: (document.getElementById("candSummary").textContent || "").trim(),
+      skills,
+      experience,
+      education,
+      education_heading: (document.getElementById("eduHeading").textContent || "Education & Certifications").trim(),
+      sections,
+    };
+  }
+
+  async function copyCandidateJson() {
+    const data = extractCandidateJson();
+    await navigator.clipboard.writeText(JSON.stringify(data, null, 2));
+    showToast("Copied candidate.json to clipboard!");
+  }
+
+  function downloadNamedPdf() {
+    syncTitleAndRules();
+    window.print();
+  }
+
+  function showToast(msg) {
+    const t = document.getElementById("toast");
+    t.textContent = msg;
+    t.classList.add("show");
+    setTimeout(() => t.classList.remove("show"), 2600);
+  }
+</script>
+</body>
+</html>

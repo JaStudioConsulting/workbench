@@ -1,0 +1,129 @@
+import { ChevronLeft, ChevronRight, Users } from "lucide-react";
+import { Button } from "../../components/ui/button.tsx";
+import CandidateCard from "./CandidateCard.jsx";
+import { getWindowedIndices, MAX_VISIBLE_DOTS } from "./figureUtils.js";
+
+export default function SwipeView({
+  candidates,
+  currentIndex,
+  onNavigateIndex,
+  onPass,
+  onWant,
+  onLogActivity,
+  onSwitchToPeopleView,
+}) {
+  if (!candidates || candidates.length === 0) {
+    return (
+      <div className="flex flex-1 flex-col items-center justify-center rounded-xl border border-dashed bg-card p-8 text-center text-muted-foreground">
+        <Users size={32} className="mb-2 opacity-50" />
+        <p className="text-sm font-semibold text-foreground">
+          No candidates in this pipeline
+        </p>
+        <p className="text-xs text-muted-foreground mt-1 max-w-sm">
+          Select another job from the job selector above to review candidate profiles.
+        </p>
+      </div>
+    );
+  }
+
+  const safeIndex = Math.max(0, Math.min(currentIndex, candidates.length - 1));
+  const currentCandidate = candidates[safeIndex];
+
+  return (
+    <div className="flex flex-1 min-h-0 flex-col gap-2.5 overflow-hidden" data-testid="swipe-view">
+      {/* Position Navigation Bar */}
+      <div className="flex items-center justify-between gap-2 px-1 shrink-0">
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-semibold text-muted-foreground">
+            Candidate {safeIndex + 1} of {candidates.length}
+          </span>
+          {currentCandidate.decision && (
+            <span
+              className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${currentCandidate.decision === "want"
+                  ? "bg-emerald-100 text-emerald-800"
+                  : "bg-rose-100 text-rose-800"
+                }`}
+            >
+              {currentCandidate.decision === "want" ? "Marked Want" : "Marked Pass"}
+            </span>
+          )}
+        </div>
+
+        <div className="flex items-center gap-1.5">
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 px-2 text-xs"
+            disabled={safeIndex === 0}
+            onClick={() => onNavigateIndex(safeIndex - 1)}
+            title="Previous candidate"
+          >
+            <ChevronLeft size={14} className="mr-0.5" /> Previous
+          </Button>
+
+          {/* Windowed Dots Indicator */}
+          <div className="hidden sm:flex items-center gap-1 px-1" data-testid="windowed-dots-container">
+            {getWindowedIndices(candidates.length, safeIndex, MAX_VISIBLE_DOTS).map((i) => {
+              const c = candidates[i];
+              return (
+                <button
+                  key={c.id}
+                  type="button"
+                  onClick={() => onNavigateIndex(i)}
+                  className={`h-2 rounded-full transition-all ${
+                    i === safeIndex
+                      ? "w-5 bg-foreground"
+                      : c.decision === "want"
+                      ? "w-2 bg-emerald-600"
+                      : c.decision === "pass"
+                      ? "w-2 bg-rose-500"
+                      : "w-2 bg-border"
+                  }`}
+                  title={`Go to ${c.name} (${i + 1} of ${candidates.length})`}
+                  data-testid={`candidate-dot-${i}`}
+                />
+              );
+            })}
+          </div>
+
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 px-2 text-xs"
+            disabled={safeIndex === candidates.length - 1}
+            onClick={() => onNavigateIndex(safeIndex + 1)}
+            title="Next candidate"
+          >
+            Next <ChevronRight size={14} className="ml-0.5" />
+          </Button>
+        </div>
+      </div>
+
+      {/* Mount Current Candidate Card */}
+      <div className="flex-1 min-h-0 overflow-hidden">
+        <CandidateCard
+          key={currentCandidate.id}
+          candidate={currentCandidate}
+          onPass={async (id) => {
+            const result = await onPass(id);
+            if (result?.ok === false) return result;
+            if (safeIndex < candidates.length - 1) {
+              onNavigateIndex(safeIndex + 1);
+            }
+            return result || { ok: true };
+          }}
+          onWant={async (id) => {
+            const result = await onWant(id);
+            if (result?.ok === false) return result;
+            if (safeIndex < candidates.length - 1) {
+              onNavigateIndex(safeIndex + 1);
+            }
+            return result || { ok: true };
+          }}
+          onLogActivity={onLogActivity}
+        />
+      </div>
+    </div>
+  );
+}
+

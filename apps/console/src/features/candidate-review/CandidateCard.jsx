@@ -1,0 +1,321 @@
+import { useMemo, useState, useRef } from "react";
+import { ExternalLink, Mail, Phone, MapPin, Tag, Check, X, ShieldAlert, AlertCircle, FileText, Loader2, NotebookText } from "lucide-react";
+import { Badge } from "../../components/ui/badge.tsx";
+import { Button } from "../../components/ui/button.tsx";
+import { RESUME_INDICATOR_STATES } from "./constants.js";
+import ResumeSection from "./ResumeSection.jsx";
+import ActivityTrail from "./ActivityTrail.jsx";
+import LogActivityForm from "./LogActivityForm.jsx";
+import AlsoFitsDialog from "./AlsoFitsDialog.jsx";
+import CandidateWriteUpDialog from "./CandidateWriteUpDialog.jsx";
+import { getOwnershipStatus, openBrandedResume } from "./brandResume.js";
+
+const LOXO_PEOPLE_BASE_URL = "https://app.loxo.co/people/";
+
+export default function CandidateCard({
+  candidate,
+  onPass,
+  onWant,
+  onLogActivity,
+}) {
+  const [activeFit, setActiveFit] = useState(null);
+  const [dragOffset, setDragOffset] = useState(0);
+  const [isDragging, setIsDragging] = useState(false);
+  const [isDeciding, setIsDeciding] = useState(false);
+  const [decisionError, setDecisionError] = useState("");
+  const [brandError, setBrandError] = useState("");
+  const [showWriteUp, setShowWriteUp] = useState(false);
+  const [ownershipOverride, setOwnershipOverride] = useState(false);
+  const startXRef = useRef(0);
+  const ownership = useMemo(
+    () => getOwnershipStatus(candidate.activityTrail),
+    [candidate.activityTrail]
+  );
+
+  const resumeIndicator =
+    RESUME_INDICATOR_STATES[candidate.resumeStatus] ||
+    RESUME_INDICATOR_STATES.resume_on_file;
+
+  const handlePointerDown = (e) => {
+    if (isDeciding) return;
+    // Avoid dragging when clicking inside interactive elements
+    if (
+      e.target.closest("button") ||
+      e.target.closest("a") ||
+      e.target.closest("input") ||
+      e.target.closest("textarea") ||
+      e.target.closest("select") ||
+      e.target.closest("[role='dialog']")
+    ) {
+      return;
+    }
+    setIsDragging(true);
+    startXRef.current = e.clientX;
+  };
+
+  const handlePointerMove = (e) => {
+    if (!isDragging || isDeciding) return;
+    const diff = e.clientX - startXRef.current;
+    setDragOffset(diff);
+  };
+
+  const handlePointerUp = () => {
+    if (!isDragging) return;
+    setIsDragging(false);
+
+    if (dragOffset > 90) {
+      handleDecision("want");
+    } else if (dragOffset < -90) {
+      handleDecision("pass");
+    }
+    setDragOffset(0);
+  };
+
+  const handleDecision = async (decision) => {
+    if (isDeciding) return { ok: false, error: "Decision already saving" };
+    setIsDeciding(true);
+    setDecisionError("");
+    try {
+      const result = await (decision === "want" ? onWant : onPass)(candidate.id);
+      if (result?.ok === false) throw new Error(result.error || "Decision failed");
+      return result || { ok: true };
+    } catch (error) {
+      const message = error.message || "Decision failed. Try again.";
+      setDecisionError(message);
+      return { ok: false, error: message };
+    } finally {
+      setIsDeciding(false);
+    }
+  };
+
+  const handleBrandResume = () => {
+    setBrandError("");
+    const result = openBrandedResume(candidate);
+    if (!result.ok) setBrandError(result.error);
+  };
+
+  // Drag overlay stamps
+  const showWantStamp = dragOffset > 40;
+  const showPassStamp = dragOffset < -40;
+
+  return (
+    <div
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerUp}
+      onPointerCancel={handlePointerUp}
+      style={{
+        transform: dragOffset ? `translateX(${dragOffset}px) rotate(${dragOffset * 0.04}deg)` : undefined,
+        transition: isDragging ? "none" : "transform 0.25s ease-out",
+        fontFamily: "Arial, Calibri, sans-serif",
+      }}
+      className="relative flex h-full max-h-[calc(100vh-175px)] w-full select-none flex-col overflow-hidden rounded-xl border bg-card text-foreground shadow-sm"
+      data-testid="swipe-candidate-card"
+    >
+      {/* Visual Swipe Direction Stamps */}
+      {showWantStamp && (
+        <div className="pointer-events-none absolute right-8 top-8 z-30 rotate-12 rounded-lg border-2 border-emerald-600 bg-emerald-50/90 px-4 py-2 text-base font-extrabold tracking-wider text-emerald-700 shadow-lg">
+          WANT THIS CANDIDATE
+        </div>
+      )}
+      {showPassStamp && (
+        <div className="pointer-events-none absolute left-8 top-8 z-30 -rotate-12 rounded-lg border-2 border-rose-600 bg-rose-50/90 px-4 py-2 text-base font-extrabold tracking-wider text-rose-700 shadow-lg">
+          PASS
+        </div>
+      )}
+
+      {/* 1. Header Row */}
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b bg-muted/10 p-4 shrink-0">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-foreground text-background font-bold text-lg">
+            {candidate.initials}
+          </div>
+
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              {/* Candidate NAME link opens Loxo profile in a new tab */}
+              <a
+                href={`${LOXO_PEOPLE_BASE_URL}${candidate.id}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()}
+                className="text-lg font-bold hover:underline hover:text-amber-800 flex items-center gap-1 leading-snug"
+                title="Open Loxo profile in new tab"
+              >
+                <span>{candidate.name}</span>
+                <ExternalLink size={14} className="text-muted-foreground" />
+              </a>
+
+              {/* Pipeline Stage Pill (exact Loxo name) */}
+              <Badge variant="outline" className="font-semibold text-xs border-foreground/30 bg-background">
+                {candidate.stage}
+              </Badge>
+
+              {/* Resume Indicator (3 states) */}
+              <span
+                className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold border ${
+                  resumeIndicator.key === "no_resume_data"
+                    ? "border-amber-400 bg-amber-50 text-amber-900"
+                    : resumeIndicator.key === "profile_only"
+                    ? "border-border bg-muted/40 text-muted-foreground"
+                    : "border-emerald-300 bg-emerald-50 text-emerald-800"
+                }`}
+                title={resumeIndicator.label}
+              >
+                <span>{resumeIndicator.symbol}</span>
+                <span>{resumeIndicator.label}</span>
+              </span>
+
+              {/* Candidate Decision Badge if already marked */}
+              {candidate.decision && (
+                <Badge
+                  variant="outline"
+                  className={`text-xs font-bold ${
+                    candidate.decision === "want"
+                      ? "border-emerald-500 bg-emerald-50 text-emerald-800"
+                      : "border-rose-400 bg-rose-50 text-rose-800"
+                  }`}
+                >
+                  {candidate.decision === "want" ? "Marked: Want" : "Marked: Pass"}
+                </Badge>
+              )}
+            </div>
+
+            <p className="text-xs text-muted-foreground truncate mt-0.5">
+              {candidate.title} at {candidate.employer}
+            </p>
+          </div>
+        </div>
+
+        {/* Contact info */}
+        <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+          {candidate.location && (
+            <span className="flex items-center gap-1 bg-background border px-2 py-1 rounded-md">
+              <MapPin size={12} /> {candidate.location}
+            </span>
+          )}
+          {candidate.phone && (
+            <span className="flex items-center gap-1 bg-background border px-2 py-1 rounded-md font-mono">
+              <Phone size={12} /> {candidate.phone}
+            </span>
+          )}
+          {candidate.email && (
+            <span className="flex items-center gap-1 bg-background border px-2 py-1 rounded-md">
+              <Mail size={12} /> {candidate.email}
+            </span>
+          )}
+        </div>
+      </div>
+
+      {ownership.active && !ownershipOverride ? (
+        <div className="mx-4 mt-2 flex flex-wrap items-center justify-between gap-2 rounded-md border border-amber-300 bg-amber-50 p-2.5 text-xs text-amber-950" data-testid="ownership-warning">
+          <span className="flex items-center gap-2">
+            <ShieldAlert size={14} />
+            Ownership check: {ownership.latest.actor} contacted this candidate on {ownership.latest.date}. This is within six months.
+          </span>
+          <Button type="button" size="sm" variant="outline" onClick={() => setOwnershipOverride(true)} className="h-7 bg-white text-xs">
+            Reach out anyway
+          </Button>
+        </div>
+      ) : null}
+
+      {ownershipOverride ? (
+        <div className="mx-4 mt-2 rounded-md border bg-muted/30 p-2 text-xs text-muted-foreground" data-testid="ownership-override">
+          Ownership warning overridden for this session. No message was sent.
+        </div>
+      ) : null}
+
+      {decisionError || brandError ? (
+        <div role="alert" className="mx-4 mt-2 flex items-center gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-2 text-xs text-destructive">
+          <AlertCircle size={14} /> {decisionError || brandError}
+        </div>
+      ) : null}
+
+      {/* 2. Main Two-Column Body with internal scrolling */}
+      <div className="grid flex-1 min-h-0 gap-4 p-4 lg:grid-cols-12 overflow-hidden">
+        {/* Left Column: Also Fits Tags + Resume Section */}
+        <div className="lg:col-span-7 flex flex-col gap-3 min-h-0 overflow-y-auto pr-1">
+          {/* "Also Fits" Tags (Source produced only) */}
+          {candidate.alsoFits && candidate.alsoFits.length > 0 && (
+            <div className="rounded-lg border bg-muted/20 p-2.5">
+              <div className="flex items-center gap-1 text-[11px] font-bold uppercase tracking-wider text-muted-foreground mb-1.5">
+                <Tag size={12} />
+                <span>Also fits other roles (Tracker verified)</span>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {candidate.alsoFits.map((fit) => (
+                  <button
+                    key={fit.id}
+                    type="button"
+                    onClick={() => setActiveFit(fit)}
+                    className="inline-flex items-center gap-1 rounded-md border border-amber-300 bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-950 hover:bg-amber-100 transition-colors"
+                  >
+                    <span>{fit.jobTitle}</span>
+                    <span className="text-[10px] text-amber-800 font-normal">
+                      ({fit.company})
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Resume Section with bolded figures & expandable jobs */}
+          <ResumeSection candidate={candidate} />
+        </div>
+
+        {/* Right Column: Full Activity Trail + Log Activity Form */}
+        <div className="lg:col-span-5 flex flex-col gap-3 min-h-0 overflow-y-auto pl-1">
+          <ActivityTrail candidate={candidate} />
+          <LogActivityForm
+            candidateId={candidate.id}
+            onLogActivity={onLogActivity}
+          />
+        </div>
+      </div>
+
+      {/* 3. Bottom Decision Bar */}
+      <div className="flex flex-wrap items-center justify-between gap-2 border-t bg-muted/10 p-3 shrink-0">
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => handleDecision("pass")}
+          disabled={isDeciding}
+          className="flex-1 max-w-[200px] border-rose-300 text-rose-800 hover:bg-rose-50 hover:border-rose-400 font-bold text-xs h-10"
+        >
+          {isDeciding ? <Loader2 size={15} className="mr-1.5 animate-spin" /> : <X size={15} className="mr-1.5" />} Pass
+        </Button>
+
+        <Button type="button" variant="outline" onClick={() => setShowWriteUp(true)} className="h-10 text-xs font-semibold">
+          <NotebookText size={15} className="mr-1.5" /> Write-up
+        </Button>
+
+        <Button type="button" variant="outline" onClick={handleBrandResume} className="h-10 border-amber-400 bg-amber-50 text-xs font-bold text-amber-950 hover:bg-amber-100" data-testid="brand-resume-button">
+          <FileText size={15} className="mr-1.5" /> Brand resume
+        </Button>
+
+        <Button
+          type="button"
+          onClick={() => handleDecision("want")}
+          disabled={isDeciding}
+          className="flex-1 max-w-[220px] bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs h-10 shadow-sm"
+        >
+          <Check size={15} className="mr-1.5" /> Want this candidate
+        </Button>
+      </div>
+
+      {/* Dialog showing WHY this fit exists from Tracker Sheet */}
+      <AlsoFitsDialog
+        fit={activeFit}
+        open={Boolean(activeFit)}
+        onOpenChange={(open) => !open && setActiveFit(null)}
+      />
+      <CandidateWriteUpDialog
+        candidate={candidate}
+        open={showWriteUp}
+        onOpenChange={setShowWriteUp}
+      />
+    </div>
+  );
+}
+
