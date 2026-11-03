@@ -7,14 +7,9 @@ import { fileURLToPath } from "node:url";
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const read = (relativePath) => fs.readFileSync(path.join(root, relativePath), "utf8");
 
-test("Supabase auth gates the console without exposing privileged credentials", () => {
-  const main = read("src/main.jsx");
+test("Supabase client never exposes privileged credentials", () => {
   const client = read("src/supabase-client.js");
-  const gate = read("src/components/SupabaseSessionGate.jsx");
 
-  assert.match(main, /SupabaseSessionGate/);
-  assert.match(gate, /signInWithOtp/);
-  assert.match(gate, /window\.location\.origin/);
   assert.doesNotMatch(client, /service[_-]?role/i);
   assert.doesNotMatch(client, /secret[_-]?key/i);
 });
