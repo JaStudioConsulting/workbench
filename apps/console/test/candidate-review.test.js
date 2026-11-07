@@ -395,11 +395,16 @@ test("fixtures strictly use synthetic IDs, 555 numbers, and example.invalid emai
   }
 });
 
-test("candidate review code has zero localStorage, zero sessionStorage, and no send authority", () => {
+test("candidate review code limits localStorage to the Canada filter, has no sessionStorage, and no send authority", () => {
   const filenames = fs.readdirSync(featureDir).filter((f) => f.endsWith(".js") || f.endsWith(".jsx"));
   const sources = filenames.map((file) => fs.readFileSync(path.join(featureDir, file), "utf8")).join("\n");
+  const withoutCanadaFilter = filenames
+    .filter((file) => file !== "canadaFilter.js")
+    .map((file) => fs.readFileSync(path.join(featureDir, file), "utf8"))
+    .join("\n");
 
-  assert.doesNotMatch(sources, /localStorage/);
+  // The remembered Canada filter is the only approved use of localStorage.
+  assert.doesNotMatch(withoutCanadaFilter, /localStorage/);
   assert.doesNotMatch(sources, /sessionStorage/);
   assert.doesNotMatch(sources, /sendEmail|candidateSubmit/i);
 });
@@ -434,4 +439,156 @@ test("also fits tags are backed by tracker rows and matching resume lines", () =
     assert.ok(Array.isArray(fit.matchingResumeLines));
     assert.ok(fit.matchingResumeLines.length > 0);
   }
+});
+
+// ---- Finish run, Builder A: reject, outreach, timeline, AI handoff, Canada filter ----
+
+const dash = String.fromCharCode(0x2014);
+
+test("reject with a reason records a pass, then queues a Loxo note to Rejected", async () => {
+  const { REJECT_REASONS, rejectCandidate, buildRejectNote } = await import("../src/features/candidate-review/rejectReasons.js");
+  assert.deepEqual(REJECT_REASONS, [
+    "Not interested",
+    "Comp / location mismatch",
+    "Already engaged by another recruiter",
+    "Not qualified on paper",
+    "Placed elsewhere",
+  ]);
+  const calls = [];
+  const result = await rejectCandidate({
+    jobId: "10",
+    personId: "sourcing:5",
+    reason: "Not interested",
+    recordDecision: async (...args) => { calls.push(["decision", ...args]); return { ok: true }; },
+    logActivity: async (...args) => { calls.push(["log", ...args]); return { ok: true }; },
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.status, "Waiting for Loxo");
+  assert.deepEqual(calls[0], ["decision", "10", "sourcing:5", "pass"]);
+  assert.deepEqual(calls[1], ["log", "10", "sourcing:5", { type: "*Note", note: "Rejected: Not interested", targetStage: "Rejected" }]);
+  assert.equal(buildRejectNote("Placed elsewhere"), "Rejected: Placed elsewhere");
+});
+
+test("reject refuses an unknown reason and reports a failed Loxo note honestly", async () => {
+  const { rejectCandidate } = await import("../src/features/candidate-review/rejectReasons.js");
+  const bad = await rejectCandidate({ jobId: "1", personId: "a", reason: "Because", recordDecision: async () => ({ ok: true }), logActivity: async () => ({ ok: true }) });
+  assert.equal(bad.ok, false);
+  const partial = await rejectCandidate({
+    jobId: "1",
+    personId: "a",
+    reason: "Placed elsewhere",
+    recordDecision: async () => ({ ok: true }),
+    logActivity: async () => { throw new Error("offline"); },
+  });
+  assert.equal(partial.ok, false);
+  assert.equal(partial.decisionSaved, true);
+});
+
+test("Quick One template fills from job data and never invents a blurb", async () => {
+  const { OUTREACH_TEMPLATES, renderOutreach, buildBlurb, pickRoleOptions, buildMailto, canSaveGmailDraft } = await import("../src/features/candidate-review/outreachTemplates.js");
+  assert.equal(OUTREACH_TEMPLATES[0].name, "Quick One");
+  assert.equal(OUTREACH_TEMPLATES[0].subject, "Quick One");
+
+  const job = { id: "1", title: "Millwright", company: "Grand River Steel Works", location: "Cambridge, ON" };
+  const out = renderOutreach({ candidate: { name: "Alex Rivera" }, job, signature: "Ja" });
+  assert.match(out.body, /^Hey Alex,/);
+  assert.match(out.body, /working on a Millwright role - Grand River Steel Works in Cambridge, ON\./);
+  assert.match(out.body, /\n\nJa$/);
+  assert.equal(out.body.includes(dash), false);
+
+  assert.equal(buildBlurb({ title: "x" }), "");
+  assert.equal(buildBlurb({ company: "Company not recorded", location: "" }), "");
+
+  const jobs = [
+    job,
+    { id: "2", title: "Welder", location: "Toronto, ON", status: "Active" },
+    { id: "3", title: "Pilot", location: "Calgary, AB", status: "Active" },
+    { id: "4", title: "Closed", location: "Toronto, ON", status: "Closed" },
+  ];
+  const provinceOf = (loc) => (/ON$/.test(loc) ? "ON" : /AB$/.test(loc) ? "AB" : "");
+  assert.deepEqual(pickRoleOptions(job, jobs, provinceOf).map((j) => j.id), ["1", "2"]);
+
+  assert.equal(buildMailto({ to: "a@example.invalid", subject: "Hi there", body: "x\ny" }), "mailto:a@example.invalid?subject=Hi%20there&body=x%0Ay");
+  assert.equal(canSaveGmailDraft({ ok: true }), true);
+  assert.equal(canSaveGmailDraft({ scopes: { compose: false } }), false);
+});
+
+test("experience timeline parses dates, totals without double counting, flags short stints", async () => {
+  const { parseDateRange, buildTimeline, formatDuration } = await import("../src/features/candidate-review/experienceTimeline.js");
+  const now = new Date("2026-11-07T12:00:00Z");
+  assert.equal(parseDateRange("Jan 2024 to Present", now).months, 35);
+  assert.equal(parseDateRange("Source record", now), null);
+  assert.equal(parseDateRange("", now), null);
+  assert.equal(formatDuration(14), "1 yr 2 mos");
+
+  const timeline = buildTimeline(
+    [
+      { id: "a", title: "Tech", company: "Acme", dates: "Jan 2024 to Present" },
+      { id: "b", title: "Lead", company: "Acme", dates: "Jun 2021 to Dec 2023" },
+      { id: "c", title: "Temp", company: "Other", dates: "Mar 2021 to Aug 2021" },
+      { id: "d", title: "Odd", company: "X", dates: "Source record" },
+    ],
+    [{ index: 0, why: "Runs Fanuc weld cells" }],
+    now
+  );
+  assert.equal(timeline.rows[0].why, "Runs Fanuc weld cells");
+  assert.equal(timeline.rows[1].why, "");
+  assert.equal(timeline.rows[2].shortStint, true);
+  assert.equal(timeline.rows[0].shortStint, false);
+  assert.equal(timeline.rows[3].duration, "");
+  assert.equal(timeline.rows[3].dates, "Source record");
+  // Mar 2021 to Nov 2026 is inclusive is continuous: 69 months.
+  assert.equal(timeline.totalMonths, 69);
+});
+
+test("For your AI handoff starts with the front door line and lists only ticked work", async () => {
+  const { buildAiHandoff } = await import("../src/features/candidate-review/aiHandoff.js");
+  const candidate = { name: "Alex Rivera", loxoPersonId: "777" };
+  const job = { id: "42", title: "Millwright", company: "Grand River Steel Works" };
+  const empty = buildAiHandoff({ candidate, job, ticked: new Set() });
+  const first = empty.split("\n")[0];
+  assert.equal(first, "Route through the Recruiter front door ($recruiter).");
+  assert.match(empty, /Loxo person id: 777/);
+  assert.match(empty, /Loxo job id: 42/);
+  assert.match(empty, /Role in play: Millwright at Grand River Steel Works/);
+  assert.match(empty, /todo:\n\(nothing ticked yet\)$/);
+
+  const some = buildAiHandoff({ candidate, job, ticked: new Set(["loxo", "brandedresume"]) });
+  assert.match(some, /1\. Build the TTTG branded resume/);
+  assert.match(some, /2\. Queue the Loxo update/);
+  assert.doesNotMatch(some, /nothing ticked/);
+});
+
+test("Canada filter defaults on, remembers choices, and can include unknown locations", async () => {
+  const { loadCanadaPrefs, saveCanadaPrefs, filterByCanada } = await import("../src/features/candidate-review/canadaFilter.js");
+  const store = new Map();
+  const storage = { getItem: (k) => (store.has(k) ? store.get(k) : null), setItem: (k, v) => store.set(k, v) };
+  assert.deepEqual(loadCanadaPrefs(storage), { canadaOnly: true, showUnknown: false });
+  saveCanadaPrefs({ canadaOnly: true, showUnknown: true }, storage);
+  assert.deepEqual(loadCanadaPrefs(storage), { canadaOnly: true, showUnknown: true });
+  assert.deepEqual(loadCanadaPrefs({ getItem: () => { throw new Error("blocked"); } }), { canadaOnly: true, showUnknown: false });
+
+  const people = [{ location: "Toronto, ON" }, { location: "Austin, TX" }, { location: "" }];
+  const isCa = (loc) => /ON$/.test(loc);
+  assert.equal(filterByCanada(people, { canadaOnly: true, showUnknown: false }, isCa).length, 1);
+  assert.equal(filterByCanada(people, { canadaOnly: true, showUnknown: true }, isCa).length, 2);
+  assert.equal(filterByCanada(people, { canadaOnly: false, showUnknown: false }, isCa).length, 3);
+});
+
+test("card wires the new pieces and drops the old no-resume message", () => {
+  const card = fs.readFileSync(path.join(featureDir, "CandidateCard.jsx"), "utf8");
+  const people = fs.readFileSync(path.join(featureDir, "PeopleView.jsx"), "utf8");
+  for (const source of [card, people]) {
+    assert.doesNotMatch(source, /No source resume is stored/);
+    assert.match(source, /Not enough data to build a resume/);
+    assert.match(source, /getResumeSource/);
+  }
+  assert.match(card, /<FitBadge job=\{currentJob\} candidate=\{candidate\} \/>/);
+  assert.match(card, /RejectMenu/);
+  assert.match(card, /ContactReveal/);
+  assert.match(card, /ForYourAiBox/);
+  // All cross-builder imports stay in one file.
+  const externals = fs.readFileSync(path.join(featureDir, "externals.js"), "utf8");
+  assert.match(externals, /pipeline\/location\.js/);
+  assert.match(externals, /mail\/mailClient\.js/);
 });

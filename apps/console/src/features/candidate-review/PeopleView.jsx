@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { AlertCircle, AlertTriangle, ExternalLink, FileText, Filter, Loader2, NotebookText, Phone, Search, Send, ShieldAlert, Users } from "lucide-react";
+import { AlertCircle, AlertTriangle, ExternalLink, FileText, Filter, Loader2, Mail, NotebookText, Phone, Search, Send, ShieldAlert, Users } from "lucide-react";
 import { Badge } from "../../components/ui/badge.tsx";
 import { Button } from "../../components/ui/button.tsx";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "../../components/ui/select.tsx";
@@ -7,6 +7,8 @@ import { LOXO_PIPELINE_STAGES, RESUME_INDICATOR_STATES } from "./constants.js";
 import { getOwnershipStatus, openBrandedResume } from "./brandResume.js";
 import { createCandidateDraft } from "./candidateReviewService.js";
 import CandidateWriteUpDialog from "./CandidateWriteUpDialog.jsx";
+import OutreachComposer from "./OutreachComposer.jsx";
+import { getResumeSource } from "./externals.js";
 
 const LOXO_PEOPLE_BASE_URL = "https://app.loxo.co/people/";
 const VIEW_TABS = [["all", "All"], ["unreviewed", "Unreviewed"], ["wanted", "Wanted"], ["passed", "Passed"], ["submitted", "Submitted"]];
@@ -28,6 +30,7 @@ export default function PeopleView({ candidates, currentJob, jobs, submissionHis
   const [submissionFrom, setSubmissionFrom] = useState("");
   const [submissionTo, setSubmissionTo] = useState("");
   const [writeUpCandidate, setWriteUpCandidate] = useState(null);
+  const [outreachCandidate, setOutreachCandidate] = useState(null);
   const [ownershipOverrides, setOwnershipOverrides] = useState(() => new Set());
   const [actionError, setActionError] = useState("");
   const [submittingId, setSubmittingId] = useState("");
@@ -85,8 +88,9 @@ export default function PeopleView({ candidates, currentJob, jobs, submissionHis
   const brandResume = async (candidate) => {
     setActionError("");
     try {
-      if (!candidate.fullResumeText?.trim()) throw new Error("No source resume is stored for this candidate.");
-      await createCandidateDraft({ job: currentJob, candidate, kind: "resume_pdf", body: candidate.fullResumeText });
+      const source = getResumeSource(candidate);
+      if (source.kind === "none") throw new Error("Not enough data to build a resume");
+      await createCandidateDraft({ job: currentJob, candidate, kind: "resume_pdf", body: source.text });
       const result = openBrandedResume(candidate);
       if (!result.ok) throw new Error(result.error);
     } catch (error) {
@@ -195,6 +199,7 @@ export default function PeopleView({ candidates, currentJob, jobs, submissionHis
                           <a href={candidate.phone ? `tel:${candidate.phone.replace(/\s/g, "")}` : undefined} aria-disabled={!candidate.phone} className={`inline-flex h-8 items-center rounded-md border bg-background px-3 text-xs font-semibold ${!candidate.phone ? "pointer-events-none opacity-50" : "hover:bg-muted"}`}><Phone size={13} className="mr-1.5" />Call</a>
                           <Button type="button" size="sm" variant="outline" className="h-8 text-xs" onClick={() => brandResume(candidate)}><FileText size={13} className="mr-1.5" />Brand resume</Button>
                           <Button type="button" size="sm" variant="outline" className="h-8 text-xs" onClick={() => setWriteUpCandidate(candidate)}><NotebookText size={13} className="mr-1.5" />Write-up</Button>
+                          <Button type="button" size="sm" variant="outline" className="h-8 text-xs" onClick={() => setOutreachCandidate(candidate)}><Mail size={13} className="mr-1.5" />Outreach</Button>
                           <Button type="button" size="sm" className="h-8 bg-blue-700 text-xs text-white hover:bg-blue-800" disabled={submittingId === candidate.id} onClick={() => markSubmitted(candidate)}>{submittingId === candidate.id ? <Loader2 size={13} className="mr-1.5 animate-spin" /> : <Send size={13} className="mr-1.5" />}Mark submitted</Button>
                         </>
                       )}
@@ -207,6 +212,7 @@ export default function PeopleView({ candidates, currentJob, jobs, submissionHis
         )}
       </div>
 
+      {outreachCandidate ? <OutreachComposer open onOpenChange={(open) => !open && setOutreachCandidate(null)} candidate={outreachCandidate} currentJob={currentJob} jobs={jobs} /> : null}
       {writeUpCandidate ? <CandidateWriteUpDialog candidate={writeUpCandidate} currentJob={currentJob} open onOpenChange={(open) => !open && setWriteUpCandidate(null)} /> : null}
     </div>
   );

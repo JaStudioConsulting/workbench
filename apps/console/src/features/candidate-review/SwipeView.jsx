@@ -6,9 +6,10 @@ import { getWindowedIndices, MAX_VISIBLE_DOTS } from "./figureUtils.js";
 export default function SwipeView({
   candidates,
   currentJob,
+  jobs,
   currentIndex,
   onNavigateIndex,
-  onPass,
+  onReject,
   onWant,
   onLogActivity,
   onSwitchToPeopleView,
@@ -106,8 +107,9 @@ export default function SwipeView({
           key={currentCandidate.id}
           candidate={currentCandidate}
           currentJob={currentJob}
-          onPass={async (id) => {
-            const result = await onPass(id);
+          jobs={jobs}
+          onReject={async (id, reason) => {
+            const result = await onReject(id, reason);
             if (result?.ok === false) return result;
             return result || { ok: true };
           }}
