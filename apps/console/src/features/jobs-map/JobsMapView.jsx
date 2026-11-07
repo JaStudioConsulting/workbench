@@ -158,6 +158,21 @@ export default function JobsMapView({ onSelectJobForWorkflow }) {
     };
   }, []);
 
+  // Keep Leaflet's cached size in sync with its container. Without this, the
+  // tile grid freezes at its last-known size and newly exposed space (e.g.
+  // after the sidebar is toggled) renders as empty tile-grid lines.
+  useEffect(() => {
+    const container = mapContainerRef.current;
+    if (!container || typeof ResizeObserver === "undefined") return;
+
+    const observer = new ResizeObserver(() => {
+      mapInstanceRef.current?.invalidateSize();
+    });
+    observer.observe(container);
+
+    return () => observer.disconnect();
+  }, []);
+
   // 3. Unique Recruiter Owners
   const uniqueOwners = useMemo(() => {
     const set = new Set();
