@@ -12,6 +12,7 @@
     "test": "node --test test/*.test.js"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^1.6.0",
     "@ja/shared-types": "workspace:*",
     "@jastudioconsulting/recruitment-skills": "github:JaStudioConsulting/recruitment-skills#bbf1bbfdc91bbdd9409c976bd5782a0fc87db0b0",
     "@modelcontextprotocol/sdk": "1.29.0",

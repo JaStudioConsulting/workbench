@@ -6,6 +6,11 @@ Core extraction is implemented. The gateway now calls the Workbench-owned
 `native/bin/workbench-transcribe` helper and stores models in Workbench support.
 The separate reference application is not a runtime dependency.
 
+The next extraction slice is implemented behind the native meeting enhancement
+flag: system audio capture, microphone mixing, optional speaker labels,
+reconciliation, transcript formatting, and the custom vocabulary codec. The
+mic-only path remains the fallback when system capture is unavailable.
+
 ## Frozen source
 
 - Fork: `JaStudioConsulting/muesli`
