@@ -44,6 +44,66 @@ export function buildBrandResumePayload(candidate) {
   };
 }
 
+function profileWorkHistoryText(workHistory) {
+  return list(workHistory).map((role) => {
+    const heading = [clean(role.title), clean(role.company)].filter(Boolean).join(" at ");
+    const dates = clean(role.dates)
+      || [clean(role.startDate), clean(role.endDate)].filter(Boolean).join(" to ");
+    const details = [
+      heading,
+      [dates, clean(role.location)].filter(Boolean).join(" | "),
+      ...list(role.bullets).map((bullet) => `- ${bullet}`),
+    ].filter(Boolean);
+    return details.join("\n");
+  }).filter(Boolean).join("\n\n");
+}
+
+export function getResumeSource(candidate = {}) {
+  const resumeText = clean(candidate.fullResumeText);
+  if (resumeText) {
+    return {
+      kind: "resume",
+      text: candidate.fullResumeText,
+      payload: buildBrandResumePayload(candidate),
+      usedSources: ["fullResumeText"],
+    };
+  }
+
+  const workHistoryText = profileWorkHistoryText(candidate.workHistory);
+  const profileFields = [
+    ["title", clean(candidate.title)],
+    ["workHistory", workHistoryText],
+    ["profileSummary", clean(candidate.profileSummary)],
+    ["skills", list(candidate.skills).join(", ")],
+    ["callNotes", clean(candidate.callNotes)],
+    ["transcriptText", clean(candidate.transcriptText)],
+  ].filter(([, value]) => Boolean(value));
+
+  if (!clean(candidate.name) || !profileFields.length) {
+    return { kind: "none", text: "", payload: null, usedSources: [] };
+  }
+
+  const labels = {
+    title: "Title",
+    workHistory: "Professional Experience",
+    profileSummary: "Professional Summary",
+    skills: "Core Competencies & Skills",
+    callNotes: "Call Notes",
+    transcriptText: "Transcript",
+  };
+  const text = [
+    clean(candidate.name),
+    ...profileFields.flatMap(([key, value]) => ["", labels[key], value]),
+  ].join("\n");
+
+  return {
+    kind: "profile",
+    text,
+    payload: buildBrandResumePayload(candidate),
+    usedSources: ["name", ...profileFields.map(([key]) => key)],
+  };
+}
+
 export function buildCandidateWriteUp(candidate) {
   const coverage = getCandidateSourceCoverage(candidate);
   const facts = [
