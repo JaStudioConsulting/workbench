@@ -22,17 +22,17 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.leads TO authenticated;
 
 CREATE POLICY "Owners can read their leads"
   ON public.leads FOR SELECT TO authenticated
-  USING ((SELECT auth.uid()) = owner_id);
+  USING ((SELECT auth.uid()) = owner_id AND public.is_authorized_recruiter());
 
 CREATE POLICY "Owners can create their leads"
   ON public.leads FOR INSERT TO authenticated
-  WITH CHECK ((SELECT auth.uid()) = owner_id);
+  WITH CHECK ((SELECT auth.uid()) = owner_id AND public.is_authorized_recruiter());
 
 CREATE POLICY "Owners can update their leads"
   ON public.leads FOR UPDATE TO authenticated
-  USING ((SELECT auth.uid()) = owner_id)
-  WITH CHECK ((SELECT auth.uid()) = owner_id);
+  USING ((SELECT auth.uid()) = owner_id AND public.is_authorized_recruiter())
+  WITH CHECK ((SELECT auth.uid()) = owner_id AND public.is_authorized_recruiter());
 
 CREATE POLICY "Owners can delete their leads"
   ON public.leads FOR DELETE TO authenticated
-  USING ((SELECT auth.uid()) = owner_id);
+  USING ((SELECT auth.uid()) = owner_id AND public.is_authorized_recruiter());

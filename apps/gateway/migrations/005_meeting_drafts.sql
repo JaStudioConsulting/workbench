@@ -15,20 +15,22 @@ CREATE INDEX meeting_drafts_owner_created_idx ON meeting_drafts (owner_id, creat
 
 ALTER TABLE meeting_drafts ENABLE ROW LEVEL SECURITY;
 
+REVOKE ALL ON TABLE meeting_drafts FROM anon;
+
 CREATE POLICY meeting_drafts_select_own ON meeting_drafts
   FOR SELECT TO authenticated
-  USING (auth.uid() = owner_id);
+  USING (auth.uid() = owner_id AND public.is_authorized_recruiter());
 
 CREATE POLICY meeting_drafts_insert_own ON meeting_drafts
   FOR INSERT TO authenticated
-  WITH CHECK (auth.uid() = owner_id);
+  WITH CHECK (auth.uid() = owner_id AND public.is_authorized_recruiter());
 
 CREATE POLICY meeting_drafts_update_own ON meeting_drafts
   FOR UPDATE TO authenticated
-  USING (auth.uid() = owner_id)
-  WITH CHECK (auth.uid() = owner_id);
+  USING (auth.uid() = owner_id AND public.is_authorized_recruiter())
+  WITH CHECK (auth.uid() = owner_id AND public.is_authorized_recruiter());
 
 CREATE POLICY meeting_drafts_delete_own ON meeting_drafts
   FOR DELETE TO authenticated
-  USING (auth.uid() = owner_id);
+  USING (auth.uid() = owner_id AND public.is_authorized_recruiter());
 

@@ -17,16 +17,16 @@ GRANT SELECT, INSERT, UPDATE ON TABLE public.workbench_profile TO authenticated;
 
 CREATE POLICY "Owners can read their Workbench profile"
   ON public.workbench_profile FOR SELECT TO authenticated
-  USING ((SELECT auth.uid()) = owner_id);
+  USING ((SELECT auth.uid()) = owner_id AND public.is_authorized_recruiter());
 
 CREATE POLICY "Owners can create their Workbench profile"
   ON public.workbench_profile FOR INSERT TO authenticated
-  WITH CHECK ((SELECT auth.uid()) = owner_id);
+  WITH CHECK ((SELECT auth.uid()) = owner_id AND public.is_authorized_recruiter());
 
 CREATE POLICY "Owners can update their Workbench profile"
   ON public.workbench_profile FOR UPDATE TO authenticated
-  USING ((SELECT auth.uid()) = owner_id)
-  WITH CHECK ((SELECT auth.uid()) = owner_id);
+  USING ((SELECT auth.uid()) = owner_id AND public.is_authorized_recruiter())
+  WITH CHECK ((SELECT auth.uid()) = owner_id AND public.is_authorized_recruiter());
 
 CREATE TABLE public.outreach_log (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -50,8 +50,8 @@ GRANT SELECT, INSERT ON TABLE public.outreach_log TO authenticated;
 
 CREATE POLICY "Owners can read their outreach log"
   ON public.outreach_log FOR SELECT TO authenticated
-  USING ((SELECT auth.uid()) = owner_id);
+  USING ((SELECT auth.uid()) = owner_id AND public.is_authorized_recruiter());
 
 CREATE POLICY "Owners can add to their outreach log"
   ON public.outreach_log FOR INSERT TO authenticated
-  WITH CHECK ((SELECT auth.uid()) = owner_id);
+  WITH CHECK ((SELECT auth.uid()) = owner_id AND public.is_authorized_recruiter());
