@@ -13,6 +13,13 @@ the repository.
   and draft storage. Tracker source tables remain read-only.
 - Candidate facts must come from source records. Missing resume, transcript, or
   notes stay visibly missing and are never invented.
+- Every sidebar page works on live data: Home, Candidates, Candidate Review,
+  Pipeline, Leads, Jobs, Meetings, Mail, Process, Settings and Profile. See
+  [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) and
+  [`docs/READINESS.md`](docs/READINESS.md) for what is active.
+- Loxo changes are queued as "Waiting for Loxo". Email is draft only.
+- AI runs only in the gateway and needs `ANTHROPIC_API_KEY` in the runtime
+  environment. Without it, rules-based fit levels still work.
 - Adzuna is not active. Its approved future workflow is documented in
   [`docs/ADZUNA-MARKET-CANDIDATE.md`](docs/ADZUNA-MARKET-CANDIDATE.md).
 
