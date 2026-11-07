@@ -58,3 +58,27 @@ test("local adapter reads a nested transcript returned by the native Workbench r
     source: "workbench_native",
   });
 });
+
+test("enhanced native transcription requests speaker labels and preserves speaker metadata", async () => {
+  let options;
+  const adapter = createLocalTranscriptionAdapter({
+    speakerLabels: true,
+    vocabularyPath: "/opt/workbench/support/vocabulary.json",
+    runner: async (_cliPath, _inputPath, _supportDir, receivedOptions) => {
+      options = receivedOptions;
+      return JSON.stringify({
+        data: {
+          transcript: "Speaker 1: Source words.",
+          segments: [{ start: 0, end: 1, text: "Source words.", speaker: "Speaker 1", source: "mixed" }],
+          speakers: ["Speaker 1"],
+          warning: null,
+        },
+      });
+    },
+  });
+  const result = await adapter.transcribe({ audio: Buffer.from("audio"), contentType: "audio/wav" });
+  assert.deepEqual(options, { speakerLabels: true, vocabularyPath: "/opt/workbench/support/vocabulary.json" });
+  assert.equal(result.transcript, "Speaker 1: Source words.");
+  assert.deepEqual(result.speakers, ["Speaker 1"]);
+  assert.equal(result.segments[0].speaker, "Speaker 1");
+});
