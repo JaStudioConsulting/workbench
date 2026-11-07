@@ -134,7 +134,8 @@ export async function createApp({
     app.post("/api/google-workspace/disconnect", authoritativeGoogleSession, googleWorkspaceHandler("disconnect"));
   }
   app.post("/api/gws/sync", authoritativeGoogleSession, googleApi.sync);
-  registerAiRoutes(app, { authenticated, env });
+  // AI routes accept the same private-network trust as meetings when LOCAL_TRUSTED_MODE=1.
+  registerAiRoutes(app, { authenticated: meetingTranscriptionAccess, env });
   registerMailRoutes(app, {
     authenticated: authoritativeGoogleSession,
     getGoogleProviderAccessToken: configuredAuth.getGoogleProviderAccessToken?.bind(configuredAuth),
