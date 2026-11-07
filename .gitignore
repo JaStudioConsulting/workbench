@@ -8,3 +8,10 @@ coverage/
 .wrangler/
 *.log
 .DS_Store
+
+# Locally installed skills (reproducible from skills-lock.json)
+.agents/skills/
+.claude/skills/
+.claude/agents/
+.claude/settings.local.json
+.codex/

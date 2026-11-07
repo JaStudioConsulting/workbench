@@ -1,0 +1,68 @@
+{
+  "version": 1,
+  "skills": {
+    "better-accessibility": {
+      "source": "jakubkrehel/skills",
+      "sourceType": "github",
+      "skillPath": "skills/better-accessibility/SKILL.md",
+      "computedHash": "7fe3f3727dc1c15b5148e1b8d47f1b025f9886348ec8a33f4c4536aa5372cbbe",
+      "installMode": "copy"
+    },
+    "better-interface": {
+      "source": "jakubkrehel/skills",
+      "sourceType": "github",
+      "skillPath": "skills/better-interface/SKILL.md",
+      "computedHash": "c4f8a7862c00e63ae0df73fa29137f01a7fdd16354919e718dcf7e9f1a3f9445",
+      "installMode": "copy"
+    },
+    "better-layout": {
+      "source": "jakubkrehel/skills",
+      "sourceType": "github",
+      "skillPath": "skills/better-layout/SKILL.md",
+      "computedHash": "822bb216c43ce743221b1afe42a21c7efc80d85b71847cf109c33af9513da655",
+      "installMode": "copy"
+    },
+    "better-writing": {
+      "source": "jakubkrehel/skills",
+      "sourceType": "github",
+      "skillPath": "skills/better-writing/SKILL.md",
+      "computedHash": "5dcd97f7df29f92ef99901601b2a63e2c709f49f9748fd6b61c751b667468564",
+      "installMode": "copy"
+    },
+    "break": {
+      "source": "jakubkrehel/skills",
+      "sourceType": "github",
+      "skillPath": "skills/break/SKILL.md",
+      "computedHash": "a31627543d546b00ee744d6cbc31889a4eef67b25f854007b99344f022fc0c05",
+      "installMode": "copy"
+    },
+    "design-taste-frontend": {
+      "source": "Leonxlnx/taste-skill",
+      "sourceType": "github",
+      "skillPath": "skills/taste-skill/SKILL.md",
+      "computedHash": "6ac8ba6089dcbc303744a507a4587113c5d845ca2f658b3ce2b0b5eab108fb0d",
+      "installMode": "copy"
+    },
+    "interface-review": {
+      "source": "jakubkrehel/skills",
+      "sourceType": "github",
+      "skillPath": "skills/interface-review/SKILL.md",
+      "computedHash": "3b04fd6eb5fef3b49c76b6af2b0bb542bbadcdbd88beed7ca11ab54d5a207750",
+      "installMode": "copy"
+    },
+    "state-machine": {
+      "source": "jakubkrehel/skills",
+      "sourceType": "github",
+      "skillPath": "skills/state-machine/SKILL.md",
+      "computedHash": "f5b8d15d09ad91de8ad969fc6314f3e45a3cc625e0ea8046f109add9e86a33eb",
+      "installMode": "copy"
+    },
+    "variant": {
+      "source": "jakubkrehel/skills",
+      "sourceType": "github",
+      "skillPath": "skills/variant/SKILL.md",
+      "computedHash": "c783573ebf39b02ed2dc393cc7fe3de0a2fafc5d10a9a3c76a8461889beb7c2d",
+      "installMode": "copy"
+    }
+  }
+}
