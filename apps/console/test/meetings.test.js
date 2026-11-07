@@ -202,7 +202,7 @@ test("meetings workspace compiles and uses live selectors, templates, exports, a
   const [workspace, store, migration] = await Promise.all([
     readFile(new URL("../src/features/meetings/MeetingsWorkspace.jsx", import.meta.url), "utf8"),
     readFile(new URL("../src/features/meetings/meetingStore.js", import.meta.url), "utf8"),
-    readFile(new URL("../../gateway/migrations/003_meeting_drafts.sql", import.meta.url), "utf8"),
+    readFile(new URL("../../gateway/migrations/005_meeting_drafts.sql", import.meta.url), "utf8"),
   ]);
   assert.match(workspace, /loadLiveReviewJobs/);
   assert.match(workspace, /loadLiveCandidatesForJob/);
