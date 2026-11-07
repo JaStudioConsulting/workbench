@@ -17,11 +17,11 @@ const demoJob = (company, title, loxoJobId) => Object.freeze({
 // Intentionally synthetic and unusable as a live Tracker/SF Jobs record.
 export const DEMO_SF_JOBS_HIERARCHY = Object.freeze([
   Object.freeze({
-    company: "DEMO COMPANY — NOT A LIVE RECORD",
+    company: "DEMO COMPANY: NOT A LIVE RECORD",
     demoOnly: true,
     jobs: Object.freeze([
-      demoJob("DEMO COMPANY — NOT A LIVE RECORD", "DEMO STAFF ACCOUNTANT", "DEMO-LOXO-JOB-001"),
-      demoJob("DEMO COMPANY — NOT A LIVE RECORD", "DEMO SENIOR ACCOUNTANT", "DEMO-LOXO-JOB-002"),
+      demoJob("DEMO COMPANY: NOT A LIVE RECORD", "DEMO STAFF ACCOUNTANT", "DEMO-LOXO-JOB-001"),
+      demoJob("DEMO COMPANY: NOT A LIVE RECORD", "DEMO SENIOR ACCOUNTANT", "DEMO-LOXO-JOB-002"),
     ]),
   }),
 ]);
@@ -115,7 +115,7 @@ export function generateRecruitingDrafts(rawInput, job) {
   const providedSources = sourceList(input);
   const supportedClaims = acceptedFacts(input);
   const summary = [
-    `${input.name} — ${input.title}`,
+    `${input.name}: ${input.title}`,
     `Target role: ${job.title} at ${job.company}`,
     `Compensation target: ${fact(input, "compensation target")}`,
     `Location: ${fact(input, "location")}`,
@@ -144,7 +144,7 @@ export function generateRecruitingDrafts(rawInput, job) {
     submission: { status: "draft", fields: submissionFields },
     presentationEmail: {
       status: "draft",
-      subject: `${input.name} — ${job.title}`,
+      subject: `${input.name}: ${job.title}`,
       body: `Please review ${input.name} for the ${job.title} opportunity at ${job.company}.\n\n${summary.join("\n")}\n\nLoxo Job ID: ${job.loxoJobId}`,
     },
     loxoDraft: {
