@@ -357,10 +357,10 @@ test("screenshot feedback: LoginButton removed from shell, navigation cleaned, e
   assert.doesNotMatch(appSource, /<LoginButton\s*\/>/);
   assert.doesNotMatch(appSource, /import LoginButton from/);
 
-  // Dropped Mail, Staff, Profile navigation
-  assert.doesNotMatch(appSource, /\["Mail"/);
+  // Staff stays out of navigation; Mail and Profile are real pages now
   assert.doesNotMatch(appSource, /\["Staff"/);
-  assert.doesNotMatch(appSource, /\["Profile"/);
+  assert.match(appSource, /\["Mail"/);
+  assert.match(appSource, /\["Profile"/);
 
   // Eyebrow removed
   assert.doesNotMatch(appSource, /JA STUDIO CONSULTING/);

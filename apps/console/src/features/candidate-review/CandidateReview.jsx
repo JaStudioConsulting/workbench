@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { Briefcase, Layers, Users, MapPin, AlertCircle } from "lucide-react";
 import { Badge } from "../../components/ui/badge.tsx";
 import { Button } from "../../components/ui/button.tsx";
@@ -19,7 +19,7 @@ import {
   loadLiveCandidatesForJob,
 } from "./candidateReviewService.js";
 
-export default function CandidateReview({ selectedJob, onSelectJob, onNavigateJobsMap, initialView = "swipe" }) {
+export default function CandidateReview({ selectedJob, onSelectJob, onNavigateJobsMap, initialView = "swipe", focusCandidateId = "" }) {
   const [jobs, setJobs] = useState([]);
   const [dataLoading, setDataLoading] = useState(true);
   const [dataError, setDataError] = useState("");
@@ -129,6 +129,21 @@ export default function CandidateReview({ selectedJob, onSelectJob, onNavigateJo
     () => shownCandidates.filter((candidate) => !candidate.decision && !candidate.isSubmitted),
     [shownCandidates]
   );
+
+  // Opened from another page (e.g. Pipeline): jump to that person once their job's candidates load.
+  const focusedRef = useRef("");
+  useEffect(() => {
+    if (!focusCandidateId || dataLoading || focusedRef.current === String(focusCandidateId)) return;
+    if (!candidates.some((item) => String(item.id) === String(focusCandidateId))) return;
+    focusedRef.current = String(focusCandidateId);
+    const swipeIndex = swipeCandidates.findIndex((item) => String(item.id) === String(focusCandidateId));
+    if (swipeIndex >= 0) {
+      setActiveView("swipe");
+      setCurrentIndex(swipeIndex);
+    } else {
+      setActiveView("people");
+    }
+  }, [focusCandidateId, dataLoading, candidates, swipeCandidates]);
 
   const submissionHistory = useMemo(() => getSubmissionHistory(), [refreshKey]);
 
