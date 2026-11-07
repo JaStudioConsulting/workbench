@@ -1,9 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import { transformWithEsbuild } from "vite";
+import { makeCandidateNotes } from "../src/features/meetings/afterCallClient.js";
 import { createMeetingDraft, groupCalendarEvents, safeJoinUrl } from "../src/features/meetings/meetingModel.js";
 import { transcribeMeetingAudio } from "../src/features/meetings/meetingGatewayClient.js";
 import { encodePcm16Wav, meetingRecordingFilename, selectWorkbenchRecordingFormat, startBrowserRecording } from "../src/features/meetings/browserRecorder.js";
+import { meetingPrintHtml } from "../src/features/meetings/meetingExport.js";
+import { MEETING_TEMPLATES, renderMeetingTemplate } from "../src/features/meetings/meetingTemplates.js";
 
 function event(title, value, joinUrl = null) {
   return {
@@ -151,4 +155,64 @@ test("Meetings workspace uses browser recording and the existing Calendar client
   assert.match(recorder, /getDisplayMedia/);
   assert.match(recorder, /MediaRecorderImpl/);
   assert.match(app, /\["Meetings", CalendarDays\]/);
+});
+
+test("recruiter templates use transcript sentences and mark absent topics", () => {
+  assert.deepEqual(MEETING_TEMPLATES.map((item) => item.label), ["Candidate screen", "Client intake", "Reference check"]);
+  const result = renderMeetingTemplate("candidate_screen", "I am looking because the plant closed. My salary is 90000. I can interview Monday.");
+  assert.match(result.sections.find((section) => section.heading === "Motivation").content, /plant closed/);
+  assert.equal(result.sections.find((section) => section.heading === "Experience").content, "Not discussed");
+  assert.match(result.markdown, /## Compensation and vacation/);
+});
+
+test("meeting print export is clean black Arial HTML", () => {
+  const template = renderMeetingTemplate("reference_check", "I would rehire them.");
+  const html = meetingPrintHtml({ title: "Reference check", template });
+  assert.match(html, /font-family:Arial/);
+  assert.match(html, /color:#000/);
+  assert.doesNotMatch(html, /gradient/i);
+  assert.match(html, /I would rehire them\./);
+});
+
+test("candidate notes call the existing after-call workflow then save a write-up draft", async () => {
+  let request;
+  let saved;
+  const result = await makeCandidateNotes({
+    job: { id: "42", title: "Maintenance Manager", company: "Source company", location: "Ontario" },
+    candidate: { id: "sourcing:7", name: "Candidate Example", title: "Supervisor", profileSummary: "Maintenance leadership" },
+    transcript: "Candidate stated a two week notice period.",
+  }, {
+    baseURL: "https://gateway.example.invalid",
+    fetchImpl: async (url, options) => {
+      request = { url: url.toString(), options };
+      return { ok: true, json: async () => ({ loxoDraft: { bullets: ["Meeting transcript: Candidate stated a two week notice period."] } }) };
+    },
+    createDraft: async (input) => { saved = input; return { id: "draft-1" }; },
+  });
+  assert.equal(new URL(request.url).pathname, "/api/workflows/after-call/prepare");
+  assert.equal(request.options.credentials, "include");
+  const payload = JSON.parse(request.options.body);
+  assert.equal(payload.verifiedFacts[0].source, "transcript");
+  assert.equal(saved.kind, "write_up");
+  assert.match(saved.body, /two week notice period/);
+  assert.equal(result.draft.id, "draft-1");
+});
+
+test("meetings workspace compiles and uses live selectors, templates, exports, and durable store fallback", async () => {
+  const [workspace, store, migration] = await Promise.all([
+    readFile(new URL("../src/features/meetings/MeetingsWorkspace.jsx", import.meta.url), "utf8"),
+    readFile(new URL("../src/features/meetings/meetingStore.js", import.meta.url), "utf8"),
+    readFile(new URL("../../gateway/migrations/003_meeting_drafts.sql", import.meta.url), "utf8"),
+  ]);
+  assert.match(workspace, /loadLiveReviewJobs/);
+  assert.match(workspace, /loadLiveCandidatesForJob/);
+  assert.match(workspace, /Make candidate notes/);
+  assert.match(workspace, /Download Markdown/);
+  assert.match(workspace, /Print or save PDF/);
+  assert.match(store, /export async function listRecentMeetings/);
+  assert.match(store, /session_only/);
+  assert.match(migration, /ENABLE ROW LEVEL SECURITY/);
+  assert.match(migration, /auth\.uid\(\) = owner_id/);
+  const compiled = await transformWithEsbuild(workspace, "MeetingsWorkspace.jsx", { loader: "jsx", jsx: "automatic" });
+  assert.match(compiled.code, /function MeetingsWorkspace/);
 });

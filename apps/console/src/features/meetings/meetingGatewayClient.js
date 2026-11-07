@@ -22,5 +22,11 @@ export async function transcribeMeetingAudio(blob, {
   if (!response.ok || typeof payload?.transcript !== "string") {
     throw new Error(payload?.error?.message || "Meeting transcription failed.");
   }
-  return { transcript: payload.transcript, source: payload.source || "workbench_native" };
+  return {
+    transcript: payload.transcript,
+    source: payload.source || "workbench_native",
+    ...(Array.isArray(payload.segments) ? { segments: payload.segments } : {}),
+    ...(Array.isArray(payload.speakers) ? { speakers: payload.speakers } : {}),
+    ...(payload.warning ? { warning: payload.warning } : {}),
+  };
 }
