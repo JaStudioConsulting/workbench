@@ -1,5 +1,5 @@
 import { useMemo, useState, useRef } from "react";
-import { ExternalLink, Mail, Phone, MapPin, Tag, Check, X, ShieldAlert, AlertCircle, FileText, Loader2, NotebookText } from "lucide-react";
+import { ExternalLink, MapPin, Tag, Check, ShieldAlert, AlertCircle, FileText, Loader2, NotebookText, Send } from "lucide-react";
 import { Badge } from "../../components/ui/badge.tsx";
 import { Button } from "../../components/ui/button.tsx";
 import { RESUME_INDICATOR_STATES } from "./constants.js";
@@ -10,13 +10,20 @@ import AlsoFitsDialog from "./AlsoFitsDialog.jsx";
 import CandidateWriteUpDialog from "./CandidateWriteUpDialog.jsx";
 import { getOwnershipStatus, openBrandedResume } from "./brandResume.js";
 import { createCandidateDraft } from "./candidateReviewService.js";
+import RejectMenu from "./RejectMenu.jsx";
+import ContactReveal from "./ContactReveal.jsx";
+import ExperienceTimeline from "./ExperienceTimeline.jsx";
+import ForYourAiBox from "./ForYourAiBox.jsx";
+import OutreachComposer from "./OutreachComposer.jsx";
+import { FitBadge, getResumeSource } from "./externals.js";
 
 const LOXO_PEOPLE_BASE_URL = "https://app.loxo.co/people/";
 
 export default function CandidateCard({
   candidate,
   currentJob,
-  onPass,
+  jobs = [],
+  onReject,
   onWant,
   onLogActivity,
 }) {
@@ -28,11 +35,32 @@ export default function CandidateCard({
   const [brandError, setBrandError] = useState("");
   const [showWriteUp, setShowWriteUp] = useState(false);
   const [ownershipOverride, setOwnershipOverride] = useState(false);
+  const [rejectOpen, setRejectOpen] = useState(false);
+  const [showOutreach, setShowOutreach] = useState(false);
+  const [ticked, setTicked] = useState(() => new Set());
   const startXRef = useRef(0);
   const ownership = useMemo(
     () => getOwnershipStatus(candidate.activityTrail),
     [candidate.activityTrail]
   );
+
+  const resumeSource = useMemo(() => {
+    try {
+      return getResumeSource(candidate);
+    } catch {
+      return { kind: "none" };
+    }
+  }, [candidate]);
+
+  const markDone = (moduleId) =>
+    setTicked((current) => (current.has(moduleId) ? current : new Set([...current, moduleId])));
+  const toggleModule = (moduleId) =>
+    setTicked((current) => {
+      const next = new Set(current);
+      if (next.has(moduleId)) next.delete(moduleId);
+      else next.add(moduleId);
+      return next;
+    });
 
   const resumeIndicator =
     RESUME_INDICATOR_STATES[candidate.resumeStatus] ||
@@ -68,7 +96,7 @@ export default function CandidateCard({
     if (dragOffset > 90) {
       handleDecision("want");
     } else if (dragOffset < -90) {
-      handleDecision("pass");
+      setRejectOpen(true);
     }
     setDragOffset(0);
   };
@@ -78,7 +106,7 @@ export default function CandidateCard({
     setIsDeciding(true);
     setDecisionError("");
     try {
-      const result = await (decision === "want" ? onWant : onPass)(candidate.id);
+      const result = await onWant(candidate.id);
       if (result?.ok === false) throw new Error(result.error || "Decision failed");
       return result || { ok: true };
     } catch (error) {
@@ -90,20 +118,42 @@ export default function CandidateCard({
     }
   };
 
+  const handleReject = async (reason) => {
+    if (isDeciding) return;
+    setIsDeciding(true);
+    setDecisionError("");
+    try {
+      const result = await onReject(candidate.id, reason);
+      if (result?.ok === false) throw new Error(result.error || "Pass failed");
+      markDone("loxo");
+    } catch (error) {
+      setDecisionError(error.message || "Pass failed. Try again.");
+    } finally {
+      setIsDeciding(false);
+    }
+  };
+
+  const handleCardLogActivity = async (candidateId, payload) => {
+    const result = await onLogActivity(candidateId, payload);
+    if (result?.ok !== false) markDone("loxo");
+    return result;
+  };
+
   const handleBrandResume = async () => {
     setBrandError("");
     try {
-      if (!candidate.fullResumeText?.trim()) {
-        throw new Error("No source resume is stored for this candidate.");
+      if (resumeSource.kind === "none") {
+        throw new Error("Not enough data to build a resume");
       }
       await createCandidateDraft({
         job: currentJob,
         candidate,
         kind: "resume_pdf",
-        body: candidate.fullResumeText,
+        body: resumeSource.text,
       });
       const result = openBrandedResume(candidate);
       if (!result.ok) throw new Error(result.error);
+      markDone("brandedresume");
     } catch (error) {
       setBrandError(error.message || "The branded resume could not be opened.");
     }
@@ -166,6 +216,8 @@ export default function CandidateCard({
                 {candidate.stage}
               </Badge>
 
+              <FitBadge job={currentJob} candidate={candidate} />
+
               {/* Resume Indicator (3 states) */}
               <span
                 className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold border ${
@@ -202,23 +254,14 @@ export default function CandidateCard({
           </div>
         </div>
 
-        {/* Contact info */}
+        {/* Contact info: email and number stay hidden until asked for */}
         <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
           {candidate.location && (
             <span className="flex items-center gap-1 bg-background border px-2 py-1 rounded-md">
               <MapPin size={12} /> {candidate.location}
             </span>
           )}
-          {candidate.phone && (
-            <span className="flex items-center gap-1 bg-background border px-2 py-1 rounded-md font-mono">
-              <Phone size={12} /> {candidate.phone}
-            </span>
-          )}
-          {candidate.email && (
-            <span className="flex items-center gap-1 bg-background border px-2 py-1 rounded-md">
-              <Mail size={12} /> {candidate.email}
-            </span>
-          )}
+          <ContactReveal candidate={candidate} />
         </div>
       </div>
 
@@ -275,6 +318,8 @@ export default function CandidateCard({
             </div>
           )}
 
+          <ExperienceTimeline candidate={candidate} job={currentJob} />
+
           {/* Resume Section with bolded figures & expandable jobs */}
           <ResumeSection candidate={candidate} />
         </div>
@@ -284,30 +329,37 @@ export default function CandidateCard({
           <ActivityTrail candidate={candidate} />
           <LogActivityForm
             candidateId={candidate.id}
-            onLogActivity={onLogActivity}
+            onLogActivity={handleCardLogActivity}
           />
+          <ForYourAiBox candidate={candidate} job={currentJob} ticked={ticked} onToggle={toggleModule} />
         </div>
       </div>
 
       {/* 3. Bottom Decision Bar */}
       <div className="flex flex-wrap items-center justify-between gap-2 border-t bg-muted/10 p-3 shrink-0">
-        <Button
-          type="button"
-          variant="outline"
-          onClick={() => handleDecision("pass")}
+        <RejectMenu
+          onReject={handleReject}
           disabled={isDeciding}
-          className="flex-1 max-w-[200px] border-rose-300 text-rose-800 hover:bg-rose-50 hover:border-rose-400 font-bold text-xs h-10"
-        >
-          {isDeciding ? <Loader2 size={15} className="mr-1.5 animate-spin" /> : <X size={15} className="mr-1.5" />} Pass
+          open={rejectOpen}
+          onOpenChange={setRejectOpen}
+        />
+
+        <Button type="button" variant="outline" onClick={() => setShowOutreach(true)} className="h-10 text-xs font-semibold" data-testid="outreach-button">
+          <Send size={15} className="mr-1.5" /> Outreach
         </Button>
 
-        <Button type="button" variant="outline" onClick={() => setShowWriteUp(true)} className="h-10 text-xs font-semibold">
+        <Button type="button" variant="outline" onClick={() => { markDone("write-up"); setShowWriteUp(true); }} className="h-10 text-xs font-semibold">
           <NotebookText size={15} className="mr-1.5" /> Write-up
         </Button>
 
         <Button type="button" variant="outline" onClick={handleBrandResume} className="h-10 border-amber-400 bg-amber-50 text-xs font-bold text-amber-950 hover:bg-amber-100" data-testid="brand-resume-button">
           <FileText size={15} className="mr-1.5" /> Brand resume
         </Button>
+        {resumeSource.kind === "profile" ? (
+          <Badge variant="outline" className="text-[10px]" title={`Sources: ${(resumeSource.usedSources || []).join(", ")}`}>
+            Built from profile, no resume on file
+          </Badge>
+        ) : null}
 
         <Button
           type="button"
@@ -324,6 +376,14 @@ export default function CandidateCard({
         fit={activeFit}
         open={Boolean(activeFit)}
         onOpenChange={(open) => !open && setActiveFit(null)}
+      />
+      <OutreachComposer
+        open={showOutreach}
+        onOpenChange={setShowOutreach}
+        candidate={candidate}
+        currentJob={currentJob}
+        jobs={jobs}
+        onDrafted={() => markDone("ja-writer")}
       />
       <CandidateWriteUpDialog
         candidate={candidate}

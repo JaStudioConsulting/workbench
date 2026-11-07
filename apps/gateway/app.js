@@ -9,6 +9,8 @@ import { createReadOnlyNeo4jAdapter } from "./src/neo4j.js";
 import { discoverMcp, loadRecruitmentContext } from "./src/recruitment-package.js";
 import { createLocalTranscriptionAdapter, meetingAudioBody } from "./src/local-transcription.js";
 import { createMeetingTranscriptionAccess } from "./src/local-trust.js";
+import { registerAiRoutes } from "./src/ai-routes.js";
+import { registerMailRoutes } from "./src/mail-routes.js";
 
 function respondError(res, code, message, status = 503) {
   return res.status(status).json(errorEnvelope(code, message));
@@ -132,6 +134,12 @@ export async function createApp({
     app.post("/api/google-workspace/disconnect", authoritativeGoogleSession, googleWorkspaceHandler("disconnect"));
   }
   app.post("/api/gws/sync", authoritativeGoogleSession, googleApi.sync);
+  // AI routes accept the same private-network trust as meetings when LOCAL_TRUSTED_MODE=1.
+  registerAiRoutes(app, { authenticated: meetingTranscriptionAccess, env });
+  registerMailRoutes(app, {
+    authenticated: authoritativeGoogleSession,
+    getGoogleProviderAccessToken: configuredAuth.getGoogleProviderAccessToken?.bind(configuredAuth),
+  });
   app.get("/api/mcp/discovery", authenticated, async (_req, res) => {
     try { return res.json(McpDiscoverySchema.parse(discoverMcp(recruiterAuthority))); }
     catch { return respondError(res, "RECRUITER_UNAVAILABLE", "Recruitment authority is unavailable"); }

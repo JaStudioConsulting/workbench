@@ -26,15 +26,18 @@ function transcriptFromJson(value) {
   return "";
 }
 
-async function defaultRunner(cliPath, inputPath, supportDir) {
-  const { stdout } = await execFileAsync(cliPath, [
+async function defaultRunner(cliPath, inputPath, supportDir, options = {}) {
+  const args = [
     "transcribe",
     inputPath,
     "--format",
     "json",
     "--support-dir",
     supportDir,
-  ], {
+  ];
+  if (options.speakerLabels) args.push("--speaker-labels");
+  if (options.vocabularyPath) args.push("--vocabulary", options.vocabularyPath);
+  const { stdout } = await execFileAsync(cliPath, args, {
     encoding: "utf8",
     timeout: 15 * 60 * 1000,
     maxBuffer: 16 * 1024 * 1024,
@@ -47,6 +50,8 @@ export function createLocalTranscriptionAdapter({
   cliPath = process.env.WORKBENCH_TRANSCRIBE_PATH || DEFAULT_CLI,
   supportDir = DEFAULT_SUPPORT_DIR,
   runner = defaultRunner,
+  speakerLabels = process.env.WORKBENCH_NATIVE_MEETING_ENHANCEMENTS === "1",
+  vocabularyPath = process.env.WORKBENCH_MEETING_VOCABULARY_PATH || "",
 } = {}) {
   return {
     async available() {
@@ -66,7 +71,7 @@ export function createLocalTranscriptionAdapter({
       const inputPath = join(directory, `recording${extension}`);
       try {
         await writeFile(inputPath, audio, { flag: "wx", mode: 0o600 });
-        const output = await runner(cliPath, inputPath, supportDir);
+        const output = await runner(cliPath, inputPath, supportDir, { speakerLabels, vocabularyPath });
         let parsed;
         try {
           parsed = typeof output === "string" ? JSON.parse(output) : output;
@@ -77,7 +82,17 @@ export function createLocalTranscriptionAdapter({
         }
         const transcript = transcriptFromJson(parsed);
         if (!transcript) throw new Error("Workbench transcription returned an empty transcript");
-        return { transcript, source: "workbench_native" };
+        const details = parsed?.data && typeof parsed.data === "object" ? parsed.data : parsed;
+        const segments = Array.isArray(details?.segments) ? details.segments : null;
+        const speakers = Array.isArray(details?.speakers) ? details.speakers : null;
+        const warning = typeof details?.warning === "string" && details.warning.trim() ? details.warning.trim() : null;
+        return {
+          transcript,
+          source: "workbench_native",
+          ...(segments?.length ? { segments } : {}),
+          ...(speakers?.length ? { speakers } : {}),
+          ...(warning ? { warning } : {}),
+        };
       } finally {
         await rm(directory, { recursive: true, force: true });
       }

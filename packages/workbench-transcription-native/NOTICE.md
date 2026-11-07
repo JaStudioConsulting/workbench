@@ -9,6 +9,20 @@ Hari under the MIT License. The required notice is retained in
 Adapted source path:
 `native/MuesliNative/Sources/MuesliCLI/TranscribeCommand.swift`.
 
+The next native meeting slice also adapts bounded implementation ideas from
+these files at the same pinned commit:
+
+- `native/MuesliNative/Sources/MuesliNativeApp/SystemAudioRecorder.swift`
+- `native/MuesliNative/Sources/MuesliNativeApp/MeetingRecordingWriter.swift`
+- `native/MuesliNative/Sources/MuesliNativeApp/SpeakerAttribution.swift`
+- `native/MuesliNative/Sources/MuesliNativeApp/TranscriptReconciler.swift`
+- `native/MuesliNative/Sources/MuesliNativeApp/TranscriptFormatter.swift`
+- `native/MuesliNative/Sources/MuesliCore/CustomWordDictionary.swift`
+
+They land in Workbench-owned capture, transcript processing, and vocabulary
+codec modules. The implementation does not include the source app shell,
+database, branding, telemetry, updater, or unrelated capture features.
+
 Local speech recognition uses FluidAudio `0.17.7` through Swift Package Manager.
 Its Apache-2.0 license is retained in `LICENSES/FLUIDAUDIO-APACHE-2.0.txt`.
 The command-line interface uses Swift Argument Parser; its Apache-2.0 license

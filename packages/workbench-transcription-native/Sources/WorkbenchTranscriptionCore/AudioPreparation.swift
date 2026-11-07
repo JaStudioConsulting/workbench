@@ -203,7 +203,7 @@ enum WorkbenchWavWriter {
         return samples.count
     }
 
-    private static func header(dataSize: UInt32) -> Data {
+    static func header(dataSize: UInt32) -> Data {
         let byteRate = sampleRate * UInt32(channels) * UInt32(bitsPerSample / 8)
         let blockAlign = channels * (bitsPerSample / 8)
         var header = Data()
