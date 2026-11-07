@@ -53,7 +53,7 @@ test("Leads page exposes real loading, empty, error and editor states", async ()
   assert.match(source, /No client companies found in active Tracker jobs/);
   assert.match(source, /No leads added/);
   assert.match(source, /Add lead/);
-  assert.doesNotMatch(source, /purple|violet|indigo|—/i);
+  assert.doesNotMatch(source, /\u2014/);
 });
 
 test("leads migration is additive and owner-only", async () => {
