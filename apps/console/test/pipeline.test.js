@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import { transformWithEsbuild } from "vite";
 import { evaluateFit, personalizeOutreach } from "../src/features/pipeline/aiClient.js";
 import { scoreFit } from "../src/features/pipeline/fitScore.js";
 import { isInCanada, province } from "../src/features/pipeline/location.js";
@@ -72,4 +73,20 @@ test("FitBadge contract exposes rules evidence and deep AI check", async () => {
   assert.match(source, /Deep check with AI/);
   assert.match(source, /AI check/);
   assert.doesNotMatch(source, /purple|violet|indigo/i);
+});
+
+test("Pipeline page loads live data, queues exact stage notes, and compiles", async () => {
+  const source = await readFile(new URL("../src/features/pipeline/PipelinePage.jsx", import.meta.url), "utf8");
+  assert.match(source, /loadLiveReviewJobs/);
+  assert.match(source, /loadLiveCandidatesForJob/);
+  assert.doesNotMatch(source, /getReviewJobs|getCandidatesForJob|SAMPLE_/);
+  assert.match(source, /type: "\*Note"/);
+  assert.match(source, /Stage move: \$\{from\} to \$\{to\}/);
+  assert.match(source, /Waiting for Loxo/);
+  assert.match(source, /DragDropProvider/);
+  assert.match(source, /onOpenCandidate\?\.\(job\.id, candidate\.id\)/);
+  assert.match(source, /Move \$\{candidate\.name\} to stage/);
+  assert.doesNotMatch(source, /purple|violet|indigo/i);
+  const result = await transformWithEsbuild(source, "PipelinePage.jsx", { loader: "jsx", jsx: "automatic" });
+  assert.match(result.code, /function PipelinePage/);
 });
