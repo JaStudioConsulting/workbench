@@ -5,7 +5,7 @@ import { z } from "zod";
 const LEVELS = ["strong", "possible", "weak", "unknown"];
 const SOURCE_CITATION = /\[(?:candidate|job)\.[^\]]+\]|not in source/i;
 const EvidenceSchema = z.string().trim().min(1).max(500)
-  .refine((value) => !value.includes("—"), "Em dashes are not allowed")
+  .refine((value) => !value.includes("\u2014"), "Em dashes are not allowed")
   .refine((value) => SOURCE_CITATION.test(value), "Evidence must cite a source field or say not in source");
 const SpecialistSchema = z.object({
   level: z.enum(LEVELS),
@@ -33,8 +33,8 @@ const OutreachInputSchema = z.object({
   body: z.string().trim().min(1).max(20_000),
 }).strict().refine((value) => JSON.stringify(value).length <= 120_000, "Outreach source is too large");
 const OutreachResultSchema = z.object({
-  subject: z.string().trim().min(1).max(300).refine((value) => !value.includes("—")),
-  body: z.string().trim().min(1).max(20_000).refine((value) => !value.includes("—")),
+  subject: z.string().trim().min(1).max(300).refine((value) => !value.includes("\u2014")),
+  body: z.string().trim().min(1).max(20_000).refine((value) => !value.includes("\u2014")),
 }).strict();
 
 const SOURCE_FIELDS = {
