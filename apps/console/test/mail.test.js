@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import {
   _resetOutreachForTesting,
   getMailStatus,
+  listMailReplies,
   listOutreach,
   logOutreach,
   saveGmailDraft,
@@ -41,6 +42,17 @@ test("mail status is expressed as plain booleans", async () => {
   assert.deepEqual(status, { connected: true, canDraft: true, canRead: false });
 });
 
+test("reply lookup normalizes candidate emails", async () => {
+  const result = await listMailReplies([" Person@Example.Invalid ", "person@example.invalid"], {
+    request: async (url) => {
+      assert.match(String(url), /emails=person%40example.invalid/);
+      return { ok: true, async json() { return { available: true, latestByEmail: { "person@example.invalid": "2026-11-06T12:00:00.000Z" } }; } };
+    },
+  });
+  assert.equal(result.available, true);
+  assert.equal(result.latestByEmail["person@example.invalid"], "2026-11-06T12:00:00.000Z");
+});
+
 test("saveGmailDraft does not call the draft route without compose scope", async () => {
   let calls = 0;
   const result = await saveGmailDraft({
@@ -70,7 +82,7 @@ test("saveGmailDraft posts a draft after the status check", async () => {
   }, {
     request: async (url, options = {}) => {
       calls.push({ url, options });
-      if (url.endsWith("/status")) {
+      if (String(url).endsWith("/status")) {
         return { ok: true, async json() { return { connected: true, canDraft: true, canRead: false }; } };
       }
       return { ok: true, async json() { return { id: "draft-1" }; } };
@@ -78,6 +90,6 @@ test("saveGmailDraft posts a draft after the status check", async () => {
   });
 
   assert.deepEqual(result, { ok: true, id: "draft-1" });
-  assert.equal(calls[1].url, "/api/mail/draft");
+  assert.equal(String(calls[1].url), "http://localhost/api/mail/draft");
   assert.equal(calls[1].options.method, "POST");
 });

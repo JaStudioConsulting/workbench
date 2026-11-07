@@ -1,4 +1,5 @@
 import { supabase } from "../../supabase-client.js";
+import { gatewayBaseURL } from "../../auth-client.js";
 
 const outreachFallback = [];
 const CHANNELS = new Set(["copy", "mailto", "gmail_draft"]);
@@ -87,7 +88,10 @@ export async function listOutreach({ client = supabase } = {}) {
 
 export async function getMailStatus({ request = globalThis.fetch } = {}) {
   try {
-    const response = await request("/api/mail/status", { headers: { accept: "application/json" } });
+    const response = await request(new URL("/api/mail/status", gatewayBaseURL), {
+      credentials: "include",
+      headers: { accept: "application/json" },
+    });
     if (!response.ok) throw new Error("status unavailable");
     const status = await response.json();
     return {
@@ -104,8 +108,9 @@ export async function saveGmailDraft({ to, subject, body }, { request = globalTh
   const status = await getMailStatus({ request });
   if (!status.canDraft) return { ok: false, reason: "no_scope" };
 
-  const response = await request("/api/mail/draft", {
+  const response = await request(new URL("/api/mail/draft", gatewayBaseURL), {
     method: "POST",
+    credentials: "include",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
       to: String(to || "").trim(),
@@ -118,6 +123,32 @@ export async function saveGmailDraft({ to, subject, body }, { request = globalTh
     return { ok: false, reason: detail.reason || "unavailable" };
   }
   return { ok: true, ...(await response.json()) };
+}
+
+export async function listMailReplies(emails, { request = globalThis.fetch } = {}) {
+  const normalized = [...new Set((emails || [])
+    .map((email) => String(email || "").trim().toLowerCase())
+    .filter(Boolean))];
+  if (!normalized.length) return { available: true, latestByEmail: {} };
+  try {
+    const url = new URL("/api/mail/replies", gatewayBaseURL);
+    url.searchParams.set("emails", normalized.join(","));
+    const response = await request(url, {
+      credentials: "include",
+      headers: { accept: "application/json" },
+      cache: "no-store",
+    });
+    if (!response.ok) throw new Error("replies unavailable");
+    const payload = await response.json();
+    return {
+      available: Boolean(payload.available),
+      latestByEmail: payload.latestByEmail && typeof payload.latestByEmail === "object"
+        ? payload.latestByEmail
+        : {},
+    };
+  } catch {
+    return { available: false, latestByEmail: {} };
+  }
 }
 
 export function _resetOutreachForTesting() {
