@@ -139,8 +139,17 @@ function buildDocument(data) {
 }
 
 window.downloadBrandedResumePdf = async ({ data, filename }) => {
-  if (!data || typeof data !== "object") {
-    throw new Error("Resume content is unavailable");
+  const hasContent = data && typeof data === "object" && [
+    data.name,
+    data.headline,
+    data.summary,
+    ...(Array.isArray(data.skills) ? data.skills : []),
+    ...(Array.isArray(data.experience) ? data.experience : []),
+    ...(Array.isArray(data.education) ? data.education : []),
+    ...(Array.isArray(data.sections) ? data.sections : []),
+  ].some(Boolean);
+  if (!hasContent) {
+    throw new Error("Not enough data to build a resume");
   }
   pdfMake.createPdf(buildDocument(data)).download(safeFilename(filename));
 };

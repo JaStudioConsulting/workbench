@@ -8,6 +8,11 @@ function list(value) {
   return Array.isArray(value) ? value.filter(Boolean) : [];
 }
 
+function items(value) {
+  if (Array.isArray(value)) return value.filter(Boolean);
+  return clean(value) ? [clean(value)] : [];
+}
+
 export function getCandidateSourceCoverage(candidate) {
   const sources = [
     { key: "resume", label: "Resume", present: Boolean(clean(candidate.fullResumeText)) },
@@ -24,6 +29,22 @@ export function getCandidateSourceCoverage(candidate) {
 }
 
 export function buildBrandResumePayload(candidate) {
+  const source = getResumeSourceKind(candidate);
+  if (source === "none") {
+    throw new Error("Not enough data to build a resume");
+  }
+
+  const sections = [];
+  if (list(candidate.certifications).length) {
+    sections.push({ heading: "Certifications", items: list(candidate.certifications) });
+  }
+  if (!clean(candidate.fullResumeText) && clean(candidate.callNotes)) {
+    sections.push({ heading: "Call Notes", items: [clean(candidate.callNotes)] });
+  }
+  if (!clean(candidate.fullResumeText) && clean(candidate.transcriptText)) {
+    sections.push({ heading: "Transcript", items: [clean(candidate.transcriptText)] });
+  }
+
   return {
     name: clean(candidate.name),
     headline: clean(candidate.title),
@@ -31,16 +52,15 @@ export function buildBrandResumePayload(candidate) {
     skills: list(candidate.skills),
     experience: list(candidate.workHistory).map((role) => ({
       title: clean(role.title),
-      dates: clean(role.dates),
+      dates: clean(role.dates)
+        || [clean(role.startDate), clean(role.endDate)].filter(Boolean).join(" to "),
       company: clean(role.company),
       location: clean(role.location),
       bullets: list(role.bullets),
     })),
-    education: list(candidate.education),
+    education: items(candidate.education),
     education_heading: "Education & Certifications",
-    sections: list(candidate.certifications).length
-      ? [{ heading: "Certifications", items: list(candidate.certifications) }]
-      : [],
+    sections,
   };
 }
 
@@ -56,6 +76,20 @@ function profileWorkHistoryText(workHistory) {
     ].filter(Boolean);
     return details.join("\n");
   }).filter(Boolean).join("\n\n");
+}
+
+function getResumeSourceKind(candidate = {}) {
+  if (clean(candidate.fullResumeText)) return "resume";
+  if (!clean(candidate.name)) return "none";
+  const hasProfileEvidence = Boolean(
+    clean(candidate.title)
+    || profileWorkHistoryText(candidate.workHistory)
+    || clean(candidate.profileSummary)
+    || list(candidate.skills).length
+    || clean(candidate.callNotes)
+    || clean(candidate.transcriptText)
+  );
+  return hasProfileEvidence ? "profile" : "none";
 }
 
 export function getResumeSource(candidate = {}) {
@@ -149,16 +183,25 @@ export function buildCandidateWriteUp(candidate) {
 }
 
 export function openBrandedResume(candidate) {
+  let source;
+  try {
+    source = getResumeSource(candidate);
+    if (source.kind === "none") {
+      throw new Error("Not enough data to build a resume");
+    }
+  } catch (error) {
+    return { ok: false, error: error.message || "The branded resume could not be built." };
+  }
+
   const resumeWindow = window.open("/resume-brander.html", "_blank");
   if (!resumeWindow) {
     return { ok: false, error: "Allow pop-ups to open the branded resume." };
   }
 
-  const payload = buildBrandResumePayload(candidate);
   const sendPayload = () => {
     if (!resumeWindow.closed) {
       resumeWindow.postMessage(
-        { type: "tttg-load-candidate", payload },
+        { type: "tttg-load-candidate", payload: source.payload },
         window.location.origin
       );
     }

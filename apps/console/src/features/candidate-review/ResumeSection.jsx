@@ -2,6 +2,17 @@ import { useState } from "react";
 import { ChevronDown, ChevronRight, FileText } from "lucide-react";
 import { Button } from "../../components/ui/button.tsx";
 import { FIGURE_REGEX } from "./figureUtils.js";
+import { getResumeSource } from "./brandResume.js";
+
+const SOURCE_LABELS = {
+  name: "Name",
+  title: "Title",
+  workHistory: "Work history",
+  profileSummary: "Profile summary",
+  skills: "Skills",
+  callNotes: "Call notes",
+  transcriptText: "Transcript",
+};
 
 // Bold figures, quantities, and metrics while preserving 100% verbatim text
 export function formatVerbatimBoldFigures(text) {
@@ -21,6 +32,7 @@ export function formatVerbatimBoldFigures(text) {
 }
 
 export default function ResumeSection({ candidate }) {
+  const resumeSource = getResumeSource(candidate);
   const [showFullResume, setShowFullResume] = useState(false);
   const [expandedJobs, setExpandedJobs] = useState(() => {
     // Expand the most recent job by default if jobs exist
@@ -49,24 +61,42 @@ export default function ResumeSection({ candidate }) {
             Resume and Work History
           </h4>
         </div>
-        <Button
-          size="sm"
-          variant="ghost"
-          className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
-          onClick={() => setShowFullResume((prev) => !prev)}
-        >
-          {showFullResume ? "Hide full resume" : "Full resume"}
-          {showFullResume ? <ChevronDown size={13} className="ml-1" /> : <ChevronRight size={13} className="ml-1" />}
-        </Button>
+        {resumeSource.kind !== "none" ? (
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
+            onClick={() => setShowFullResume((prev) => !prev)}
+            aria-expanded={showFullResume}
+          >
+            {showFullResume ? "Hide source" : "View source"}
+            {showFullResume ? <ChevronDown size={13} className="ml-1" /> : <ChevronRight size={13} className="ml-1" />}
+          </Button>
+        ) : null}
       </div>
+
+      {resumeSource.kind === "profile" ? (
+        <div className="rounded-md border border-amber-700/30 bg-amber-50 px-2.5 py-2 text-[11px] text-amber-950">
+          <p className="font-semibold">Built from profile, no resume on file</p>
+          <p className="mt-0.5">
+            Sources used: {resumeSource.usedSources.map((source) => SOURCE_LABELS[source] || source).join(", ")}
+          </p>
+        </div>
+      ) : null}
+
+      {resumeSource.kind === "none" ? (
+        <div className="rounded-md border border-dashed p-3 text-center text-xs text-muted-foreground">
+          Not enough data to build a resume
+        </div>
+      ) : null}
 
       {showFullResume && (
         <div className="rounded-md border bg-muted/30 p-2.5">
           <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">
-            Verbatim Source Resume
+            {resumeSource.kind === "resume" ? "Verbatim Source Resume" : "Profile Sources"}
           </p>
           <pre className="whitespace-pre-wrap font-sans text-xs leading-relaxed text-foreground">
-            {formatVerbatimBoldFigures(candidate.fullResumeText)}
+            {formatVerbatimBoldFigures(resumeSource.text)}
           </pre>
         </div>
       )}
