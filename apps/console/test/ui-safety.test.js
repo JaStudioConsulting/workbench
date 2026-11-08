@@ -6,9 +6,9 @@ import test from "node:test";
 test("console has no local persistence or send authority", async () => {
   const files = await Promise.all([
     "../src/App.jsx",
-    "../src/components/HomeWidgets.jsx",
-    "../src/components/MailInbox.jsx",
-    "../src/components/PageStubs.jsx",
+    "../src/features/home/HomePage.jsx",
+    "../src/features/mail/MailPage.jsx",
+    "../src/EmptyWorkspace.jsx",
     "../src/components/GoogleWorkspacePanel.jsx",
     "../src/components/UpcomingCalendar.jsx",
     "../src/google-workspace-client.js",
@@ -17,8 +17,8 @@ test("console has no local persistence or send authority", async () => {
   const source = files.join("\n");
   assert.doesNotMatch(source, /localStorage|sessionStorage|sendEmail|candidateSubmit/i);
   assert.doesNotMatch(source, /Marcus|Meridian|BrightPath|Marketing Director/i);
-  assert.match(source, /No workbench data/);
-  assert.match(source, /No mail connected/);
+  assert.match(source, /No Loxo changes are waiting/);
+  assert.match(source, /No outreach logged/);
   assert.doesNotMatch(source, /graph-node|graph-lines|selectedNode|CandidateWorkspace/);
   await assert.rejects(access(new URL("../src/components/CandidateWorkspace.jsx", import.meta.url)));
 });
@@ -49,12 +49,12 @@ test("Better Auth and Workspace clients use gateway or same-origin without local
 });
 
 test("Settings uses one Better Auth Google connection for Workspace services", async () => {
-  const [panel, calendar, stubs] = await Promise.all([
+  const [panel, calendar, settings] = await Promise.all([
     readFile(new URL("../src/components/GoogleWorkspacePanel.jsx", import.meta.url), "utf8"),
     readFile(new URL("../src/components/UpcomingCalendar.jsx", import.meta.url), "utf8"),
-    readFile(new URL("../src/components/PageStubs.jsx", import.meta.url), "utf8"),
+    readFile(new URL("../src/features/settings/SettingsPage.jsx", import.meta.url), "utf8"),
   ]);
-  const source = `${panel}\n${calendar}\n${stubs}`;
+  const source = `${panel}\n${calendar}\n${settings}`;
 
   assert.match(panel, /authClient\.useSession\(\)/);
   assert.match(panel, /getGoogleWorkspaceStatus/);
