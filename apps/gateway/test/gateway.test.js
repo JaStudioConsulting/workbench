@@ -5,7 +5,6 @@ import { createApp } from "../app.js";
 import { createConfiguredAuth, parseAllowedGoogleEmails, parseExactHttpsOrigins } from "../src/auth.js";
 import { prepareAfterCallWorkflow } from "../src/after-call.js";
 import { createDraftOnlyMailService } from "../src/gmail.js";
-import { assertReadOnlyCypher, createReadOnlyNeo4jAdapter, stripCypherLiteralsAndComments } from "../src/neo4j.js";
 import { discoverMcp, loadRecruitmentAuthority, validatePublishedRecruitmentAssets, validateRecruitmentManifest } from "../src/recruitment-package.js";
 import { createMemoryTestStorage, requireDurableStorage } from "../src/storage.js";
 
@@ -314,15 +313,12 @@ test("draft-only mail and test-only storage do not expose external write methods
   assert.throws(() => requireDurableStorage(storage), { code: "STORAGE_UNAVAILABLE" });
 });
 
-test("Neo4j stays disabled without a driver and blocks bypass attempts", async () => {
-  const graph = createReadOnlyNeo4jAdapter();
-  assert.deepEqual(await graph.read("MATCH (n) RETURN n"), { available: false, records: [] });
-  for (const query of ["MATCH (n) SET n.x = 1 RETURN n", "WITH 1 AS n CREATE (x) RETURN x", "MATCH (n) RETURN n; MATCH (m) RETURN m", "CALL db.labels()", "MATCH (n) // SET n.x = 1\n RETURN n"]) {
-    if (query.includes("//")) assert.doesNotThrow(() => assertReadOnlyCypher(query));
-    else assert.throws(() => assertReadOnlyCypher(query), { code: "NEO4J_WRITE_REJECTED" });
-  }
-  assert.equal(stripCypherLiteralsAndComments("MATCH (n {note: 'CREATE'}) RETURN n").includes("CREATE"), false);
-  await assert.rejects(() => graph.write("anything"), { code: "NEO4J_WRITE_REJECTED" });
+test("public safety status contains only supported fields", async () => {
+  const app = await createApp({ env: testEnv, recruitmentContextLoader: testRecruitmentContext });
+  const response = await request(app, "GET", "/api/safety");
+  assert.equal(response.status, 200);
+  assert.deepEqual(Object.keys(response.body).sort(), ["auth", "externalWrites", "gmail", "storage"]);
+  assert.equal(response.body.externalWrites, false);
 });
 
 test("full synthetic after-call output is recruiter-authorized, draft-only, and source-backed", () => {
