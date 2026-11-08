@@ -14,7 +14,6 @@ import {
   recordCandidateDecision,
   recordCandidateSubmission,
   logCandidateActivity,
-  isSampleData,
   loadLiveReviewJobs,
   loadLiveCandidatesForJob,
 } from "./candidateReviewService.js";
@@ -151,8 +150,8 @@ export default function CandidateReview({ selectedJob, onSelectJob, onNavigateJo
     ? "Loading live data"
     : dataError
       ? "Supabase unavailable"
-      : isSampleData()
-        ? "Sample data only - sign in for live candidates"
+      : jobs.length === 0
+        ? "No live review jobs available"
         : "Connected to Supabase";
 
   const handleJobChange = (newJobId) => {
@@ -253,14 +252,6 @@ export default function CandidateReview({ selectedJob, onSelectJob, onNavigateJo
           <div>
             <div className="flex items-center gap-2">
               <h2 className="text-base font-bold leading-tight">Candidate Review</h2>
-              {isSampleData() && (
-                <Badge
-                  variant="outline"
-                  className="border-amber-400 bg-amber-50 text-amber-900 text-[11px] font-semibold py-0 px-2"
-                >
-                  Sample data
-                </Badge>
-              )}
               <Badge variant="outline" className="text-[11px] py-0 px-2">
                 {supabaseStatus}
               </Badge>
@@ -374,11 +365,15 @@ export default function CandidateReview({ selectedJob, onSelectJob, onNavigateJo
           <div className="flex h-12 w-12 items-center justify-center rounded-full bg-muted/50 mb-3 text-muted-foreground">
             <Briefcase size={24} />
           </div>
-          <h3 className="text-sm font-bold text-foreground">No matching job selected</h3>
+          <h3 className="text-sm font-bold text-foreground">
+            {!dataLoading && !dataError && jobs.length === 0 ? "No live review jobs available" : "No matching job selected"}
+          </h3>
           <p className="text-xs text-muted-foreground mt-1 max-w-sm">
-            {activeJobId
-              ? `The selected job ID "${activeJobId}" does not match any active review pipeline.`
-              : "Choose an active job from the dropdown above to review candidates."}
+            {!dataLoading && !dataError && jobs.length === 0
+              ? "No active Tracker jobs are visible to this session. Check sign-in and the Tracker import."
+              : activeJobId
+                ? `The selected job ID "${activeJobId}" does not match any active review pipeline.`
+                : "Choose an active job from the dropdown above to review candidates."}
           </p>
           {onNavigateJobsMap && (
             <Button
