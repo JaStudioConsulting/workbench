@@ -23,6 +23,23 @@ test("recoverable audio survives failed and session-only saves until durable sav
   assert.equal(archive.has("recording-1"), false);
 });
 
+test("archive cleanup failure logs the error and keeps the durable draft", async () => {
+  const cleanupError = new Error("storage unavailable");
+  const logged = [];
+  const result = await saveMeetingAndReleaseArchive({
+    saveDraft: async () => ({ ok: true, persistence: "durable", draft: { id: "saved" } }),
+    discardArchive: async () => { throw cleanupError; },
+    recordingId: "recording-1",
+    logger: { error: (message, details) => logged.push({ message, details }) },
+  });
+  assert.equal(result.draft.id, "saved");
+  assert.equal(result.archiveRetained, true);
+  assert.equal(logged.length, 1);
+  assert.match(logged[0].message, /cleanup failed/);
+  assert.equal(logged[0].details.recordingId, "recording-1");
+  assert.equal(logged[0].details.error, cleanupError);
+});
+
 function event(title, value, joinUrl = null) {
   return {
     title,
