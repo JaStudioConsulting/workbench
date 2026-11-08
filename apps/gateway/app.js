@@ -8,6 +8,7 @@ import { createMcpRequestHandler } from "./src/mcp.js";
 import { createReadOnlyNeo4jAdapter } from "./src/neo4j.js";
 import { discoverMcp, loadRecruitmentContext } from "./src/recruitment-package.js";
 import { createLocalTranscriptionAdapter, meetingAudioBody } from "./src/local-transcription.js";
+import { createNativeCaptureManager, parseByteRange } from "./src/native-capture.js";
 import { createMeetingTranscriptionAccess } from "./src/local-trust.js";
 import { registerAiRoutes } from "./src/ai-routes.js";
 import { registerMailRoutes } from "./src/mail-routes.js";
@@ -62,6 +63,7 @@ export async function createApp({
   googleWorkspaceOptions,
   googleApiHandlers,
   transcriptionAdapter = createLocalTranscriptionAdapter(),
+  captureManager = createNativeCaptureManager(),
   mcpHandlerFactory = createMcpRequestHandler,
   neo4j = createReadOnlyNeo4jAdapter(),
 } = {}) {
@@ -79,6 +81,7 @@ export async function createApp({
     // Keep public health and safety routes available while every recruiter route fails closed.
   }
   app.use(createCorsGuard(env));
+  await captureManager.initialize?.().catch(() => {});
 
   // Better Auth must receive raw requests. JSON parsing is intentionally mounted after it.
   if (configuredAuth.enabled) app.all("/api/auth/*", configuredAuth.handler);
@@ -97,6 +100,14 @@ export async function createApp({
   const authenticated = requireSession(configuredAuth);
   const authoritativeGoogleSession = requireSession(configuredAuth, { authoritative: true, requireStableUser: true });
   const meetingTranscriptionAccess = createMeetingTranscriptionAccess({ env, authenticated });
+  app.get("/api/meetings/status", meetingTranscriptionAccess, async (_req, res) => {
+    res.set("Cache-Control", "private, no-store");
+    return res.json({
+      available: await transcriptionAdapter.available(),
+      enhanced: env.WORKBENCH_NATIVE_MEETING_ENHANCEMENTS === "1",
+      captureAvailable: await captureManager.available?.() || false,
+    });
+  });
   app.post("/api/meetings/transcribe", meetingTranscriptionAccess, express.raw(meetingAudioBody), async (req, res) => {
     if (!Buffer.isBuffer(req.body) || req.body.length === 0) {
       return respondError(res, "INVALID_INPUT", "Meeting audio is required", 400);
@@ -113,6 +124,113 @@ export async function createApp({
       const message = error instanceof Error ? error.message : "Meeting transcription failed";
       const status = /unsupported|empty|required/i.test(message) ? 400 : 502;
       return respondError(res, "TRANSCRIPTION_FAILED", message, status);
+    }
+  });
+  app.post("/api/meetings/capture/start", authoritativeGoogleSession, async (req, res) => {
+    try {
+      const capture = await captureManager.start({ jobId: req.body?.jobId, candidateId: req.body?.candidateId, ownerId: req.workbenchSession.user.id });
+      return res.status(201).json({ ok: true, capture });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Native meeting capture could not start";
+      const status = /required|invalid/i.test(message) ? 400 : 503;
+      return respondError(res, "CAPTURE_START_FAILED", message, status);
+    }
+  });
+  const captureFinalizations = new Map();
+  async function finalizeCapture(id, ownerId) {
+    const persisted = await captureManager.loadFinalizedResponse?.(id, ownerId);
+    if (persisted) return persisted;
+    const capture = await captureManager.stop(id, ownerId);
+    const tracks = [];
+    for (const source of ["microphone", "system"]) {
+      const audio = await captureManager.audioInfo(id, source, ownerId).catch(() => null);
+      if (!audio) continue;
+      try {
+        const result = await transcriptionAdapter.transcribeFile({ path: audio.path });
+        const fallbackSpeaker = source === "microphone" ? "You" : "Remote speaker";
+        const segments = result.segments?.length
+          ? result.segments.map((segment) => ({ ...segment, source, speaker: source === "microphone" ? "You" : (segment.speaker || fallbackSpeaker) }))
+          : [{ start: 0, end: 0, text: result.transcript, source, speaker: fallbackSpeaker }];
+        tracks.push({ source, result, segments });
+      } catch (error) {
+        tracks.push({ source, error: error instanceof Error ? error.message : "Transcription failed", segments: [] });
+      }
+    }
+    const segments = tracks.flatMap((track) => track.segments).sort((left, right) => left.start - right.start || left.end - right.end);
+    const speakers = [...new Set(segments.map((segment) => segment.speaker).filter(Boolean))];
+    const transcript = [];
+    for (const segment of segments) {
+      const previous = transcript.at(-1);
+      if (previous?.speaker === segment.speaker) previous.text += ` ${segment.text}`;
+      else transcript.push({ speaker: segment.speaker || "Speaker", text: segment.text });
+    }
+    const warnings = [capture.warning, ...tracks.map((track) => track.error || track.result?.warning)].filter(Boolean);
+    const transcriptionReady = transcript.length > 0;
+    const response = {
+      ok: true,
+      capture: {
+        id: capture.id,
+        status: capture.state,
+        warning: capture.warning || null,
+        audioUrl: `/api/meetings/capture/${capture.id}/audio`,
+        jobId: capture.jobId,
+        candidateId: capture.candidateId,
+      },
+      transcription: {
+        status: transcriptionReady ? "ready" : "failed",
+        source: "workbench_native",
+        model: tracks.find((track) => track.result?.model)?.result.model || null,
+        warning: warnings.join(" ") || null,
+      },
+      transcript: transcript.map((turn) => `${turn.speaker}: ${turn.text}`).join("\n"),
+      segments,
+      speakers,
+    };
+    await captureManager.saveFinalizedResponse?.(id, ownerId, response);
+    return response;
+  }
+  function serializedFinalization(id, ownerId) {
+    const now = Date.now();
+    for (const [key, entry] of captureFinalizations) {
+      if (entry.expiresAt <= now) captureFinalizations.delete(key);
+    }
+    const key = `${ownerId}:${id}`;
+    const existing = captureFinalizations.get(key);
+    if (existing) return existing.promise;
+    const promise = finalizeCapture(id, ownerId).catch((error) => {
+      captureFinalizations.delete(key);
+      throw error;
+    });
+    captureFinalizations.set(key, { promise, expiresAt: now + 15 * 60_000 });
+    while (captureFinalizations.size > 100) captureFinalizations.delete(captureFinalizations.keys().next().value);
+    return promise;
+  }
+  app.post("/api/meetings/capture/:id/stop", authoritativeGoogleSession, async (req, res) => {
+    try {
+      return res.json(await serializedFinalization(req.params.id, req.workbenchSession.user.id));
+    } catch (error) {
+      return respondError(res, "CAPTURE_STOP_FAILED", error instanceof Error ? error.message : "Native capture could not stop", 502);
+    }
+  });
+  app.get("/api/meetings/capture/:id/audio", authoritativeGoogleSession, async (req, res) => {
+    try {
+      const audio = await captureManager.audioInfo(req.params.id, String(req.query.source || "mixed"), req.workbenchSession.user.id);
+      const range = parseByteRange(req.get("range"), audio.size);
+      res.set({
+        "Accept-Ranges": "bytes",
+        "Cache-Control": "private, no-store",
+        "Content-Type": audio.contentType,
+        "Content-Disposition": 'inline; filename="meeting-recording.wav"',
+      });
+      if (range) {
+        res.status(206).set({ "Content-Range": `bytes ${range.start}-${range.end}/${audio.size}`, "Content-Length": String(range.end - range.start + 1) });
+        return audio.stream(range).pipe(res);
+      }
+      res.set("Content-Length", String(audio.size));
+      return audio.stream().pipe(res);
+    } catch (error) {
+      const status = /range/i.test(error?.message || "") ? 416 : 404;
+      return respondError(res, "CAPTURE_AUDIO_UNAVAILABLE", "Capture audio is unavailable", status);
     }
   });
   const googleWorkspace = googleWorkspaceConfig ?? createGoogleWorkspaceHandlers({ env, auth: configuredAuth, ...googleWorkspaceOptions });

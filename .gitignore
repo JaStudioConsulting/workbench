@@ -8,6 +8,8 @@ coverage/
 .wrangler/
 *.log
 .DS_Store
+native/bin/
+native/support/
 
 # Locally installed skills (reproducible from skills-lock.json)
 .agents/skills/

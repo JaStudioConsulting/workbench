@@ -133,17 +133,25 @@ export async function loadClientCompanies({ client = supabase } = {}) {
   return groupTrackerJobs(data || []);
 }
 
-export async function listLeads({ client = supabase, storage = browserStorage() } = {}) {
+export async function loadLeadsWithStatus({ client = supabase, storage = browserStorage() } = {}) {
   const user = await currentUser(client);
-  if (!user) return readLocal(storage);
+  if (!user) {
+    return { leads: readLocal(storage), storage: "local", signedIn: false, reason: "signed_out" };
+  }
   const { data, error } = await client
     .from("leads")
     .select("id,company,contact,role,status,next_action,next_date,notes,created_at,updated_at")
     .eq("owner_id", user.id)
     .order("updated_at", { ascending: false });
-  if (isMissingTable(error)) return readLocal(storage);
+  if (isMissingTable(error)) {
+    return { leads: readLocal(storage), storage: "local", signedIn: true, reason: "table_missing" };
+  }
   if (error) throw new Error("My leads could not be loaded");
-  return (data || []).map(fromLeadRow);
+  return { leads: (data || []).map(fromLeadRow), storage: "supabase", signedIn: true, reason: "" };
+}
+
+export async function listLeads(options = {}) {
+  return (await loadLeadsWithStatus(options)).leads;
 }
 
 export async function saveLead(value, { client = supabase, storage = browserStorage() } = {}) {

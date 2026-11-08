@@ -19,7 +19,7 @@ function withinDateRange(value, start, end) {
   return (!start || day >= start) && (!end || day <= end);
 }
 
-export default function PeopleView({ candidates, currentJob, jobs, submissionHistory, onSelectCandidateToSwipe, onMarkSubmitted }) {
+export default function PeopleView({ candidates, currentJob, jobs, submissionHistory, onSelectCandidateToSwipe, onMarkSubmitted, onStartCandidateCall }) {
   const [viewFilter, setViewFilter] = useState("all");
   const [searchTerm, setSearchTerm] = useState("");
   const [stageFilter, setStageFilter] = useState("ALL");
@@ -196,7 +196,7 @@ export default function PeopleView({ candidates, currentJob, jobs, submissionHis
                         <><span className="mr-auto flex items-center gap-1.5 text-xs text-amber-900"><ShieldAlert size={13} />{ownership.latest.actor} contacted them within six months.</span><Button type="button" size="sm" variant="outline" className="h-8 text-xs" onClick={() => overrideOwnership(candidate.id)}>Reach out anyway</Button></>
                       ) : (
                         <>
-                          <a href={candidate.phone ? `tel:${candidate.phone.replace(/\s/g, "")}` : undefined} aria-disabled={!candidate.phone} className={`inline-flex h-8 items-center rounded-md border bg-background px-3 text-xs font-semibold ${!candidate.phone ? "pointer-events-none opacity-50" : "hover:bg-muted"}`}><Phone size={13} className="mr-1.5" />Call</a>
+                          <button type="button" disabled={!candidate.phone} onClick={() => onStartCandidateCall?.({ job: currentJob, candidate })} className="inline-flex h-8 items-center rounded-md border bg-background px-3 text-xs font-semibold hover:bg-muted disabled:pointer-events-none disabled:opacity-50"><Phone size={13} className="mr-1.5" />Call</button>
                           <Button type="button" size="sm" variant="outline" className="h-8 text-xs" onClick={() => brandResume(candidate)}><FileText size={13} className="mr-1.5" />Brand resume</Button>
                           <Button type="button" size="sm" variant="outline" className="h-8 text-xs" onClick={() => setWriteUpCandidate(candidate)}><NotebookText size={13} className="mr-1.5" />Write-up</Button>
                           <Button type="button" size="sm" variant="outline" className="h-8 text-xs" onClick={() => setOutreachCandidate(candidate)}><Mail size={13} className="mr-1.5" />Outreach</Button>

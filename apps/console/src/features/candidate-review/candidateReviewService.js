@@ -38,7 +38,7 @@ function displayDate(value) {
   return date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
 
-function mapLiveCandidate(row, actions = []) {
+export function mapLiveCandidate(row, actions = []) {
   const decision = actions.find((item) => item.action_type === "decision")?.decision || null;
   const activityTrail = actions
     .filter((item) => item.action_type === "activity")
@@ -54,17 +54,6 @@ function mapLiveCandidate(row, actions = []) {
       targetStage: item.target_stage || "No automatic stage change",
     }));
 
-  const sourceSummary = row.profile_summary || row.fit_evidence || "";
-  const workHistory = sourceSummary
-    ? [{
-        id: `source-${row.candidate_source}-${row.candidate_source_id}`,
-        title: row.current_title || "Source profile",
-        company: row.current_company || "Company not recorded",
-        location: row.location || "Location not recorded",
-        dates: "Source record",
-        bullets: [sourceSummary],
-      }]
-    : [];
   const resumeText = row.resume_text || "";
 
   return {
@@ -83,7 +72,7 @@ function mapLiveCandidate(row, actions = []) {
     stage: row.stage || "Needs checking",
     resumeStatus: resumeText ? "resume_on_file" : row.profile_url ? "profile_only" : "no_resume_data",
     fullResumeText: resumeText,
-    workHistory,
+    workHistory: [],
     education: [],
     skills: [],
     certifications: [],

@@ -5,6 +5,7 @@ import { transformWithEsbuild } from "vite";
 import { evaluateFit, personalizeOutreach } from "../src/features/pipeline/aiClient.js";
 import { scoreFit } from "../src/features/pipeline/fitScore.js";
 import { isInCanada, province } from "../src/features/pipeline/location.js";
+import { resolvePendingStage } from "../src/features/pipeline/pendingStage.js";
 
 test("Canada location matching uses province, territory, city, and country tokens", () => {
   assert.equal(isInCanada("Toronto, ON"), true);
@@ -74,6 +75,20 @@ test("FitBadge contract exposes rules evidence and deep AI check", async () => {
   assert.match(source, /AI check/);
 });
 
+test("pending stage moves are rebuilt from the persisted activity trail", () => {
+  const candidate = {
+    id: "sourcing:42",
+    activityTrail: [
+      { status: "Saved", targetStage: "Interview" },
+      { status: "Waiting for Loxo", targetStage: "Screening" },
+    ],
+  };
+  assert.equal(resolvePendingStage(candidate), "Screening");
+  assert.equal(resolvePendingStage({ id: "a", activityTrail: [] }, { a: "Interview" }), "Interview");
+  assert.equal(resolvePendingStage({ id: "b", activityTrail: [{ status: "Waiting for Loxo", targetStage: "Unsupported" }] }), null);
+  assert.equal(resolvePendingStage({ id: "c" }), null);
+});
+
 test("Pipeline page loads live data, queues exact stage notes, and compiles", async () => {
   const source = await readFile(new URL("../src/features/pipeline/PipelinePage.jsx", import.meta.url), "utf8");
   assert.match(source, /loadLiveReviewJobs/);
@@ -82,6 +97,7 @@ test("Pipeline page loads live data, queues exact stage notes, and compiles", as
   assert.match(source, /type: "\*Note"/);
   assert.match(source, /Stage move: \$\{from\} to \$\{to\}/);
   assert.match(source, /Waiting for Loxo/);
+  assert.match(source, /resolvePendingStage/);
   assert.match(source, /DragDropProvider/);
   assert.match(source, /onOpenCandidate\?\.\(job\.id, candidate\.id\)/);
   assert.match(source, /Move \$\{candidate\.name\} to stage/);

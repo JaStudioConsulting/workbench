@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useState } from "react";
 import { Building2, ExternalLink, Pencil, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { Button } from "../../components/ui/button.tsx";
+import { Badge } from "../../components/ui/badge.tsx";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../components/ui/card.tsx";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "../../components/ui/dialog.tsx";
 import { Input } from "../../components/ui/input.tsx";
 import { Label } from "../../components/ui/label.tsx";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../../components/ui/table.tsx";
 import { Textarea } from "../../components/ui/textarea.tsx";
-import { deleteLead, listLeads, loadClientCompanies, saveLead } from "./leadsService.js";
+import { deleteLead, loadClientCompanies, loadLeadsWithStatus, saveLead } from "./leadsService.js";
 
 const EMPTY_LEAD = Object.freeze({ company: "", contact: "", role: "", status: "", nextAction: "", nextDate: "", notes: "" });
 
@@ -35,7 +36,7 @@ function LeadForm({ value, onChange }) {
 }
 
 export default function LeadsPage() {
-  const [state, setState] = useState({ phase: "loading", companies: [], leads: [], error: "" });
+  const [state, setState] = useState({ phase: "loading", companies: [], leads: [], leadsStorage: null, error: "" });
   const [reloadKey, setReloadKey] = useState(0);
   const [editing, setEditing] = useState(null);
   const [saving, setSaving] = useState(false);
@@ -45,9 +46,9 @@ export default function LeadsPage() {
   useEffect(() => {
     let active = true;
     setState((current) => ({ ...current, phase: "loading", error: "" }));
-    Promise.all([loadClientCompanies(), listLeads()])
-      .then(([companies, leads]) => { if (active) setState({ phase: "ready", companies, leads, error: "" }); })
-      .catch(() => { if (active) setState({ phase: "error", companies: [], leads: [], error: "Leads could not be loaded." }); });
+    Promise.all([loadClientCompanies(), loadLeadsWithStatus()])
+      .then(([companies, leadsResult]) => { if (active) setState({ phase: "ready", companies, leads: leadsResult.leads, leadsStorage: leadsResult, error: "" }); })
+      .catch(() => { if (active) setState({ phase: "error", companies: [], leads: [], leadsStorage: null, error: "Leads could not be loaded." }); });
     return () => { active = false; };
   }, [reloadKey]);
 
@@ -80,6 +81,15 @@ export default function LeadsPage() {
   if (state.phase === "loading") return <section className="rounded-xl border p-6" role="status">Loading leads...</section>;
   if (state.phase === "error") return <section className="rounded-xl border p-6" role="alert"><p>{state.error}</p><Button className="mt-4" variant="outline" onClick={load}><RefreshCw /> Retry</Button></section>;
 
+  const storageState = state.leadsStorage;
+  const storageLabel = !storageState
+    ? ""
+    : storageState.storage === "supabase"
+      ? "Synced to Supabase"
+      : storageState.signedIn
+        ? "Saved locally - leads table unavailable"
+        : "Saved on this device only - sign in to sync";
+
   return (
     <div className="flex flex-col gap-6" data-testid="leads-page">
       {state.error ? <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm" role="alert">{state.error}</div> : null}
@@ -98,7 +108,7 @@ export default function LeadsPage() {
       </section>
 
       <section aria-labelledby="my-leads-title">
-        <div className="mb-3 flex flex-wrap items-end justify-between gap-3"><div><h2 id="my-leads-title" className="text-lg font-semibold">My leads</h2><p className="text-sm text-muted-foreground">Business development leads you add and maintain.</p></div><Button onClick={openNew}><Plus /> Add lead</Button></div>
+        <div className="mb-3 flex flex-wrap items-end justify-between gap-3"><div><div className="flex flex-wrap items-center gap-2"><h2 id="my-leads-title" className="text-lg font-semibold">My leads</h2>{storageLabel ? <Badge variant="outline" className={storageState.storage === "supabase" ? "" : "border-amber-700/30 bg-amber-50 text-amber-900"}>{storageLabel}</Badge> : null}</div><p className="text-sm text-muted-foreground">Business development leads you add and maintain.</p></div><Button onClick={openNew}><Plus /> Add lead</Button></div>
         {state.leads.length === 0 ? <div className="rounded-xl border border-dashed p-8 text-center"><p className="font-medium">No leads added</p><p className="mt-1 text-sm text-muted-foreground">Add a lead when you have a real company or contact to track.</p></div> : (
           <div className="max-w-full overflow-x-auto rounded-xl border"><Table><TableHeader><TableRow><TableHead>Company</TableHead><TableHead>Contact</TableHead><TableHead>Status</TableHead><TableHead>Next action</TableHead><TableHead>Next date</TableHead><TableHead><span className="sr-only">Actions</span></TableHead></TableRow></TableHeader><TableBody>{state.leads.map((lead) => <TableRow key={lead.id}><TableCell><p className="font-medium">{lead.company}</p><p className="text-xs text-muted-foreground">{lead.role || "Role not on file"}</p></TableCell><TableCell>{lead.contact || "Not on file"}</TableCell><TableCell>{lead.status || "Not on file"}</TableCell><TableCell>{lead.nextAction || "Not on file"}</TableCell><TableCell>{formatDate(lead.nextDate)}</TableCell><TableCell><div className="flex justify-end gap-1"><Button variant="ghost" size="icon-sm" aria-label={`Edit ${lead.company}`} onClick={() => openExisting(lead)}><Pencil /></Button><Button variant="ghost" size="icon-sm" aria-label={`Delete ${lead.company}`} onClick={() => remove(lead)}><Trash2 /></Button></div></TableCell></TableRow>)}</TableBody></Table></div>
         )}

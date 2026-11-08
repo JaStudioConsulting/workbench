@@ -18,21 +18,62 @@ const resumeSectionSource = fs.readFileSync(
 );
 const viteSource = fs.readFileSync(path.join(consoleRoot, "vite.config.js"), "utf8");
 
-test("resume brander is a built Vite page with direct PDF export", () => {
+test("resume brander prints the edited paper instead of rebuilding a separate PDF layout", () => {
   assert.match(viteSource, /resumeBrander:/);
   assert.match(branderHtml, /src="\/src\/resume-brander-export\.js"/);
-  assert.match(branderHtml, /await window\.downloadBrandedResumePdf/);
-  assert.match(exporterSource, /pdfMake\.createPdf\(buildDocument\(data\)\)\.download/);
-  assert.match(exporterSource, /pageSize: "LETTER"/);
-  assert.match(exporterSource, /title: `\$\{data\.name \|\| "Candidate"\} - Top Tier Talent Group`/);
+  assert.match(branderHtml, /await window\.printBrandedResume\(\{ title: getPdfTitle\(\) \}\)/);
+  assert.match(exporterSource, /window\.print\(\)/);
+  assert.doesNotMatch(exporterSource, /pdfMake|buildDocument|pageSize/);
+  assert.doesNotMatch(branderHtml, /pdfMake|downloadBrandedResumePdf/);
+  assert.match(branderHtml, /@page\s*\{[\s\S]*?size:\s*Letter;/);
 });
 
-test("download uses a candidate-named PDF and print is fallback only", () => {
+test("download uses the candidate name in document.title so print names the PDF", () => {
   assert.match(branderHtml, /const filename = `\$\{getPdfTitle\(\)\}\.pdf`/);
-  assert.match(exporterSource, /download\(safeFilename\(filename\)\)/);
-  assert.match(branderHtml, /data: extractCandidateJson\(\), filename/);
-  assert.match(branderHtml, /catch \(error\)[\s\S]*window\.print\(\)/);
-  assert.doesNotMatch(branderHtml, /function downloadNamedPdf\(\) \{\s*syncTitleAndRules\(\);\s*window\.print\(\)/);
+  assert.match(branderHtml, /document\.title = title;/);
+  assert.match(branderHtml, /function getPdfTitle\(\)[\s\S]*?Top Tier Talent Group/);
+});
+
+test("source resume stays available in the editor and is excluded from print", () => {
+  assert.match(branderHtml, /id="sourcePanel"/);
+  assert.match(branderHtml, /id="sourceText"/);
+  assert.match(branderHtml, /@media print \{[\s\S]*?\.source-panel/);
+  assert.match(branderHtml, /sourceTextEl\.textContent = sourceText/);
+});
+
+test("print is labeled honestly and blocked until structured content exists", () => {
+  assert.match(branderHtml, />\s*Print \/ Save PDF\s*</);
+  assert.doesNotMatch(branderHtml, /Download PDF/);
+  assert.match(branderHtml, /id="incompleteNotice"/);
+  assert.match(branderHtml, /!paperHasStructuredContent\(\)/);
+  assert.match(branderHtml, /Boolean\(candNameEl\.textContent\.trim\(\)\)/);
+  assert.match(branderHtml, /Add the candidate name and source-backed resume content before printing/);
+  assert.match(branderHtml, /@media print \{[\s\S]*?\.incomplete-notice/);
+});
+
+test("display fallbacks never become candidate resume facts", () => {
+  const payload = buildBrandResumePayload({
+    name: "Unnamed candidate",
+    title: "Title not recorded",
+    fullResumeText: "Original source text",
+  });
+  assert.equal(payload.name, "");
+  assert.equal(payload.headline, "");
+  assert.equal(payload.sourceText, "Original source text");
+});
+
+test("mapped profile with resume text keeps the source out of printable experience", () => {
+  const source = getResumeSource({
+    name: "Candidate Name",
+    title: "Maintenance Manager",
+    profileSummary: "Summary from the source profile.",
+    fullResumeText: "Candidate Name\nMaintained conveyors at Example Manufacturing.",
+    workHistory: [],
+  });
+
+  assert.equal(source.payload.sourceText, "Candidate Name\nMaintained conveyors at Example Manufacturing.");
+  assert.deepEqual(source.payload.experience, []);
+  assert.deepEqual(source.payload.sections, []);
 });
 
 test("resume source preserves the source resume verbatim", () => {
@@ -42,6 +83,12 @@ test("resume source preserves the source resume verbatim", () => {
   assert.equal(source.kind, "resume");
   assert.equal(source.text, text);
   assert.deepEqual(source.usedSources, ["fullResumeText"]);
+});
+
+test("unstructured resume text stays out of printable sections", () => {
+  const source = getResumeSource({ name: "Candidate Name", fullResumeText: "Raw line one\nRaw line two" });
+  assert.equal(source.payload.sourceText, "Raw line one\nRaw line two");
+  assert.deepEqual(source.payload.sections, []);
 });
 
 test("resume source builds a profile only from available source fields", () => {
@@ -113,4 +160,10 @@ test("profile provenance appears only in the internal resume section", () => {
   assert.match(resumeSectionSource, /Sources used:/);
   assert.doesNotMatch(branderHtml, /Built from profile, no resume on file|Sources used:/);
   assert.doesNotMatch(exporterSource, /Built from profile, no resume on file|Sources used:/);
+});
+
+test("branded resume paper uses the real TTTG logo asset", () => {
+  assert.match(branderHtml, /src="\/assets\/tttg_logo\.png"/);
+  assert.match(branderHtml, /alt="Top Tier Talent Group"/);
+  assert.ok(fs.existsSync(path.join(consoleRoot, "public/assets/tttg_logo.png")));
 });

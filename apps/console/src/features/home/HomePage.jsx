@@ -66,7 +66,7 @@ export default function HomePage({ onNavigate = () => {}, recentMeetingsLoader }
       </div>
       <div className="grid gap-4 xl:grid-cols-2">
         <Card><CardHeader><CardTitle className="flex items-center gap-2 text-base"><CalendarDays size={17} />Today</CardTitle></CardHeader><CardContent><UpcomingCalendar /></CardContent></Card>
-        <WorkList title="Recent meetings" description="Saved meeting drafts." icon={Mail} items={meetings} empty="No recent meetings are available." onOpen={(item) => onNavigate("Meetings", item)} renderItem={(item) => <><strong>{item.title || "Untitled meeting"}</strong><span className="block text-xs text-muted-foreground">{item.createdAt ? new Date(item.createdAt).toLocaleString() : "Date not on file"}</span></>} />
+        <WorkList title="Recent meetings" description="Saved meeting drafts." icon={Mail} items={meetings} empty="No recent meetings are available." onOpen={(item) => onNavigate("Meetings", item)} renderItem={(item) => <><strong>{item.title || "Untitled meeting"}</strong><span className="block text-xs text-muted-foreground">{item.createdAt ? new Date(item.createdAt).toLocaleString() : "Date not on file"}</span>{item.persistence === "session_only" ? <span className="mt-1 inline-flex rounded-full border border-amber-400 bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-900">Session only - not synced</span> : null}</>} />
       </div>
     </div>
   );

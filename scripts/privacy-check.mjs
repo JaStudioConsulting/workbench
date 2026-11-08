@@ -1,9 +1,11 @@
 import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { createHash } from "node:crypto";
 
 const ignored = new Set([".git", "node_modules", "dist", "coverage", ".vercel", ".build", ".swiftpm"]);
 const forbiddenAssets = /\.(avif|gif|heic|jpe?g|pdf|png|svg|webp|docx|xlsx|csv)$/i;
+const approvedAssets = new Map([["apps/console/public/assets/tttg_logo.png", "ecad1061bb94c2a11d901b6a6b900d2411a3ce0874806307d3bc4dca7421f055"]]);
 const credentialFiles = new Set([".npmrc", ".netrc", ".pypirc", ".env"]);
 const unsafe = /(?:["']\/api\/(?:gmail\/send|loxo)|["'](?:gmail_send|candidate_submit|loxo_write|approval_decide|neo4j_write|external_delete)["'])/i;
 const selfPath = fileURLToPath(import.meta.url);
@@ -35,6 +37,8 @@ export async function validateRepository(root) {
     if (basename === "package-lock.json") findings.push(`${relative}: package-lock files are forbidden`);
     if (credentialFiles.has(basename)) findings.push(`${relative}: credential configuration files are forbidden`);
     if (forbiddenAssets.test(file)) {
+      const expectedHash = approvedAssets.get(relative.split(path.sep).join("/"));
+      if (expectedHash && createHash("sha256").update(await readFile(file)).digest("hex") === expectedHash) continue;
       findings.push(`${relative}: binary or data assets are forbidden in this clean repository`);
       continue;
     }

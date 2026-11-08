@@ -13,6 +13,7 @@ export default function SwipeView({
   onWant,
   onLogActivity,
   onSwitchToPeopleView,
+  onStartCandidateCall,
 }) {
   if (!candidates || candidates.length === 0) {
     return (
@@ -108,6 +109,7 @@ export default function SwipeView({
           candidate={currentCandidate}
           currentJob={currentJob}
           jobs={jobs}
+          onStartCandidateCall={onStartCandidateCall}
           onReject={async (id, reason) => {
             const result = await onReject(id, reason);
             if (result?.ok === false) return result;

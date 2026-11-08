@@ -80,7 +80,9 @@ test("every non-public API route requires Better Auth session", async () => {
   assert.equal((await request(noAuth, "GET", "/api/mcp/discovery")).status, 503);
   const app = await createApp({ env: testEnv, recruitmentContextLoader: testRecruitmentContext, authConfig: authenticated });
   assert.equal((await request(app, "GET", "/api/mcp/discovery")).status, 401);
+  assert.equal((await request(app, "GET", "/api/meetings/status")).status, 401);
   assert.equal((await request(app, "POST", "/api/meetings/transcribe", { rawBody: Buffer.from("audio"), headers: { "content-type": "audio/mp4" } })).status, 401);
+  assert.equal((await request(app, "POST", "/api/meetings/capture/start", { body: { jobId: "job-1", candidateId: "candidate-1" } })).status, 401);
   assert.equal((await request(app, "POST", "/mcp", { body: { jsonrpc: "2.0", id: 1, method: "initialize", params: {} } })).status, 401);
   assert.equal((await request(app, "GET", "/api/mcp/discovery", { headers: { authorization: "Bearer synthetic-unapproved" } })).status, 403);
   assert.equal((await request(app, "GET", "/api/mcp/discovery", { headers: { authorization: "Bearer synthetic-missing-email" } })).status, 403);
@@ -95,6 +97,7 @@ test("meeting transcription stays authenticated and uses the injected local adap
     env: testEnv,
     recruitmentContextLoader: testRecruitmentContext,
     authConfig: authenticated,
+    captureManager: { available: async () => false },
     transcriptionAdapter: {
       available: async () => true,
       transcribe: async (input) => {
@@ -112,6 +115,70 @@ test("meeting transcription stays authenticated and uses the injected local adap
   assert.equal(calls.length, 1);
   assert.equal(calls[0].contentType, "audio/mp4");
   assert.deepEqual(calls[0].audio, Buffer.from("synthetic-audio"));
+  const status = await request(app, "GET", "/api/meetings/status", {
+    headers: { authorization: "Bearer synthetic-review" },
+  });
+  assert.equal(status.status, 200);
+  assert.deepEqual(status.body, { available: true, enhanced: false, captureAvailable: false });
+});
+
+test("meeting status reports the enhancement flag without exposing runtime paths", async () => {
+  const app = await createApp({
+    env: { ...testEnv, WORKBENCH_NATIVE_MEETING_ENHANCEMENTS: "1" },
+    recruitmentContextLoader: testRecruitmentContext,
+    authConfig: authenticated,
+    captureManager: { available: async () => false },
+    transcriptionAdapter: { available: async () => true, transcribe: async () => ({ transcript: "Source words." }) },
+  });
+  const response = await request(app, "GET", "/api/meetings/status", {
+    headers: { authorization: "Bearer synthetic-review" },
+  });
+  assert.deepEqual(response.body, { available: true, enhanced: true, captureAvailable: false });
+  assert.doesNotMatch(JSON.stringify(response.body), /path|native\/bin/i);
+});
+
+test("native stop is owner-bound and finalizes plus transcribes only once", async () => {
+  let stops = 0;
+  let transcriptions = 0;
+  let saved = null;
+  const captureManager = {
+    initialize: async () => {},
+    available: async () => true,
+    start: async ({ jobId, candidateId }) => ({ id: "capture-1", state: "recording", jobId, candidateId, usedSystemAudio: true }),
+    stop: async () => { stops += 1; await new Promise((resolve) => setTimeout(resolve, 10)); return { id: "capture-1", state: "captured", jobId: "job-1", candidateId: "candidate-1", warning: null }; },
+    audioInfo: async (_id, source, ownerId) => {
+      assert.equal(ownerId, "synthetic-user");
+      return { path: `/private/${source}.wav` };
+    },
+    loadFinalizedResponse: async (_id, ownerId) => { assert.equal(ownerId, "synthetic-user"); return saved; },
+    saveFinalizedResponse: async (_id, ownerId, response) => { assert.equal(ownerId, "synthetic-user"); saved = response; },
+  };
+  const app = await createApp({
+    env: testEnv,
+    recruitmentContextLoader: testRecruitmentContext,
+    authConfig: authenticated,
+    captureManager,
+    transcriptionAdapter: {
+      available: async () => true,
+      transcribe: async () => ({ transcript: "unused" }),
+      transcribeFile: async ({ path }) => { transcriptions += 1; return { transcript: path.includes("microphone") ? "Hello" : "Hi", segments: [], model: "test" }; },
+    },
+  });
+  const headers = { authorization: "Bearer synthetic-review" };
+  const started = await request(app, "POST", "/api/meetings/capture/start", { headers, body: { jobId: "job-1", candidateId: "candidate-1" } });
+  assert.equal(started.status, 201);
+  const [first, second] = await Promise.all([
+    request(app, "POST", "/api/meetings/capture/capture-1/stop", { headers }),
+    request(app, "POST", "/api/meetings/capture/capture-1/stop", { headers }),
+  ]);
+  assert.equal(first.status, 200);
+  assert.deepEqual(second.body, first.body);
+  assert.equal(stops, 1);
+  assert.equal(transcriptions, 2);
+  const retried = await request(app, "POST", "/api/meetings/capture/capture-1/stop", { headers });
+  assert.deepEqual(retried.body, first.body);
+  assert.equal(stops, 1);
+  assert.equal(transcriptions, 2);
 });
 
 test("explicit local trusted mode bypasses login only for meeting transcription", async () => {

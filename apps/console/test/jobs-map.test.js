@@ -152,3 +152,17 @@ test("jobs-map feature codebase adheres to security, privacy, and zero-persisten
     assert.ok(item["Location"]);
   }
 });
+
+test("radius filtering excludes jobs without resolvable coordinates", () => {
+  const source = fs.readFileSync(path.join(featureRoot, "JobsMapView.jsx"), "utf8");
+  assert.match(source, /if \(job\.distance === null\) return false;/);
+  assert.match(source, /no resolvable location/);
+  assert.match(source, /excluded from the radius filter/);
+});
+
+test("job details expose a direct fit-review entry point", () => {
+  const source = fs.readFileSync(path.join(featureRoot, "JobsMapView.jsx"), "utf8");
+  assert.match(source, /onOpenJobReview/);
+  assert.match(source, /Review fit/);
+  assert.match(source, /aria-label="Close job details"/);
+});

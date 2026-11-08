@@ -39,19 +39,20 @@ function RevealField({ label, value, icon: Icon, mono }) {
   );
 }
 
-export default function ContactReveal({ candidate }) {
+export default function ContactReveal({ candidate, currentJob, onStartCandidateCall }) {
   const phone = String(candidate?.phone || "").trim();
   return (
     <div className="flex flex-wrap items-center gap-2" data-testid="contact-reveal">
       <RevealField label="Email" value={candidate?.email} icon={Mail} />
       <RevealField label="Number" value={phone} icon={Phone} mono />
       {phone ? (
-        <a
-          href={`tel:${phone.replace(/\s/g, "")}`}
+        <button
+          type="button"
+          onClick={() => onStartCandidateCall?.({ job: currentJob, candidate })}
           className="inline-flex h-7 items-center rounded-md border bg-background px-2.5 text-xs font-semibold hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           <Phone size={12} className="mr-1" /> Call
-        </a>
+        </button>
       ) : null}
     </div>
   );

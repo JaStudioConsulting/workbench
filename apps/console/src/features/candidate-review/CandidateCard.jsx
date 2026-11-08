@@ -26,6 +26,7 @@ export default function CandidateCard({
   onReject,
   onWant,
   onLogActivity,
+  onStartCandidateCall,
 }) {
   const [activeFit, setActiveFit] = useState(null);
   const [dragOffset, setDragOffset] = useState(0);
@@ -261,7 +262,7 @@ export default function CandidateCard({
               <MapPin size={12} /> {candidate.location}
             </span>
           )}
-          <ContactReveal candidate={candidate} />
+          <ContactReveal candidate={candidate} currentJob={currentJob} onStartCandidateCall={onStartCandidateCall} />
         </div>
       </div>
 

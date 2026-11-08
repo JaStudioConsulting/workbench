@@ -573,6 +573,63 @@
     content: "" !important;
   }
 
+  /* ================= SOURCE RESUME REFERENCE (EDITOR ONLY) ================= */
+  .incomplete-notice {
+    width: 816px;
+    max-width: 100%;
+    box-sizing: border-box;
+    margin: 14px auto 0 auto;
+    border: 1px solid #f0c36d;
+    border-radius: 8px;
+    background: #fff8e6;
+    color: #7a4b00;
+    padding: 10px 14px;
+    font: 12px/1.5 Arial, sans-serif;
+  }
+
+  .incomplete-notice strong {
+    display: block;
+    margin-bottom: 2px;
+  }
+
+  .source-panel {
+    width: 816px;
+    max-width: 100%;
+    box-sizing: border-box;
+    margin: 18px auto 40px auto;
+    border: 1px solid #d7dbe0;
+    border-radius: 8px;
+    background: #fafbfc;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
+  }
+
+  .source-panel summary {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
+    cursor: pointer;
+    font: 600 12px Arial, sans-serif;
+    color: #334155;
+  }
+
+  .source-panel pre {
+    margin: 0;
+    padding: 0 14px 14px 14px;
+    max-height: 320px;
+    overflow: auto;
+    white-space: pre-wrap;
+    word-break: break-word;
+    font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+    color: #1f2937;
+  }
+
+  .source-panel .source-note {
+    margin-left: auto;
+    font-weight: 500;
+    color: #64748b;
+  }
+
   /* ================= EXACT PDF PRINT RULES ================= */
   @page {
     size: Letter;
@@ -587,7 +644,12 @@
     .docs-ruler-bar,
     .inline-tools,
     .logo-lock-tag,
-    .toast {
+    .toast,
+    .incomplete-notice,
+    .source-panel,
+    #chrome-extension-pull-out-tab-host,
+    #chrome-extension-search-anywhere-popup-host,
+    .section-block[data-print-empty="true"] {
       display: none !important;
     }
     .docs-canvas {
@@ -645,7 +707,7 @@
         Copy JSON
       </button>
       <button class="btn btn-primary" type="button" onclick="downloadNamedPdf()">
-        ⬇ Download PDF
+        Print / Save PDF
       </button>
     </div>
   </div>
@@ -735,12 +797,25 @@
 
 <!-- ================= GOOGLE DOCS PAPER WORKSPACE (EMPTY TEMPLATE) ================= -->
 <main class="docs-canvas">
+  <div class="incomplete-notice" id="incompleteNotice" hidden>
+    <strong>Add resume content before printing.</strong>
+    <span>
+      Use the source resume below when available, then add verified experience, skills, education, or other details to the paper.
+      The source panel is excluded from the PDF.
+    </span>
+  </div>
   <div class="paper-zoom-wrap" id="paperZoomWrap">
     <article class="paper" id="resumePaper">
 
       <!-- PRESET CENTERED TTTG LOGO (LOCKED) -->
       <div class="logo-header" contenteditable="false">
-        <div class="logo-wordmark">TOP TIER TALENT GROUP</div>
+        <img
+          class="logo"
+          src="/assets/tttg_logo.png"
+          alt="Top Tier Talent Group"
+          onerror="this.style.display='none';this.nextElementSibling.style.display='block';"
+        />
+        <div class="logo-wordmark" style="display:none">TOP TIER TALENT GROUP</div>
         <span class="logo-lock-tag">🔒 Preset Logo</span>
       </div>
 
@@ -839,6 +914,16 @@
 
     </article>
   </div>
+
+  <!-- ORIGINAL SOURCE RESUME (EDITOR REFERENCE ONLY, NEVER PRINTED) -->
+  <details class="source-panel" id="sourcePanel" hidden>
+    <summary>
+      <span>Source resume on file</span>
+      <span class="source-note">Editor only - not printed</span>
+      <button class="mini-btn" type="button" id="copySourceBtn">Copy source</button>
+    </summary>
+    <pre id="sourceText"></pre>
+  </details>
 </main>
 
 <div id="toast" class="toast"></div>
@@ -871,6 +956,51 @@
     return `${rawName} - Top Tier Talent Group`;
   }
 
+  function paperHasStructuredContent() {
+    const hasExperience = Array.from(document.querySelectorAll("#experienceList .job")).some((job) => {
+      const heading = job.querySelector(".job-title")?.textContent.trim()
+        || job.querySelector(".job-company")?.textContent.trim();
+      const bullets = Array.from(job.querySelectorAll(".exp-bullets li"))
+        .some((li) => li.textContent.trim());
+      return Boolean(heading || bullets);
+    });
+    const hasSkills = Array.from(document.querySelectorAll("#skillsList li"))
+      .some((li) => li.textContent.trim());
+    const hasEducation = Array.from(document.querySelectorAll("#educationList .edu-item"))
+      .some((el) => el.textContent.trim());
+    const hasExtraSection = Array.from(document.querySelectorAll("#extraSections .extra-sec")).some((section) => {
+      const items = Array.from(section.querySelectorAll(".extra-items .edu-item"))
+        .some((el) => el.textContent.trim());
+      return items;
+    });
+    return Boolean(candNameEl.textContent.trim()) && (hasExperience || hasSkills || hasEducation || hasExtraSection);
+  }
+
+  function syncIncompleteNotice() {
+    const notice = document.getElementById("incompleteNotice");
+    if (!notice) return;
+    notice.hidden = paperHasStructuredContent();
+  }
+
+  function syncPrintSections() {
+    const hasText = (selector) => Array.from(document.querySelectorAll(selector))
+      .some((element) => element.textContent.trim());
+    const mark = (element, filled) => {
+      if (element) element.dataset.printEmpty = filled ? "false" : "true";
+    };
+    mark(document.getElementById("candSummary").closest(".section-block"), hasText("#candSummary"));
+    mark(document.getElementById("skillsList").closest(".section-block"), hasText("#skillsList li"));
+    mark(document.getElementById("experienceList").closest(".section-block"),
+      hasText("#experienceList .job-title, #experienceList .job-company, #experienceList .exp-bullets li"));
+    mark(document.getElementById("educationSection"), hasText("#educationList .edu-item"));
+    document.querySelectorAll("#extraSections .extra-sec").forEach((section) => {
+      mark(section, Array.from(section.querySelectorAll(".extra-items .edu-item"))
+        .some((element) => element.textContent.trim()));
+    });
+  }
+
+  window.addEventListener("beforeprint", syncPrintSections);
+
   function syncTitleAndRules() {
     const title = getPdfTitle();
     docFilenameEl.textContent = title;
@@ -889,6 +1019,9 @@
       guardPillEl.className = "guard-pill";
       guardPillEl.textContent = "✓ TTTG House Rules OK";
     }
+
+    syncIncompleteNotice();
+    syncPrintSections();
   }
 
   // ================= LIVE TOOLBAR STATE SYNC (LIKE GOOGLE DOCS) =================
@@ -1258,6 +1391,12 @@
     document.getElementById("candHeadline").textContent = data.headline || "";
     document.getElementById("candSummary").textContent = data.summary || "";
 
+    const sourcePanel = document.getElementById("sourcePanel");
+    const sourceTextEl = document.getElementById("sourceText");
+    const sourceText = typeof data.sourceText === "string" ? data.sourceText.trim() : "";
+    sourceTextEl.textContent = sourceText;
+    sourcePanel.hidden = !sourceText;
+
     const skillsUl = document.getElementById("skillsList");
     skillsUl.innerHTML = "";
     const skills = Array.isArray(data.skills) && data.skills.length ? data.skills : ["", "", "", "", "", ""];
@@ -1416,22 +1555,30 @@
 
   async function downloadNamedPdf() {
     syncTitleAndRules();
-    if (typeof window.downloadBrandedResumePdf !== "function") {
-      showToast("PDF download is loading. Try again.");
+    if (!paperHasStructuredContent()) {
+      showToast("Add the candidate name and source-backed resume content before printing.");
+      return;
+    }
+    if (typeof window.printBrandedResume !== "function") {
+      window.print();
       return;
     }
 
     const filename = `${getPdfTitle()}.pdf`;
-    try {
-      showToast("Building named PDF…");
-      await window.downloadBrandedResumePdf({ data: extractCandidateJson(), filename });
-      showToast(`Downloaded ${filename}`);
-    } catch (error) {
-      console.error("Direct PDF download failed", error);
-      showToast("Download failed. Opening print fallback.");
-      window.print();
-    }
+    showToast(`Opening print dialog for ${filename}`);
+    await window.printBrandedResume({ title: getPdfTitle() });
   }
+
+  document.getElementById("copySourceBtn").addEventListener("click", async (event) => {
+    event.preventDefault();
+    const text = document.getElementById("sourceText").textContent || "";
+    try {
+      await navigator.clipboard.writeText(text);
+      showToast("Copied source resume");
+    } catch {
+      showToast("Could not copy source resume");
+    }
+  });
 
   function showToast(msg) {
     const t = document.getElementById("toast");

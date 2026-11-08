@@ -59,7 +59,10 @@ public actor WorkbenchNativeTranscriber {
                 let windows = try await diarizationWindows(samples: samples)
                 let labels = WorkbenchSpeakerAttribution.labelMap(for: windows)
                 let words = buildWordTimings(from: timed.tokenTimings)
-                segments = groupedSegments(words: words, windows: windows, labels: labels)
+                let speechWords = words.map {
+                    WorkbenchSpeechSegment(start: $0.startTime, end: $0.endTime, text: $0.word, source: "mixed")
+                }
+                segments = WorkbenchSpeakerAttribution.attributedSegments(words: speechWords, windows: windows)
                 speakers = labels.values.sorted()
                 let labelled = WorkbenchTranscriptFormatter.labelled(segments)
                 if !labelled.isEmpty { transcript = labelled }
@@ -97,42 +100,6 @@ public actor WorkbenchNativeTranscriber {
                 end: Double($0.endTimeSeconds)
             )
         }
-    }
-
-    private func groupedSegments(
-        words: [WordTiming],
-        windows: [WorkbenchSpeakerWindow],
-        labels: [String: String]
-    ) -> [WorkbenchSpeechSegment] {
-        var result: [WorkbenchSpeechSegment] = []
-        for word in words {
-            let raw = WorkbenchSpeechSegment(
-                start: word.startTime,
-                end: word.endTime,
-                text: word.word,
-                source: "mixed"
-            )
-            let speakerID = WorkbenchSpeakerAttribution.speaker(for: raw, windows: windows)
-            let speaker = speakerID.flatMap { labels[$0] } ?? "Others"
-            if let previous = result.last, previous.speaker == speaker, word.startTime - previous.end < 1.25 {
-                result[result.count - 1] = WorkbenchSpeechSegment(
-                    start: previous.start,
-                    end: word.endTime,
-                    text: "\(previous.text) \(word.word)",
-                    speaker: speaker,
-                    source: "mixed"
-                )
-            } else {
-                result.append(WorkbenchSpeechSegment(
-                    start: word.startTime,
-                    end: word.endTime,
-                    text: word.word,
-                    speaker: speaker,
-                    source: "mixed"
-                ))
-            }
-        }
-        return result
     }
 
     private func loadedManager(progress: @Sendable (String) -> Void) async throws -> UnifiedAsrManager {

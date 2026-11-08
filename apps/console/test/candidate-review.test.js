@@ -21,6 +21,7 @@ import {
   recordCandidateSubmission,
   logCandidateActivity,
   makeCompositeKey,
+  mapLiveCandidate,
   _resetStoreForTesting,
 } from "../src/features/candidate-review/candidateReviewService.js";
 import { SAMPLE_CANDIDATES, SAMPLE_JOBS } from "../src/features/candidate-review/sampleReviewData.js";
@@ -342,6 +343,8 @@ test("people view exposes fast queues and wanted actions while swipe stays unrev
   assert.match(peopleSource, /data-testid="people-search"/);
   assert.match(peopleSource, /data-testid="wanted-actions"/);
   assert.match(peopleSource, />Call</);
+  assert.match(peopleSource, /onStartCandidateCall/);
+  assert.doesNotMatch(peopleSource, /href=\{candidate\.phone \? `tel:/);
   assert.match(peopleSource, />Brand resume</);
   assert.match(peopleSource, />Write-up</);
   assert.match(peopleSource, /Mark submitted/);
@@ -591,4 +594,30 @@ test("card wires the new pieces and drops the old no-resume message", () => {
   const externals = fs.readFileSync(path.join(featureDir, "externals.js"), "utf8");
   assert.match(externals, /pipeline\/location\.js/);
   assert.match(externals, /mail\/mailClient\.js/);
+});
+
+test("candidate review labels sample data instead of claiming a live connection", () => {
+  const source = fs.readFileSync(path.join(featureDir, "CandidateReview.jsx"), "utf8");
+  assert.match(source, /Sample data only - sign in for live candidates/);
+  assert.match(source, /isSampleData\(\)/);
+});
+
+test("live mapper keeps profile evidence in its own fields and invents no job history", () => {
+  const candidate = mapLiveCandidate({
+    candidate_source: "sourcing",
+    candidate_source_id: 42,
+    candidate_key: "sourcing_42",
+    job_id: 7,
+    candidate_name: "Real Candidate",
+    current_title: "Maintenance Manager",
+    profile_summary: "Summary from the source profile.",
+    fit_evidence: "Fit evidence from the source profile.",
+    resume_text: "Full resume text on file.",
+    stage: "Needs checking",
+  });
+
+  assert.deepEqual(candidate.workHistory, []);
+  assert.equal(candidate.profileSummary, "Summary from the source profile.");
+  assert.equal(candidate.fitEvidence, "Fit evidence from the source profile.");
+  assert.equal(candidate.fullResumeText, "Full resume text on file.");
 });

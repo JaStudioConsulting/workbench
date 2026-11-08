@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, rm, symlink, writeFile } from "node:fs/promises";
+import { copyFile, mkdtemp, mkdir, rm, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 import { validateRepository } from "./privacy-check.mjs";
 
 test("privacy validator rejects symlinks, credential config, and data assets", async () => {
@@ -27,5 +28,20 @@ test("privacy validator ignores generated Swift build trees", async () => {
     await mkdir(swiftBuild, { recursive: true });
     await writeFile(path.join(swiftBuild, "machine.bin"), Buffer.from([0, 1, 2, 3]));
     assert.deepEqual(await validateRepository(fixture), []);
+  } finally { await rm(fixture, { recursive: true, force: true }); }
+});
+
+test("only the exact approved logo path and hash bypass the asset restriction", async () => {
+  const fixture = await mkdtemp(path.join(os.tmpdir(), "workbench-logo-"));
+  try {
+    const assets = path.join(fixture, "apps/console/public/assets");
+    await mkdir(assets, { recursive: true });
+    const logo = path.join(assets, "tttg_logo.png");
+    await copyFile(fileURLToPath(new URL("../apps/console/public/assets/tttg_logo.png", import.meta.url)), logo);
+    assert.deepEqual(await validateRepository(fixture), []);
+    await copyFile(logo, path.join(assets, "other.png"));
+    await writeFile(logo, "changed");
+    const findings = await validateRepository(fixture);
+    assert.equal(findings.filter((item) => item.includes("binary or data assets are forbidden")).length, 2);
   } finally { await rm(fixture, { recursive: true, force: true }); }
 });

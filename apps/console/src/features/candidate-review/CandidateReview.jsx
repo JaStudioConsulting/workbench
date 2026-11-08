@@ -19,7 +19,7 @@ import {
   loadLiveCandidatesForJob,
 } from "./candidateReviewService.js";
 
-export default function CandidateReview({ selectedJob, onSelectJob, onNavigateJobsMap, initialView = "swipe", focusCandidateId = "" }) {
+export default function CandidateReview({ selectedJob, onSelectJob, onNavigateJobsMap, onStartCandidateCall, initialView = "swipe", focusCandidateId = "" }) {
   const [jobs, setJobs] = useState([]);
   const [dataLoading, setDataLoading] = useState(true);
   const [dataError, setDataError] = useState("");
@@ -148,10 +148,12 @@ export default function CandidateReview({ selectedJob, onSelectJob, onNavigateJo
   const submissionHistory = useMemo(() => getSubmissionHistory(), [refreshKey]);
 
   const supabaseStatus = dataLoading
-    ? "Loading Supabase"
+    ? "Loading live data"
     : dataError
       ? "Supabase unavailable"
-      : "Connected to Supabase";
+      : isSampleData()
+        ? "Sample data only - sign in for live candidates"
+        : "Connected to Supabase";
 
   const handleJobChange = (newJobId) => {
     setActiveJobId(newJobId);
@@ -404,6 +406,7 @@ export default function CandidateReview({ selectedJob, onSelectJob, onNavigateJo
               onWant={handleWant}
               onLogActivity={handleLogActivity}
               onSwitchToPeopleView={() => setActiveView("people")}
+              onStartCandidateCall={onStartCandidateCall}
             />
           ) : (
             <PeopleView
@@ -413,6 +416,7 @@ export default function CandidateReview({ selectedJob, onSelectJob, onNavigateJo
               submissionHistory={submissionHistory}
               onSelectCandidateToSwipe={handleSelectCandidateToSwipe}
               onMarkSubmitted={handleMarkSubmitted}
+              onStartCandidateCall={onStartCandidateCall}
             />
           )}
         </div>

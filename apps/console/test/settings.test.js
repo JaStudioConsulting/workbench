@@ -22,3 +22,13 @@ test("settings status stays honest when optional services are unavailable", asyn
   assert.equal(status.meetings.available, false);
   assert.match(status.loxo.label, /Queued mode/);
 });
+
+test("settings reports the installed meeting helper through its explicit loader", async () => {
+  const client = { auth: { async getSession() { return { data: { session: {} }, error: null }; } } };
+  const request = async (url) => String(url).includes("/api/mail/status")
+    ? { ok: true, async json() { return { connected: false, canRead: false, canDraft: false }; } }
+    : { ok: false, async json() { return {}; } };
+  const status = await loadSettingsStatus({ client, request, meetingsStatusLoader: async () => ({ available: true, enhanced: true, captureAvailable: false }) });
+  assert.equal(status.meetings.available, true);
+  assert.equal(status.meetings.label, "M1 transcription available; recording uses this device's microphone");
+});

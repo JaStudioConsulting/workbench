@@ -1,7 +1,9 @@
-import { lazy, Suspense, useState } from "react";
+import { lazy, Suspense, useRef, useState } from "react";
 import { Briefcase, CalendarDays, Columns3, Contact, GitBranch, Home, Mail, Settings, UserCheck, UserRound, Users } from "lucide-react";
 import { SidebarProvider, Sidebar, SidebarHeader, SidebarContent, SidebarGroup, SidebarGroupLabel, SidebarGroupContent, SidebarMenu, SidebarMenuItem, SidebarMenuButton, SidebarInset, SidebarTrigger } from "./components/ui/sidebar.tsx";
 import { Skeleton } from "./components/ui/skeleton.tsx";
+import { startCandidateCallSession } from "./features/meetings/candidateCallSession.js";
+import { getMeetingStatus } from "./features/meetings/meetingGatewayClient.js";
 
 const ContextPicker = lazy(() => import("./ContextPicker.jsx"));
 const EmptyWorkspace = lazy(() => import("./EmptyWorkspace.jsx"));
@@ -22,7 +24,7 @@ const loadRecentMeetings = () => import("./features/meetings/meetingStore.js").t
 
 function PanelFallback() { return <div className="min-h-[520px] rounded-lg border p-6" role="status" aria-label="Loading workspace"><Skeleton className="h-6 w-48" /><Skeleton className="mt-4 h-24 w-full" /></div>; }
 
-function NavGroup({ label, items, page, onSelect }) {
+function NavGroup({ label, items, page, onSelect, recordingLocked = false }) {
   return (
     <SidebarGroup>
       <SidebarGroupLabel>{label}</SidebarGroupLabel>
@@ -30,7 +32,7 @@ function NavGroup({ label, items, page, onSelect }) {
         <SidebarMenu>
           {items.map(([name, Icon]) => (
             <SidebarMenuItem key={name}>
-              <SidebarMenuButton isActive={page === name} onClick={() => onSelect(name)}><Icon /><span>{name}</span></SidebarMenuButton>
+              <SidebarMenuButton isActive={page === name} disabled={recordingLocked && name !== "Meetings"} title={recordingLocked && name !== "Meetings" ? "Stop the active recording before leaving Meetings" : undefined} onClick={() => onSelect(name)}><Icon /><span>{name}</span></SidebarMenuButton>
             </SidebarMenuItem>
           ))}
         </SidebarMenu>
@@ -44,8 +46,12 @@ export default function App() {
   const [context, setContext] = useState("Independent recruiting");
   const [recruiting, setRecruiting] = useState(null);
   const [focusCandidateId, setFocusCandidateId] = useState("");
+  const [meetingLaunch, setMeetingLaunch] = useState(null);
+  const callStartRef = useRef(false);
+  const recordingLocked = ["starting", "recording", "finalizing"].includes(meetingLaunch?.phase);
 
   const selectPage = (next) => {
+    if (recordingLocked && next !== "Meetings") return;
     setFocusCandidateId("");
     setPage(next);
   };
@@ -57,10 +63,47 @@ export default function App() {
     setPage("Candidate Review");
   };
 
+  const startCandidateCall = async ({ job, candidate }) => {
+    if (callStartRef.current) return;
+    callStartRef.current = true;
+    const pending = { job, candidate, source: "candidate_call", phase: "starting", error: "" };
+    setMeetingLaunch(pending);
+    setPage("Meetings");
+    try {
+      const session = await startCandidateCallSession({ job, candidate });
+      setMeetingLaunch(session);
+    } catch (error) {
+      callStartRef.current = false;
+      setMeetingLaunch({ ...pending, phase: "error", error: error.message || "The recorded call could not start." });
+    }
+  };
+
+  const updateMeetingLaunch = (patch) => {
+    if (patch?.phase && !["starting", "recording"].includes(patch.phase)) callStartRef.current = false;
+    setMeetingLaunch((current) => ({ ...(current || { source: "meeting" }), ...patch }));
+  };
+
+  const openJobReview = (job) => {
+    setRecruiting((current) => ({ ...(current || {}), job }));
+    setFocusCandidateId("");
+    setPage("Candidate Review");
+  };
+
   const navigateFromHome = (next, item) => {
     const jobId = item?.job_id ?? item?.jobId;
     const personId = item?.person_id ?? item?.personId;
     if (next === "Candidate Review" && jobId) return openCandidate(jobId, personId);
+    if (next === "Meetings" && item?.id) {
+      setMeetingLaunch({
+        phase: "saved",
+        source: "recent_meeting",
+        meeting: item,
+        job: { id: item.jobId },
+        candidate: { id: item.candidateId },
+      });
+      setPage("Meetings");
+      return undefined;
+    }
     selectPage(next);
   };
 
@@ -69,15 +112,15 @@ export default function App() {
       case "Home": return <HomePage onNavigate={navigateFromHome} recentMeetingsLoader={loadRecentMeetings} />;
       case "Candidates":
       case "Candidate Review":
-        return <CandidateReview key={page} initialView={page === "Candidates" ? "people" : "swipe"} selectedJob={recruiting?.job} focusCandidateId={page === "Candidate Review" ? focusCandidateId : ""} onSelectJob={(job) => setRecruiting((prev) => ({ ...(prev || {}), job }))} onNavigateJobsMap={() => selectPage("Jobs")} />;
+        return <CandidateReview key={page} initialView={page === "Candidates" ? "people" : "swipe"} selectedJob={recruiting?.job} focusCandidateId={page === "Candidate Review" ? focusCandidateId : ""} onSelectJob={(job) => setRecruiting((prev) => ({ ...(prev || {}), job }))} onNavigateJobsMap={() => selectPage("Jobs")} onStartCandidateCall={startCandidateCall} />;
       case "Pipeline": return <PipelinePage onOpenCandidate={openCandidate} />;
       case "Leads": return <LeadsPage />;
       case "Jobs":
       case "Process":
-        return <RecruitingWorkspace page={page} value={recruiting} onChange={setRecruiting} />;
-      case "Meetings": return <MeetingsWorkspace />;
+        return <RecruitingWorkspace page={page} value={recruiting} onChange={setRecruiting} onOpenJobReview={openJobReview} />;
+      case "Meetings": return <MeetingsWorkspace launchContext={meetingLaunch} onLaunchChange={updateMeetingLaunch} />;
       case "Mail": return <MailPage />;
-      case "Settings": return <SettingsPage />;
+      case "Settings": return <SettingsPage meetingsStatusLoader={getMeetingStatus} />;
       case "Profile": return <ProfilePage />;
       default: return <EmptyWorkspace page={page} />;
     }
@@ -88,8 +131,8 @@ export default function App() {
       <Sidebar>
         <SidebarHeader><div className="px-2 py-3 text-lg font-semibold">JA <span className="text-muted-foreground">Workbench</span></div></SidebarHeader>
         <SidebarContent>
-          <NavGroup label="Work areas" items={workAreas} page={page} onSelect={selectPage} />
-          <NavGroup label="Supporting" items={supporting} page={page} onSelect={selectPage} />
+          <NavGroup label="Work areas" items={workAreas} page={page} onSelect={selectPage} recordingLocked={recordingLocked} />
+          <NavGroup label="Supporting" items={supporting} page={page} onSelect={selectPage} recordingLocked={recordingLocked} />
         </SidebarContent>
       </Sidebar>
       <SidebarInset className="min-w-0">

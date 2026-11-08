@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Briefcase, Copy, Check, MapPin, RefreshCw, Search, SlidersHorizontal, ArrowRight, ShieldCheck, X } from "lucide-react";
+import { Briefcase, Copy, Check, MapPin, RefreshCw, Search, SlidersHorizontal, ArrowRight, ShieldCheck, X, CircleDollarSign, UserRoundSearch } from "lucide-react";
 import { Badge } from "../../components/ui/badge.tsx";
 import { Button } from "../../components/ui/button.tsx";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../components/ui/card.tsx";
@@ -14,7 +14,7 @@ import { supabase } from "../../supabase-client.js";
 const DEFAULT_CENTER = [43.6532, -79.3832]; // Toronto, ON
 const DEFAULT_ZOOM = 10;
 
-export default function JobsMapView({ onSelectJobForWorkflow }) {
+export default function JobsMapView({ onSelectJobForWorkflow, onOpenJobReview }) {
   const [jobs, setJobs] = useState([]);
   const [loading, setLoading] = useState(false);
   const [dataSource, setDataSource] = useState("loading"); // "live" | "unavailable"
@@ -211,7 +211,10 @@ export default function JobsMapView({ onSelectJobForWorkflow }) {
           if (!owners.includes(selectedOwner)) return false;
         }
 
-        if (searchCoords && maxRadius !== "ALL" && job.distance !== null) {
+        if (searchCoords && maxRadius !== "ALL") {
+          // A job without resolvable coordinates cannot be proven inside the
+          // radius, so it is excluded instead of silently passing the filter.
+          if (job.distance === null) return false;
           if (job.distance > parseInt(maxRadius, 10)) return false;
         }
 
@@ -235,6 +238,11 @@ export default function JobsMapView({ onSelectJobForWorkflow }) {
         return 0;
       });
   }, [jobs, searchCoords, keywordFilter, selectedOwner, maxRadius, unit, regionFilter]);
+
+  const unmappedJobCount = useMemo(
+    () => jobs.filter((job) => !job.coords).length,
+    [jobs],
+  );
 
   // 5. Sync Markers on Map
   useEffect(() => {
@@ -556,6 +564,12 @@ export default function JobsMapView({ onSelectJobForWorkflow }) {
               {searchCoords ? ` · Ranked by proximity to ${searchAddressName}` : ""}
             </p>
           </div>
+          {unmappedJobCount > 0 ? (
+            <p className="px-1 text-[11px] text-amber-700" role="status">
+              {unmappedJobCount} {unmappedJobCount === 1 ? "role has" : "roles have"} no resolvable location and {unmappedJobCount === 1 ? "is" : "are"} not shown on the map
+              {searchCoords && maxRadius !== "ALL" ? "; excluded from the radius filter." : "."}
+            </p>
+          ) : null}
 
           <ScrollArea className="flex-1 rounded-lg border bg-card p-2">
             <div className="flex flex-col gap-2">
@@ -632,26 +646,22 @@ export default function JobsMapView({ onSelectJobForWorkflow }) {
                   <p className="text-xs text-muted-foreground">{selectedJob.company}</p>
                 </div>
                 <button
+                  type="button"
                   onClick={() => setSelectedJob(null)}
                   className="rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+                  aria-label="Close job details"
                 >
                   <X size={16} />
                 </button>
               </div>
 
               <div className="mt-2.5 space-y-1 text-xs text-muted-foreground">
-                <p>
-                  📍 <strong>Location:</strong> {selectedJob.displayLocation}
-                </p>
+                <p className="flex items-start gap-1.5"><MapPin size={13} className="mt-0.5 shrink-0" aria-hidden="true" /><span><strong>Location:</strong> {selectedJob.displayLocation}</span></p>
                 {selectedJob.compensation && (
-                  <p>
-                    💰 <strong>Compensation:</strong> {selectedJob.compensation}
-                  </p>
+                  <p className="flex items-start gap-1.5"><CircleDollarSign size={13} className="mt-0.5 shrink-0" aria-hidden="true" /><span><strong>Compensation:</strong> {selectedJob.compensation}</span></p>
                 )}
                 {selectedJob.owners && (
-                  <p>
-                    👤 <strong>Recruiter:</strong> {selectedJob.owners}
-                  </p>
+                  <p className="flex items-start gap-1.5"><UserRoundSearch size={13} className="mt-0.5 shrink-0" aria-hidden="true" /><span><strong>Recruiter:</strong> {selectedJob.owners}</span></p>
                 )}
               </div>
 
@@ -675,6 +685,12 @@ export default function JobsMapView({ onSelectJobForWorkflow }) {
                   >
                     <span>Use for Drafting</span>
                     <ArrowRight size={14} />
+                  </Button>
+                )}
+                {onOpenJobReview && (
+                  <Button size="sm" variant="outline" onClick={() => onOpenJobReview(selectedJob)} className="flex-1 text-xs">
+                    <span>Review fit</span>
+                    <UserRoundSearch size={14} />
                   </Button>
                 )}
               </div>

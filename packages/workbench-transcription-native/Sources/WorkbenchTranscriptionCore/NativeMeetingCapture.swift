@@ -1,4 +1,5 @@
 import AVFoundation
+import AudioToolbox
 import CoreMedia
 import Foundation
 import ScreenCaptureKit
@@ -7,6 +8,7 @@ public struct WorkbenchCaptureResult: Sendable {
     public let audioURL: URL
     public let usedSystemAudio: Bool
     public let warning: String?
+    public let journal: WorkbenchCaptureJournalResult?
 }
 
 public final class WorkbenchAudioMixer: @unchecked Sendable {
@@ -73,40 +75,78 @@ public final class WorkbenchAudioMixer: @unchecked Sendable {
 
 final class WorkbenchMicrophoneCapture: @unchecked Sendable {
     private let engine = AVAudioEngine()
-    private let onSamples: @Sendable ([Int16]) -> Void
+    private let onSamples: @Sendable ([Int16], UInt64) -> Void
+    private let onInterruption: @Sendable (String) -> Void
+    private var observer: NSObjectProtocol?
 
-    init(onSamples: @escaping @Sendable ([Int16]) -> Void) {
+    init(onSamples: @escaping @Sendable ([Int16], UInt64) -> Void, onInterruption: @escaping @Sendable (String) -> Void = { _ in }) {
         self.onSamples = onSamples
+        self.onInterruption = onInterruption
     }
 
     func start() throws {
         let input = engine.inputNode
-        guard let target = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: 16_000, channels: 1, interleaved: false) else {
+        guard let target = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: 16_000, channels: 1, interleaved: false),
+              input.outputFormat(forBus: 0).sampleRate > 0,
+              input.outputFormat(forBus: 0).channelCount > 0
+        else {
             throw WorkbenchCaptureError.microphoneUnavailable
         }
-        input.installTap(onBus: 0, bufferSize: 4096, format: target) { [onSamples] buffer, _ in
-            guard let channel = buffer.floatChannelData?[0] else { return }
-            let samples = (0..<Int(buffer.frameLength)).map { index in
+        // AVAudioEngine input taps must use the device's native format. Forcing
+        // 16 kHz here aborts the process on common 44.1/48 kHz microphones.
+        // Convert inside the callback after AVAudioEngine supplies a valid buffer.
+        input.installTap(onBus: 0, bufferSize: 4096, format: nil) { [onSamples] buffer, time in
+            guard buffer.frameLength > 0,
+                  let converter = AVAudioConverter(from: buffer.format, to: target)
+            else { return }
+            let ratio = target.sampleRate / max(1, buffer.format.sampleRate)
+            let capacity = max(1, AVAudioFrameCount(ceil(Double(buffer.frameLength) * ratio)) + 32)
+            guard let converted = AVAudioPCMBuffer(pcmFormat: target, frameCapacity: capacity) else { return }
+            var supplied = false
+            var conversionError: NSError?
+            let status = converter.convert(to: converted, error: &conversionError) { _, packetStatus in
+                if supplied {
+                    packetStatus.pointee = .endOfStream
+                    return nil
+                }
+                supplied = true
+                packetStatus.pointee = .haveData
+                return buffer
+            }
+            guard status != .error, conversionError == nil, let channel = converted.floatChannelData?[0] else { return }
+            let samples = (0..<Int(converted.frameLength)).map { index in
                 Int16(max(-1, min(1, channel[index])) * 32767)
             }
-            onSamples(samples)
+            let hostTime = time.hostTime > 0 ? AudioConvertHostTimeToNanos(time.hostTime) : DispatchTime.now().uptimeNanoseconds
+            onSamples(samples, hostTime)
         }
         engine.prepare()
         try engine.start()
+        observer = NotificationCenter.default.addObserver(
+            forName: .AVAudioEngineConfigurationChange,
+            object: engine,
+            queue: nil
+        ) { [onInterruption] _ in
+            onInterruption("Microphone device configuration changed during capture.")
+        }
     }
 
     func stop() {
         engine.inputNode.removeTap(onBus: 0)
         engine.stop()
+        if let observer { NotificationCenter.default.removeObserver(observer) }
+        observer = nil
     }
 }
 
 final class WorkbenchSystemAudioCapture: NSObject, SCStreamOutput, SCStreamDelegate, @unchecked Sendable {
-    private let onSamples: @Sendable ([Int16]) -> Void
+    private let onSamples: @Sendable ([Int16], UInt64) -> Void
+    private let onInterruption: @Sendable (String) -> Void
     private var stream: SCStream?
 
-    init(onSamples: @escaping @Sendable ([Int16]) -> Void) {
+    init(onSamples: @escaping @Sendable ([Int16], UInt64) -> Void, onInterruption: @escaping @Sendable (String) -> Void = { _ in }) {
         self.onSamples = onSamples
+        self.onInterruption = onInterruption
     }
 
     func start() async throws {
@@ -134,35 +174,71 @@ final class WorkbenchSystemAudioCapture: NSObject, SCStreamOutput, SCStreamDeleg
     }
 
     func stream(_ stream: SCStream, didOutputSampleBuffer sampleBuffer: CMSampleBuffer, of type: SCStreamOutputType) {
-        guard type == .audio,
-              let format = CMSampleBufferGetFormatDescription(sampleBuffer),
-              let description = CMAudioFormatDescriptionGetStreamBasicDescription(format)?.pointee,
-              let block = CMSampleBufferGetDataBuffer(sampleBuffer)
-        else { return }
-        let length = CMBlockBufferGetDataLength(block)
-        guard length > 0 else { return }
-        var pointer: UnsafeMutablePointer<Int8>?
-        guard CMBlockBufferGetDataPointer(block, atOffset: 0, lengthAtOffsetOut: nil, totalLengthOut: nil, dataPointerOut: &pointer) == kCMBlockBufferNoErr,
-              let pointer
-        else { return }
+        guard type == .audio, let samples = normalizedSamples(from: sampleBuffer), !samples.isEmpty else { return }
+        let presentationTime = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
+        let scaledTime = CMTimeConvertScale(presentationTime, timescale: 1_000_000_000, method: .default)
+        let hostTime = presentationTime.isValid && scaledTime.value >= 0 ? UInt64(scaledTime.value) : DispatchTime.now().uptimeNanoseconds
+        onSamples(samples, hostTime)
+    }
 
-        let channels = max(1, Int(description.mChannelsPerFrame))
-        if description.mFormatFlags & kAudioFormatFlagIsFloat != 0 {
-            let count = length / MemoryLayout<Float>.size
-            let values = UnsafeRawPointer(pointer).bindMemory(to: Float.self, capacity: count)
-            let frames = count / channels
-            onSamples((0..<frames).map { frame in
-                let sum = (0..<channels).reduce(Float(0)) { $0 + values[(frame * channels) + $1] }
-                return Int16(max(-1, min(1, sum / Float(channels))) * 32767)
-            })
-        } else if description.mFormatID == kAudioFormatLinearPCM && description.mBitsPerChannel == 16 {
-            let data = Data(bytes: pointer, count: length)
-            let values = data.withUnsafeBytes { Array($0.bindMemory(to: Int16.self)) }
-            let frames = values.count / channels
-            onSamples((0..<frames).map { frame in
-                let sum = (0..<channels).reduce(0) { $0 + Int(values[(frame * channels) + $1]) }
-                return Int16(clamping: sum / channels)
-            })
+    func stream(_ stream: SCStream, didStopWithError error: Error) {
+        onInterruption("System audio capture stopped: \(error.localizedDescription)")
+    }
+
+    private func normalizedSamples(from sampleBuffer: CMSampleBuffer) -> [Int16]? {
+        guard let description = CMSampleBufferGetFormatDescription(sampleBuffer),
+              let outputFormat = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: 16_000, channels: 1, interleaved: false)
+        else { return nil }
+        let inputFormat = AVAudioFormat(cmAudioFormatDescription: description)
+
+        var requiredSize = 0
+        let sizingStatus = CMSampleBufferGetAudioBufferListWithRetainedBlockBuffer(
+            sampleBuffer,
+            bufferListSizeNeededOut: &requiredSize,
+            bufferListOut: nil,
+            bufferListSize: 0,
+            blockBufferAllocator: kCFAllocatorDefault,
+            blockBufferMemoryAllocator: kCFAllocatorDefault,
+            flags: UInt32(kCMSampleBufferFlag_AudioBufferList_Assure16ByteAlignment),
+            blockBufferOut: nil
+        )
+        guard sizingStatus == noErr, requiredSize >= MemoryLayout<AudioBufferList>.size else { return nil }
+        let storage = UnsafeMutableRawPointer.allocate(byteCount: requiredSize, alignment: 16)
+        defer { storage.deallocate() }
+        let audioBufferList = storage.bindMemory(to: AudioBufferList.self, capacity: 1)
+        var retainedBlock: CMBlockBuffer?
+        let status = CMSampleBufferGetAudioBufferListWithRetainedBlockBuffer(
+            sampleBuffer,
+            bufferListSizeNeededOut: nil,
+            bufferListOut: audioBufferList,
+            bufferListSize: requiredSize,
+            blockBufferAllocator: kCFAllocatorDefault,
+            blockBufferMemoryAllocator: kCFAllocatorDefault,
+            flags: UInt32(kCMSampleBufferFlag_AudioBufferList_Assure16ByteAlignment),
+            blockBufferOut: &retainedBlock
+        )
+        guard status == noErr,
+              let inputBuffer = AVAudioPCMBuffer(pcmFormat: inputFormat, bufferListNoCopy: audioBufferList, deallocator: nil)
+        else { return nil }
+        inputBuffer.frameLength = AVAudioFrameCount(CMSampleBufferGetNumSamples(sampleBuffer))
+        guard let converter = AVAudioConverter(from: inputFormat, to: outputFormat) else { return nil }
+        let ratio = 16_000 / max(1, inputFormat.sampleRate)
+        let capacity = max(1, AVAudioFrameCount(ceil(Double(inputBuffer.frameLength) * ratio)) + 32)
+        guard let outputBuffer = AVAudioPCMBuffer(pcmFormat: outputFormat, frameCapacity: capacity) else { return nil }
+        var supplied = false
+        var conversionError: NSError?
+        let conversionStatus = converter.convert(to: outputBuffer, error: &conversionError) { _, packetStatus in
+            if supplied {
+                packetStatus.pointee = .endOfStream
+                return nil
+            }
+            supplied = true
+            packetStatus.pointee = .haveData
+            return inputBuffer
+        }
+        guard conversionStatus != .error, conversionError == nil, let channel = outputBuffer.floatChannelData?[0] else { return nil }
+        return (0..<Int(outputBuffer.frameLength)).map { index in
+            Int16(max(-1, min(1, channel[index])) * 32767)
         }
     }
 }
@@ -173,39 +249,106 @@ public actor WorkbenchNativeMeetingCapture {
     private var mixer: WorkbenchAudioMixer?
     private var warning: String?
     private var usingSystemAudio = false
+    private var journal: WorkbenchCaptureJournal?
 
     public init() {}
 
-    public func start(outputURL: URL, includeSystemAudio: Bool) async throws {
-        let mixer = try WorkbenchAudioMixer(outputURL: outputURL)
-        let microphone = WorkbenchMicrophoneCapture(onSamples: { samples in mixer.appendMicrophone(samples) })
-        try microphone.start()
-        self.mixer = mixer
+    public func start(
+        outputURL: URL,
+        includeSystemAudio: Bool,
+        journalDirectory: URL? = nil,
+        context: WorkbenchCaptureContext? = nil,
+        requireSystemAudio: Bool = false
+    ) async throws {
+        let activeJournal = try journalDirectory.map { directory in
+            try WorkbenchCaptureJournal(
+                directory: directory,
+                context: context ?? WorkbenchCaptureContext(sessionID: UUID().uuidString, jobID: "", candidateID: "", controlID: UUID().uuidString)
+            )
+        }
+        let activeMixer = try activeJournal == nil ? WorkbenchAudioMixer(outputURL: outputURL) : nil
+        let microphone = WorkbenchMicrophoneCapture(onSamples: { samples, hostTime in
+            if let activeJournal {
+                _ = activeJournal.enqueue(samples, source: .microphone, hostTimeNanoseconds: hostTime)
+            } else {
+                activeMixer?.appendMicrophone(samples)
+            }
+        }, onInterruption: { message in activeJournal?.markFailed(message) })
+        do {
+            try microphone.start()
+        } catch {
+            activeJournal?.markFailed(error.localizedDescription)
+            throw error
+        }
+        self.mixer = activeMixer
         self.microphone = microphone
-        guard includeSystemAudio else { return }
+        self.journal = activeJournal
+        guard includeSystemAudio else {
+            try activeJournal?.markReady()
+            return
+        }
 
-        let system = WorkbenchSystemAudioCapture(onSamples: { samples in mixer.appendSystem(samples) })
+        let system = WorkbenchSystemAudioCapture(onSamples: { samples, hostTime in
+            if let activeJournal {
+                _ = activeJournal.enqueue(samples, source: .system, hostTimeNanoseconds: hostTime)
+            } else {
+                activeMixer?.appendSystem(samples)
+            }
+        }, onInterruption: { message in activeJournal?.markFailed(message) })
         do {
             try await system.start()
             self.system = system
             usingSystemAudio = true
+            try activeJournal?.markReady()
         } catch {
+            if requireSystemAudio {
+                microphone.stop()
+                try? activeMixer?.finish()
+                activeJournal?.markFailed(error.localizedDescription)
+                self.microphone = nil
+                self.mixer = nil
+                self.journal = nil
+                throw error
+            }
             warning = "System audio was unavailable. Microphone recording continued."
             usingSystemAudio = false
+            try activeJournal?.markReady()
         }
+    }
+
+    public func healthError() -> String? {
+        journal?.healthError
+    }
+
+    public func heartbeat(controlID: String, leaseExpiresAt: Date) throws {
+        try journal?.heartbeat(controlID: controlID, leaseExpiresAt: leaseExpiresAt)
     }
 
     public func stop() async throws -> WorkbenchCaptureResult {
         microphone?.stop()
         await system?.stop()
-        try mixer?.finish()
-        guard let outputURL = mixer?.outputURL else { throw WorkbenchCaptureError.notRecording }
-        let result = WorkbenchCaptureResult(audioURL: outputURL, usedSystemAudio: usingSystemAudio, warning: warning)
+        let journalResult: WorkbenchCaptureJournalResult?
+        let outputURL: URL
+        if let journal {
+            journalResult = try journal.finish()
+            guard let recovered = journalResult?.mixedWAV ?? journalResult?.microphoneWAV ?? journalResult?.systemWAV else {
+                throw WorkbenchCaptureError.notRecording
+            }
+            outputURL = recovered
+        } else {
+            try mixer?.finish()
+            guard let mixed = mixer?.outputURL else { throw WorkbenchCaptureError.notRecording }
+            outputURL = mixed
+            journalResult = nil
+        }
+        let warnings = [warning, journalResult?.warning].compactMap { $0 }
+        let result = WorkbenchCaptureResult(audioURL: outputURL, usedSystemAudio: usingSystemAudio, warning: warnings.isEmpty ? nil : warnings.joined(separator: " "), journal: journalResult)
         microphone = nil
         system = nil
         mixer = nil
         warning = nil
         usingSystemAudio = false
+        self.journal = nil
         return result
     }
 }

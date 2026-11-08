@@ -34,6 +34,21 @@ export function safeJoinUrl(value) {
   }
 }
 
+export function isMeetingContextLocked({ launchContext, recording, transcribing } = {}) {
+  return Boolean(recording) || Boolean(transcribing) || ["starting", "recording", "finalizing"].includes(launchContext?.phase);
+}
+
+export function formatSpeakerTranscript(segments = [], speakerLabels = {}) {
+  return (Array.isArray(segments) ? segments : [])
+    .map((segment) => {
+      const speaker = speakerLabels[segment.speaker] || segment.speaker || "Speaker";
+      const text = String(segment.text || "").trim();
+      return text ? `${speaker}: ${text}` : "";
+    })
+    .filter(Boolean)
+    .join("\n");
+}
+
 export function groupCalendarEvents(events, now = new Date()) {
   const grouped = { today: [], upcoming: [], past: [] };
   for (const event of Array.isArray(events) ? events : []) {
@@ -46,9 +61,10 @@ export function groupCalendarEvents(events, now = new Date()) {
   return grouped;
 }
 
-export function createMeetingDraft({ event = null, candidate = null, job = null, transcript = "", notes = "" } = {}) {
+export function createMeetingDraft({ event = null, candidate = null, job = null, transcript = "", notes = "", recording = null, transcription = null, segments = [], speakers = [], speakerLabels = {}, existingId = null } = {}) {
   return {
     idempotencyKey: globalThis.crypto?.randomUUID?.() || `meeting-${Date.now()}`,
+    existingId,
     event: event ? {
       title: event.title || "Untitled meeting",
       start: event.start,
@@ -60,7 +76,17 @@ export function createMeetingDraft({ event = null, candidate = null, job = null,
     transcript: String(transcript || "").trim(),
     notes: String(notes || "").trim(),
     transcriptStatus: String(transcript || "").trim() ? "ready" : "awaiting_transcription",
-    source: "browser_recording",
+    source: recording?.source || "browser_recording",
+    recordingId: recording?.id || null,
+    captureStatus: recording?.status || (String(transcript || "").trim() ? "transcribed" : "captured"),
+    captureWarning: recording?.warning || null,
+    transcriptionStatus: transcription?.status || (String(transcript || "").trim() ? "ready" : "pending"),
+    transcriptionWarning: transcription?.warning || null,
+    transcriptionSource: transcription?.source || null,
+    transcriptionModel: transcription?.model || null,
+    segments: Array.isArray(segments) ? segments : [],
+    speakers: Array.isArray(speakers) ? speakers : [],
+    speakerLabels: speakerLabels && typeof speakerLabels === "object" ? speakerLabels : {},
     createdAt: new Date().toISOString(),
   };
 }

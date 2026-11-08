@@ -14,6 +14,7 @@ import {
 import { LOXO_PIPELINE_STAGES } from "../candidate-review/constants.js";
 import FitBadge from "./FitBadge.jsx";
 import { isInCanada } from "./location.js";
+import { resolvePendingStage } from "./pendingStage.js";
 
 function CandidateCard({ job, candidate, waiting, onMove, onOpenCandidate }) {
   const { ref, handleRef, isDragging } = useDraggable({
@@ -86,7 +87,7 @@ export default function PipelinePage({ onOpenCandidate }) {
   const [selectedJobId, setSelectedJobId] = useState("");
   const [candidatesState, setCandidatesState] = useState({ phase: "idle", candidates: [], error: "" });
   const [canadaOnly, setCanadaOnly] = useState(false);
-  const [waitingIds, setWaitingIds] = useState(new Set());
+  const [sessionPending, setSessionPending] = useState({});
   const [moveError, setMoveError] = useState("");
 
   const loadJobs = async () => {
@@ -117,7 +118,22 @@ export default function PipelinePage({ onOpenCandidate }) {
   const selectedJob = jobsState.jobs.find((job) => String(job.id) === selectedJobId) || null;
   const visibleCandidates = useMemo(() => candidatesState.candidates
     .filter((candidate) => !canadaOnly || isInCanada(candidate.location)), [candidatesState.candidates, canadaOnly]);
-  const unsupported = visibleCandidates.filter((candidate) => !LOXO_PIPELINE_STAGES.includes(candidate.stage));
+
+  // A stage move is only a queued request until Loxo applies it. Rebuild that
+  // state from the persisted activity trail so the badge survives a reload.
+  const boardCandidates = useMemo(() => visibleCandidates.map((candidate) => {
+    const pendingStage = resolvePendingStage(candidate, sessionPending);
+    return pendingStage
+      ? { ...candidate, stage: pendingStage, pendingStage }
+      : { ...candidate, pendingStage: null };
+  }), [visibleCandidates, sessionPending]);
+
+  const waitingIds = useMemo(
+    () => new Set(boardCandidates.filter((candidate) => candidate.pendingStage).map((candidate) => candidate.id)),
+    [boardCandidates]
+  );
+
+  const unsupported = boardCandidates.filter((candidate) => !LOXO_PIPELINE_STAGES.includes(candidate.stage));
 
   const moveCandidate = async (candidateId, from, to) => {
     if (!to || from === to) return;
@@ -132,7 +148,7 @@ export default function PipelinePage({ onOpenCandidate }) {
         ...current,
         candidates: current.candidates.map((candidate) => candidate.id === candidateId ? { ...candidate, stage: to } : candidate),
       }));
-      setWaitingIds((current) => new Set(current).add(candidateId));
+      setSessionPending((current) => ({ ...current, [candidateId]: to }));
     } catch (error) {
       setMoveError(error.message || "Stage move could not be queued.");
     }
@@ -180,7 +196,7 @@ export default function PipelinePage({ onOpenCandidate }) {
           key={stage}
           stage={stage}
           job={selectedJob}
-          candidates={visibleCandidates.filter((candidate) => candidate.stage === stage)}
+          candidates={boardCandidates.filter((candidate) => candidate.stage === stage)}
           waitingIds={waitingIds}
           onMove={moveCandidate}
           onOpenCandidate={onOpenCandidate}

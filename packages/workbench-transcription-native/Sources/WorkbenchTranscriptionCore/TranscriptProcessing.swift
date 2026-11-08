@@ -77,6 +77,27 @@ public enum WorkbenchTranscriptReconciler {
 }
 
 public enum WorkbenchSpeakerAttribution {
+    public static func attributedSegments(words: [WorkbenchSpeechSegment], windows: [WorkbenchSpeakerWindow]) -> [WorkbenchSpeechSegment] {
+        let labels = labelMap(for: windows)
+        var result: [WorkbenchSpeechSegment] = []
+        for word in words.sorted(by: { $0.start < $1.start }) {
+            let speakerID = speaker(for: word, windows: windows)
+            let label = speakerID.flatMap { labels[$0] } ?? "Others"
+            if let previous = result.last, previous.speaker == label, word.start - previous.end < 1.25 {
+                result[result.count - 1] = WorkbenchSpeechSegment(
+                    start: previous.start, end: word.end,
+                    text: "\(previous.text) \(word.text)", speaker: label, source: word.source
+                )
+            } else {
+                result.append(WorkbenchSpeechSegment(
+                    start: word.start, end: word.end, text: word.text,
+                    speaker: label, source: word.source
+                ))
+            }
+        }
+        return result
+    }
+
     public static func speaker(for segment: WorkbenchSpeechSegment, windows: [WorkbenchSpeakerWindow]) -> String? {
         let midpoint = segment.start + ((segment.end - segment.start) / 2)
         if let containing = windows.first(where: { $0.start <= midpoint && $0.end >= midpoint }) {

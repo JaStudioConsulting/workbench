@@ -69,6 +69,6 @@ test("Settings uses one Better Auth Google connection for Workspace services", a
 test("Settings navigation can reach the Google Workspace panel", async () => {
   const app = await readFile(new URL("../src/App.jsx", import.meta.url), "utf8");
   const settings = await readFile(new URL("../src/features/settings/SettingsPage.jsx", import.meta.url), "utf8");
-  assert.match(app, /case "Settings": return <SettingsPage \/>/);
+  assert.match(app, /case "Settings": return <SettingsPage meetingsStatusLoader=\{getMeetingStatus\} \/>/);
   assert.match(settings, /<GoogleWorkspacePanel/);
 });

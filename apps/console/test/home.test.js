@@ -22,3 +22,10 @@ test("waiting actions group by job and candidate", () => {
   assert.equal(groups[0].candidateName, "Candidate Example");
   assert.equal(groups[0].count, 2);
 });
+
+test("recent meetings label session-only drafts", async () => {
+  const fs = await import("node:fs/promises");
+  const source = await fs.readFile(new URL("../src/features/home/HomePage.jsx", import.meta.url), "utf8");
+  assert.match(source, /item\.persistence === "session_only"/);
+  assert.match(source, /Session only - not synced/);
+});

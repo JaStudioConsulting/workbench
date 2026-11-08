@@ -45,20 +45,25 @@ export function buildBrandResumePayload(candidate) {
     sections.push({ heading: "Transcript", items: [clean(candidate.transcriptText)] });
   }
 
+  const experience = list(candidate.workHistory).map((role) => ({
+    title: clean(role.title),
+    dates: clean(role.dates)
+      || [clean(role.startDate), clean(role.endDate)].filter(Boolean).join(" to "),
+    company: clean(role.company),
+    location: clean(role.location),
+    bullets: list(role.bullets),
+  }));
+  const skills = list(candidate.skills);
+  const education = items(candidate.education);
+
   return {
-    name: clean(candidate.name),
-    headline: clean(candidate.title),
+    name: clean(candidate.name) === "Unnamed candidate" ? "" : clean(candidate.name),
+    headline: clean(candidate.title) === "Title not recorded" ? "" : clean(candidate.title),
     summary: clean(candidate.profileSummary || candidate.writeUpSummary),
-    skills: list(candidate.skills),
-    experience: list(candidate.workHistory).map((role) => ({
-      title: clean(role.title),
-      dates: clean(role.dates)
-        || [clean(role.startDate), clean(role.endDate)].filter(Boolean).join(" to "),
-      company: clean(role.company),
-      location: clean(role.location),
-      bullets: list(role.bullets),
-    })),
-    education: items(candidate.education),
+    sourceText: clean(candidate.fullResumeText),
+    skills,
+    experience,
+    education,
     education_heading: "Education & Certifications",
     sections,
   };

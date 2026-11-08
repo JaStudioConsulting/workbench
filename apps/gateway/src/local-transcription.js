@@ -26,6 +26,31 @@ function transcriptFromJson(value) {
   return "";
 }
 
+async function parsedTranscript(output, inputPath) {
+  let parsed;
+  try {
+    parsed = typeof output === "string" ? JSON.parse(output) : output;
+  } catch {
+    const sidecar = await readFile(`${inputPath}.json`, "utf8").catch(() => "");
+    if (!sidecar) throw new Error("Workbench transcription returned invalid data");
+    parsed = JSON.parse(sidecar);
+  }
+  const transcript = transcriptFromJson(parsed);
+  if (!transcript) throw new Error("Workbench transcription returned an empty transcript");
+  const details = parsed?.data && typeof parsed.data === "object" ? parsed.data : parsed;
+  const segments = Array.isArray(details?.segments) ? details.segments : null;
+  const speakers = Array.isArray(details?.speakers) ? details.speakers : null;
+  const warning = typeof details?.warning === "string" && details.warning.trim() ? details.warning.trim() : null;
+  return {
+    transcript,
+    source: "workbench_native",
+    ...(typeof details?.model === "string" ? { model: details.model } : {}),
+    ...(segments?.length ? { segments } : {}),
+    ...(speakers?.length ? { speakers } : {}),
+    ...(warning ? { warning } : {}),
+  };
+}
+
 async function defaultRunner(cliPath, inputPath, supportDir, options = {}) {
   const args = [
     "transcribe",
@@ -72,30 +97,19 @@ export function createLocalTranscriptionAdapter({
       try {
         await writeFile(inputPath, audio, { flag: "wx", mode: 0o600 });
         const output = await runner(cliPath, inputPath, supportDir, { speakerLabels, vocabularyPath });
-        let parsed;
-        try {
-          parsed = typeof output === "string" ? JSON.parse(output) : output;
-        } catch {
-          const sidecar = await readFile(`${inputPath}.json`, "utf8").catch(() => "");
-          if (!sidecar) throw new Error("Workbench transcription returned invalid data");
-          parsed = JSON.parse(sidecar);
-        }
-        const transcript = transcriptFromJson(parsed);
-        if (!transcript) throw new Error("Workbench transcription returned an empty transcript");
-        const details = parsed?.data && typeof parsed.data === "object" ? parsed.data : parsed;
-        const segments = Array.isArray(details?.segments) ? details.segments : null;
-        const speakers = Array.isArray(details?.speakers) ? details.speakers : null;
-        const warning = typeof details?.warning === "string" && details.warning.trim() ? details.warning.trim() : null;
-        return {
-          transcript,
-          source: "workbench_native",
-          ...(segments?.length ? { segments } : {}),
-          ...(speakers?.length ? { speakers } : {}),
-          ...(warning ? { warning } : {}),
-        };
+        return await parsedTranscript(output, inputPath);
       } finally {
         await rm(directory, { recursive: true, force: true });
       }
+    },
+
+    async transcribeFile({ path }) {
+      const extension = String(path || "").toLowerCase().match(/\.(wav|m4a|mp4|mp3)$/)?.[0];
+      if (!extension || !await stat(path).then((value) => value.isFile() && value.size > 44).catch(() => false)) {
+        throw new Error("Meeting audio is empty or unsupported");
+      }
+      const output = await runner(cliPath, path, supportDir, { speakerLabels, vocabularyPath });
+      return parsedTranscript(output, path);
     },
   };
 }

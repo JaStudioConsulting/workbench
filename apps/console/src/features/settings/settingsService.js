@@ -47,6 +47,11 @@ export async function loadSettingsStatus({ client = supabase, request = globalTh
     google: mail,
     ai,
     loxo: { queued: true, label: "Queued mode: changes wait for you or $recruiter" },
-    meetings: { available: Boolean(meetings?.available), label: meetings?.available ? "Meetings helper available" : "Meetings helper status unavailable" },
+    meetings: {
+      available: Boolean(meetings?.available),
+      label: meetings?.available
+        ? "M1 transcription available; recording uses this device's microphone"
+        : "Meetings transcription helper unavailable",
+    },
   };
 }
