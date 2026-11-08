@@ -15,6 +15,7 @@ import { LOXO_PIPELINE_STAGES } from "../candidate-review/constants.js";
 import FitBadge from "./FitBadge.jsx";
 import { isInCanada } from "./location.js";
 import { resolvePendingStage } from "./pendingStage.js";
+import { readCanadaFilter, saveCanadaFilter } from "../settings/settingsService.js";
 
 function CandidateCard({ job, candidate, waiting, onMove, onOpenCandidate }) {
   const { ref, handleRef, isDragging } = useDraggable({
@@ -86,7 +87,7 @@ export default function PipelinePage({ onOpenCandidate }) {
   const [jobsState, setJobsState] = useState({ phase: "loading", jobs: [], error: "" });
   const [selectedJobId, setSelectedJobId] = useState("");
   const [candidatesState, setCandidatesState] = useState({ phase: "idle", candidates: [], error: "" });
-  const [canadaOnly, setCanadaOnly] = useState(false);
+  const [canadaOnly, setCanadaOnly] = useState(() => readCanadaFilter());
   const [sessionPending, setSessionPending] = useState({});
   const [moveError, setMoveError] = useState("");
 
@@ -167,7 +168,7 @@ export default function PipelinePage({ onOpenCandidate }) {
   return <div className="flex min-w-0 flex-col gap-4" data-testid="pipeline-page">
     <div className="flex flex-wrap items-end justify-between gap-3">
       <div><h2 className="text-lg font-semibold">Pipeline</h2><p className="text-sm text-muted-foreground">Stage moves wait for Loxo review.</p></div>
-      <label className="flex items-center gap-2 text-sm"><Checkbox checked={canadaOnly} onCheckedChange={(value) => setCanadaOnly(Boolean(value))} />Canada only</label>
+      <label className="flex items-center gap-2 text-sm"><Checkbox checked={canadaOnly} onCheckedChange={(value) => setCanadaOnly(saveCanadaFilter(Boolean(value)))} />Canada only</label>
     </div>
 
     <Card>
