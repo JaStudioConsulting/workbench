@@ -217,6 +217,12 @@ test("MCP initializes and lists only recruiter plus read-only status", async () 
   const listed = await request(app, "POST", "/mcp", { headers, body: { jsonrpc: "2.0", id: 2, method: "tools/list", params: {} } });
   assert.equal(listed.status, 200);
   assert.deepEqual(listed.body.result.tools.map((tool) => tool.name).sort(), ["recruiter", "workspace_status"]);
+  const status = await request(app, "POST", "/mcp", { headers, body: { jsonrpc: "2.0", id: 5, method: "tools/call", params: { name: "workspace_status", arguments: {} } } });
+  assert.equal(status.status, 200);
+  assert.match(status.body.result.content[0].text, /Supabase-backed candidate review/);
+  assert.match(status.body.result.content[0].text, /does not check current connectivity/);
+  assert.match(status.body.result.content[0].text, /Loxo changes queue for review/);
+  assert.doesNotMatch(status.body.result.content[0].text, /review-only|Durable storage is unavailable/);
   const router = await request(app, "POST", "/mcp", { headers, body: { jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "recruiter", arguments: {} } } });
   assert.equal(router.status, 200);
   assert.match(router.body.result.content[0].text, /recruiter/i);
