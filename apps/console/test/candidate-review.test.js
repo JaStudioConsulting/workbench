@@ -11,7 +11,6 @@ import {
   RESUME_INDICATOR_STATES,
 } from "../src/features/candidate-review/constants.js";
 import {
-  isSampleData,
   getReviewJobs,
   getJobById,
   getCandidatesForJob,
@@ -37,7 +36,7 @@ const featureDir = path.resolve(here, "../src/features/candidate-review");
 const appFile = path.resolve(here, "../src/App.jsx");
 
 test.beforeEach(() => {
-  _resetStoreForTesting();
+  _resetStoreForTesting({ jobs: SAMPLE_JOBS, candidates: SAMPLE_CANDIDATES });
 });
 
 test("exact pipeline stages match docs/loxo/true-actions.md in order", () => {
@@ -104,8 +103,6 @@ test("resume indicator supports three distinct states", () => {
 });
 
 test("candidate review data layer returns sorted candidates and handles async decisions", async () => {
-  assert.equal(isSampleData(), true);
-
   const jobs = getReviewJobs();
   assert.ok(jobs.length >= 2);
   const activeJob = jobs[0];
@@ -596,10 +593,20 @@ test("card wires the new pieces and drops the old no-resume message", () => {
   assert.match(externals, /mail\/mailClient\.js/);
 });
 
-test("candidate review labels sample data instead of claiming a live connection", () => {
-  const source = fs.readFileSync(path.join(featureDir, "CandidateReview.jsx"), "utf8");
-  assert.match(source, /Sample data only - sign in for live candidates/);
-  assert.match(source, /isSampleData\(\)/);
+test("empty live state never falls back to sample records", async () => {
+  _resetStoreForTesting();
+  assert.deepEqual(getReviewJobs(), []);
+  assert.deepEqual(getCandidatesForJob(SAMPLE_JOBS[0].id), []);
+  assert.deepEqual(getSubmissionHistory(), []);
+  await assert.rejects(
+    recordCandidateSubmission(SAMPLE_JOBS[0].id, SAMPLE_CANDIDATES[0].id),
+    /unknown candidate or job/
+  );
+  const reviewSource = fs.readFileSync(path.join(featureDir, "CandidateReview.jsx"), "utf8");
+  const serviceSource = fs.readFileSync(path.join(featureDir, "candidateReviewService.js"), "utf8");
+  assert.match(reviewSource, /No live review jobs available/);
+  assert.doesNotMatch(reviewSource, /Sample data|isSampleData/);
+  assert.doesNotMatch(serviceSource, /SAMPLE_JOBS|SAMPLE_CANDIDATES/);
 });
 
 test("live mapper keeps profile evidence in its own fields and invents no job history", () => {
