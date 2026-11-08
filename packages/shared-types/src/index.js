@@ -51,7 +51,6 @@ export const SafetyStateSchema = z.object({
   auth: z.enum(["configured", "unavailable"]),
   storage: z.enum(["durable", "memory_test_only", "unavailable"]),
   gmail: z.literal("draft_only"),
-  neo4j: z.enum(["disabled", "read_only"]),
   externalWrites: z.literal(false),
 });
 
