@@ -43,6 +43,14 @@ export function province(location) {
   return matchedProvince(location)?.name || "";
 }
 
+export function canadianCity(location) {
+  const normalized = normalizedTokens(location);
+  if (!normalized) return "";
+  const entry = matchedProvince(location);
+  if (!entry) return "";
+  return entry.cities.find((city) => containsTokenPhrase(normalized, city)) || "";
+}
+
 export function isInCanada(location) {
   const normalized = normalizedTokens(location);
   if (!normalized) return false;
