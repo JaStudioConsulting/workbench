@@ -35,7 +35,7 @@ function LeadForm({ value, onChange }) {
   );
 }
 
-export default function LeadsPage() {
+export default function LeadsPage({ focusLeadId = "", focusClient = null } = {}) {
   const [state, setState] = useState({ phase: "loading", companies: [], leads: [], leadsStorage: null, error: "" });
   const [reloadKey, setReloadKey] = useState(0);
   const [editing, setEditing] = useState(null);
@@ -95,14 +95,23 @@ export default function LeadsPage() {
       {state.error ? <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm" role="alert">{state.error}</div> : null}
       <section aria-labelledby="client-companies-title">
         <div className="mb-3"><h2 id="client-companies-title" className="text-lg font-semibold">Client companies</h2><p className="text-sm text-muted-foreground">Active companies from Tracker jobs.</p></div>
+        {focusClient?.entityId && !state.companies.some((item) => item.company.trim().toLowerCase() === String(focusClient.entityId).trim().toLowerCase()) ? (
+          <Card className="mb-3 border-primary ring-2 ring-primary/30" data-testid="focused-client-card" data-focused="true">
+            <CardHeader><div className="flex items-start justify-between gap-3"><div><CardTitle className="flex items-center gap-2"><Building2 size={17} aria-hidden="true" />{focusClient.company || focusClient.entityId}</CardTitle><CardDescription>{focusClient.status || "Status not on file"}</CardDescription></div></div></CardHeader>
+            <CardContent className="grid gap-2 text-sm sm:grid-cols-2"><p><span className="text-muted-foreground">Roles:</span> {focusClient.jobTitles || "Not on file"}</p><p><span className="text-muted-foreground">Location:</span> {focusClient.location || "Not on file"}</p><p><span className="text-muted-foreground">Client contact:</span> {focusClient.clientContact || "Not on file"}</p></CardContent>
+          </Card>
+        ) : null}
         {state.companies.length === 0 ? <div className="rounded-xl border border-dashed p-8 text-center text-sm text-muted-foreground">No client companies found in active Tracker jobs.</div> : (
           <div className="grid gap-3 lg:grid-cols-2">
-            {state.companies.map((company) => (
-              <Card key={company.company}>
-                <CardHeader><div className="flex items-start justify-between gap-3"><div><CardTitle className="flex items-center gap-2"><Building2 size={17} aria-hidden="true" />{company.company}</CardTitle><CardDescription>{company.openJobsCount} open job{company.openJobsCount === 1 ? "" : "s"}</CardDescription></div>{company.loxoLink ? <Button variant="outline" size="sm" render={<a href={company.loxoLink} target="_blank" rel="noreferrer" aria-label={`Open ${company.company} in Loxo`} />}><ExternalLink /> Loxo</Button> : null}</div></CardHeader>
-                <CardContent className="grid gap-2 text-sm sm:grid-cols-2"><p><span className="text-muted-foreground">Owners:</span> {company.owners.length ? company.owners.join(", ") : "Not on file"}</p><p><span className="text-muted-foreground">Newest job:</span> {formatDate(company.newestJobDate)}</p></CardContent>
-              </Card>
-            ))}
+            {state.companies.map((company) => {
+              const isFocusedClient = Boolean(focusClient?.entityId && company.company.trim().toLowerCase() === String(focusClient.entityId).trim().toLowerCase());
+              return (
+                <Card key={company.company} data-focused={isFocusedClient ? "true" : undefined} className={isFocusedClient ? "border-primary ring-2 ring-primary/30" : undefined}>
+                  <CardHeader><div className="flex items-start justify-between gap-3"><div><CardTitle className="flex items-center gap-2"><Building2 size={17} aria-hidden="true" />{company.company}</CardTitle><CardDescription>{company.openJobsCount} open job{company.openJobsCount === 1 ? "" : "s"}</CardDescription></div>{company.loxoLink ? <Button variant="outline" size="sm" render={<a href={company.loxoLink} target="_blank" rel="noreferrer" aria-label={`Open ${company.company} in Loxo`} />}><ExternalLink /> Loxo</Button> : null}</div></CardHeader>
+                  <CardContent className="grid gap-2 text-sm sm:grid-cols-2"><p><span className="text-muted-foreground">Owners:</span> {company.owners.length ? company.owners.join(", ") : "Not on file"}</p><p><span className="text-muted-foreground">Newest job:</span> {formatDate(company.newestJobDate)}</p></CardContent>
+                </Card>
+              );
+            })}
           </div>
         )}
       </section>
@@ -110,7 +119,7 @@ export default function LeadsPage() {
       <section aria-labelledby="my-leads-title">
         <div className="mb-3 flex flex-wrap items-end justify-between gap-3"><div><div className="flex flex-wrap items-center gap-2"><h2 id="my-leads-title" className="text-lg font-semibold">My leads</h2>{storageLabel ? <Badge variant="outline" className={storageState.storage === "supabase" ? "" : "border-amber-700/30 bg-amber-50 text-amber-900"}>{storageLabel}</Badge> : null}</div><p className="text-sm text-muted-foreground">Business development leads you add and maintain.</p></div><Button onClick={openNew}><Plus /> Add lead</Button></div>
         {state.leads.length === 0 ? <div className="rounded-xl border border-dashed p-8 text-center"><p className="font-medium">No leads added</p><p className="mt-1 text-sm text-muted-foreground">Add a lead when you have a real company or contact to track.</p></div> : (
-          <div className="max-w-full overflow-x-auto rounded-xl border"><Table><TableHeader><TableRow><TableHead>Company</TableHead><TableHead>Contact</TableHead><TableHead>Status</TableHead><TableHead>Next action</TableHead><TableHead>Next date</TableHead><TableHead><span className="sr-only">Actions</span></TableHead></TableRow></TableHeader><TableBody>{state.leads.map((lead) => <TableRow key={lead.id}><TableCell><p className="font-medium">{lead.company}</p><p className="text-xs text-muted-foreground">{lead.role || "Role not on file"}</p></TableCell><TableCell>{lead.contact || "Not on file"}</TableCell><TableCell>{lead.status || "Not on file"}</TableCell><TableCell>{lead.nextAction || "Not on file"}</TableCell><TableCell>{formatDate(lead.nextDate)}</TableCell><TableCell><div className="flex justify-end gap-1"><Button variant="ghost" size="icon-sm" aria-label={`Edit ${lead.company}`} onClick={() => openExisting(lead)}><Pencil /></Button><Button variant="ghost" size="icon-sm" aria-label={`Delete ${lead.company}`} onClick={() => remove(lead)}><Trash2 /></Button></div></TableCell></TableRow>)}</TableBody></Table></div>
+          <div className="max-w-full overflow-x-auto rounded-xl border"><Table><TableHeader><TableRow><TableHead>Company</TableHead><TableHead>Contact</TableHead><TableHead>Status</TableHead><TableHead>Next action</TableHead><TableHead>Next date</TableHead><TableHead><span className="sr-only">Actions</span></TableHead></TableRow></TableHeader><TableBody>{state.leads.map((lead) => { const isFocusedLead = Boolean(focusLeadId && String(lead.id).toLowerCase() === String(focusLeadId).toLowerCase()); return <TableRow key={lead.id} data-focused={isFocusedLead ? "true" : undefined} className={isFocusedLead ? "bg-accent/60" : undefined}><TableCell><p className="font-medium">{lead.company}</p><p className="text-xs text-muted-foreground">{lead.role || "Role not on file"}</p></TableCell><TableCell>{lead.contact || "Not on file"}</TableCell><TableCell>{lead.status || "Not on file"}</TableCell><TableCell>{lead.nextAction || "Not on file"}</TableCell><TableCell>{formatDate(lead.nextDate)}</TableCell><TableCell><div className="flex justify-end gap-1"><Button variant="ghost" size="icon-sm" aria-label={`Edit ${lead.company}`} onClick={() => openExisting(lead)}><Pencil /></Button><Button variant="ghost" size="icon-sm" aria-label={`Delete ${lead.company}`} onClick={() => remove(lead)}><Trash2 /></Button></div></TableCell></TableRow>; })}</TableBody></Table></div>
         )}
       </section>
 
