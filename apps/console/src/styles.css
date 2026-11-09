@@ -734,3 +734,16 @@ h1 {
   color: #273c30;
   text-decoration: underline;
 }
+
+/* Keep Excalidraw controls in the Workbench forest and sage palette. */
+.workbench-board-panel .excalidraw.theme--light {
+  --color-primary: var(--forest);
+  --color-primary-darker: #213328;
+  --color-primary-darkest: #17271d;
+  --color-primary-hover: #3b5646;
+  --color-primary-light: var(--forest-soft);
+  --color-brand-active: #213328;
+  --color-brand-hover: #3b5646;
+  --color-surface-primary-container: var(--forest-soft);
+  --color-on-primary-container: #213328;
+}
