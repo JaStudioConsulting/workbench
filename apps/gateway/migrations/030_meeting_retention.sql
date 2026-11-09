@@ -20,9 +20,17 @@ UPDATE public.meeting_drafts
 CREATE OR REPLACE FUNCTION public.track_meeting_transcript_save()
 RETURNS trigger LANGUAGE plpgsql SET search_path = '' AS $$
 BEGIN
-  IF NEW.transcript <> '' OR coalesce(NEW.speaker_segments, '[]'::jsonb) <> '[]'::jsonb THEN
-    NEW.transcript_saved_at = now();
-    NEW.transcript_expired_at = NULL;
+  IF TG_OP = 'INSERT' THEN
+    IF NEW.transcript <> '' OR coalesce(NEW.speaker_segments, '[]'::jsonb) <> '[]'::jsonb THEN
+      NEW.transcript_saved_at = now();
+      NEW.transcript_expired_at = NULL;
+    END IF;
+  ELSIF NEW.transcript IS DISTINCT FROM OLD.transcript
+     OR NEW.speaker_segments IS DISTINCT FROM OLD.speaker_segments THEN
+    IF NEW.transcript <> '' OR coalesce(NEW.speaker_segments, '[]'::jsonb) <> '[]'::jsonb THEN
+      NEW.transcript_saved_at = now();
+      NEW.transcript_expired_at = NULL;
+    END IF;
   END IF;
   RETURN NEW;
 END;
