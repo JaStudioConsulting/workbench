@@ -1,5 +1,5 @@
-import { useMemo, useState, useRef } from "react";
-import { ExternalLink, MapPin, Tag, Check, ShieldAlert, AlertCircle, FileText, Loader2, NotebookText, Send } from "lucide-react";
+import { lazy, Suspense, useEffect, useMemo, useState, useRef } from "react";
+import { ExternalLink, MapPin, Tag, Check, ShieldAlert, AlertCircle, FileText, Loader2, NotebookText, Pencil, Plus, Send } from "lucide-react";
 import { Badge } from "../../components/ui/badge.tsx";
 import { Button } from "../../components/ui/button.tsx";
 import { RESUME_INDICATOR_STATES } from "./constants.js";
@@ -8,6 +8,14 @@ import ActivityTrail from "./ActivityTrail.jsx";
 import LogActivityForm from "./LogActivityForm.jsx";
 import AlsoFitsDialog from "./AlsoFitsDialog.jsx";
 import CandidateWriteUpDialog from "./CandidateWriteUpDialog.jsx";
+import CandidateEditorDialog from "./CandidateEditorDialog.jsx";
+import {
+  applyCandidateRecordToUiCandidate,
+  describeCandidateProvenance,
+  getCachedCandidateRecord,
+  getCandidateById,
+  subscribeCandidateRecords,
+} from "./candidateEditorService.js";
 import { getOwnershipStatus, openBrandedResume } from "./brandResume.js";
 import { createCandidateDraft } from "./candidateReviewService.js";
 import RejectMenu from "./RejectMenu.jsx";
@@ -18,16 +26,21 @@ import OutreachComposer from "./OutreachComposer.jsx";
 import { FitBadge, getResumeSource } from "./externals.js";
 
 const LOXO_PEOPLE_BASE_URL = "https://app.loxo.co/people/";
+const NotesPanel = lazy(() => import("../notes/NotesPanel.jsx"));
 
 export default function CandidateCard({
-  candidate,
+  candidate: rawCandidate,
   currentJob,
   jobs = [],
   onReject,
   onWant,
   onLogActivity,
   onStartCandidateCall,
+  onCandidateSaved,
 }) {
+  const [overlayRecord, setOverlayRecord] = useState(() => getCachedCandidateRecord(rawCandidate?.id));
+  const [editorMode, setEditorMode] = useState(null); // "edit" | "create" | null
+  const [saveNotice, setSaveNotice] = useState("");
   const [activeFit, setActiveFit] = useState(null);
   const [dragOffset, setDragOffset] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
@@ -38,8 +51,36 @@ export default function CandidateCard({
   const [ownershipOverride, setOwnershipOverride] = useState(false);
   const [rejectOpen, setRejectOpen] = useState(false);
   const [showOutreach, setShowOutreach] = useState(false);
+  const [activeTab, setActiveTab] = useState("profile");
+  const [notesOpened, setNotesOpened] = useState(false);
   const [ticked, setTicked] = useState(() => new Set());
   const startXRef = useRef(0);
+
+  useEffect(() => {
+    setOverlayRecord(getCachedCandidateRecord(rawCandidate?.id));
+    setSaveNotice("");
+    const unsubscribe = subscribeCandidateRecords(() => {
+      setOverlayRecord(getCachedCandidateRecord(rawCandidate?.id));
+    });
+    const prov = describeCandidateProvenance(rawCandidate, { mode: "edit" });
+    if (rawCandidate?.id && !prov.invalidKey && !getCachedCandidateRecord(rawCandidate.id)) {
+      getCandidateById(rawCandidate.id).catch(() => {
+        // Ignore unauthenticated or offline background lookup on mount.
+      });
+    }
+    return unsubscribe;
+  }, [rawCandidate?.id]);
+
+  const candidate = useMemo(
+    () => (overlayRecord ? applyCandidateRecordToUiCandidate(rawCandidate, overlayRecord) : rawCandidate),
+    [rawCandidate, overlayRecord],
+  );
+
+  const provenance = useMemo(
+    () => describeCandidateProvenance(overlayRecord || candidate, { mode: "edit" }),
+    [overlayRecord, candidate],
+  );
+
   const ownership = useMemo(
     () => getOwnershipStatus(candidate.activityTrail),
     [candidate.activityTrail]
@@ -76,7 +117,8 @@ export default function CandidateCard({
       e.target.closest("input") ||
       e.target.closest("textarea") ||
       e.target.closest("select") ||
-      e.target.closest("[role='dialog']")
+      e.target.closest("[role='dialog']") ||
+      e.target.closest(".workbench-notes-panel")
     ) {
       return;
     }
@@ -234,6 +276,22 @@ export default function CandidateCard({
                 <span>{resumeIndicator.label}</span>
               </span>
 
+              {!provenance.invalidKey ? (
+                <Badge
+                  variant="outline"
+                  className={
+                    provenance.isManual
+                      ? "border-emerald-400 bg-emerald-50 text-emerald-900 text-[11px] font-semibold"
+                      : provenance.hasOverlay
+                        ? "border-amber-400 bg-amber-50 text-amber-900 text-[11px] font-semibold"
+                        : "text-[11px]"
+                  }
+                  data-testid="card-provenance-badge"
+                >
+                  {provenance.badgeLabel}
+                </Badge>
+              ) : null}
+
               {/* Candidate Decision Badge if already marked */}
               {candidate.decision && (
                 <Badge
@@ -263,8 +321,55 @@ export default function CandidateCard({
             </span>
           )}
           <ContactReveal candidate={candidate} currentJob={currentJob} onStartCandidateCall={onStartCandidateCall} />
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={() => setEditorMode("edit")}
+            className="h-7 px-2 text-xs font-semibold"
+            aria-label={`Edit ${candidate.name}`}
+            data-testid="card-edit-candidate-button"
+          >
+            <Pencil size={12} className="mr-1" /> Edit candidate
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={() => setEditorMode("create")}
+            className="h-7 px-2 text-xs font-semibold"
+            data-testid="card-add-candidate-button"
+          >
+            <Plus size={12} className="mr-1" /> Add candidate
+          </Button>
         </div>
       </div>
+
+      {(candidate.industry || candidate.shift || candidate.compensation_target || candidate.current_compensation || candidate.compensation_context || candidate.role_context || candidate.client_context || candidate.notes) ? (
+        <div
+          className="mx-4 mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 rounded-md border bg-muted/20 px-3 py-1.5 text-xs"
+          data-testid="card-candidate-details"
+        >
+          {candidate.industry ? <span><strong className="font-semibold">Industry:</strong> {candidate.industry}</span> : null}
+          {candidate.shift ? <span><strong className="font-semibold">Shift:</strong> {candidate.shift}</span> : null}
+          {candidate.compensation_target ? <span><strong className="font-semibold">Target comp:</strong> {candidate.compensation_target}</span> : null}
+          {candidate.current_compensation ? <span><strong className="font-semibold">Current comp:</strong> {candidate.current_compensation}</span> : null}
+          {candidate.compensation_context ? <span><strong className="font-semibold">Comp context:</strong> {candidate.compensation_context}</span> : null}
+          {candidate.role_context ? <span><strong className="font-semibold">Role context:</strong> {candidate.role_context}</span> : null}
+          {candidate.client_context ? <span><strong className="font-semibold">Client context:</strong> {candidate.client_context}</span> : null}
+          {candidate.notes ? <span className="truncate max-w-md"><strong className="font-semibold">Notes:</strong> {candidate.notes}</span> : null}
+        </div>
+      ) : null}
+
+      {saveNotice ? (
+        <div
+          role="status"
+          className="mx-4 mt-2 rounded-md border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-900"
+          data-testid="card-candidate-save-status"
+        >
+          {saveNotice}
+        </div>
+      ) : null}
 
       {ownership.active && !ownershipOverride ? (
         <div className="mx-4 mt-2 flex flex-wrap items-center justify-between gap-2 rounded-md border border-amber-300 bg-amber-50 p-2.5 text-xs text-amber-950" data-testid="ownership-warning">
@@ -290,8 +395,19 @@ export default function CandidateCard({
         </div>
       ) : null}
 
+      <div role="tablist" aria-label="Candidate details" className="flex shrink-0 gap-2 border-b px-4 pt-2">
+        <button type="button" role="tab" aria-selected={activeTab === "profile"} onClick={() => setActiveTab("profile")} className="min-h-10 rounded-t-md border px-3 text-sm aria-selected:bg-muted">Profile</button>
+        <button type="button" role="tab" aria-selected={activeTab === "notes"} onClick={() => { setNotesOpened(true); setActiveTab("notes"); }} className="min-h-10 rounded-t-md border px-3 text-sm aria-selected:bg-muted">Notes</button>
+      </div>
+      {notesOpened ? (
+        <div role="tabpanel" hidden={activeTab !== "notes"} className={activeTab === "notes" ? "min-h-0 flex-1 overflow-y-auto p-4 select-text" : "hidden"}>
+          <Suspense fallback={<p className="text-sm text-muted-foreground">Loading notes editor…</p>}>
+            <NotesPanel subjectType="candidate" subjectId={candidate.id} defaultTitle={candidate.name} />
+          </Suspense>
+        </div>
+      ) : null}
       {/* 2. Main Two-Column Body with internal scrolling */}
-      <div className="grid flex-1 min-h-0 gap-4 p-4 lg:grid-cols-12 overflow-hidden">
+      <div role="tabpanel" hidden={activeTab !== "profile"} className={activeTab === "profile" ? "grid flex-1 min-h-0 gap-4 overflow-hidden p-4 lg:grid-cols-12" : "hidden"}>
         {/* Left Column: Also Fits Tags + Resume Section */}
         <div className="lg:col-span-7 flex flex-col gap-3 min-h-0 overflow-y-auto pr-1">
           {/* "Also Fits" Tags (Source produced only) */}
@@ -391,6 +507,25 @@ export default function CandidateCard({
         currentJob={currentJob}
         open={showWriteUp}
         onOpenChange={setShowWriteUp}
+      />
+      <CandidateEditorDialog
+        open={Boolean(editorMode)}
+        onOpenChange={(open) => !open && setEditorMode(null)}
+        mode={editorMode || "edit"}
+        candidate={editorMode === "edit" ? candidate : null}
+        onSaved={(savedRecord) => {
+          if (savedRecord?.id === rawCandidate?.id) {
+            setOverlayRecord(savedRecord);
+            setSaveNotice(
+              savedRecord.is_manual
+                ? `Saved manual candidate: ${savedRecord.candidate_name}`
+                : `Saved overlay edits for ${savedRecord.candidate_name || candidate.name}`
+            );
+          } else if (savedRecord) {
+            setSaveNotice(`Added manual candidate: ${savedRecord.candidate_name}`);
+          }
+          onCandidateSaved?.(savedRecord);
+        }}
       />
     </div>
   );

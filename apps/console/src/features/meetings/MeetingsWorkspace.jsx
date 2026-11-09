@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { ExternalLink, FileDown, Mic, Printer, RefreshCw } from "lucide-react";
 import { Badge } from "../../components/ui/badge.tsx";
 import { Button } from "../../components/ui/button.tsx";
@@ -26,6 +26,7 @@ import { MEETING_TEMPLATES, renderMeetingTemplate } from "./meetingTemplates.js"
 import MeetingCaptureVariants from "./MeetingCaptureVariants.jsx";
 
 const defaultAdapter = createMeetingAdapter();
+const NotesPanel = lazy(() => import("../notes/NotesPanel.jsx"));
 
 function browserCaptureMetadata(recording) {
   return {
@@ -75,6 +76,7 @@ export default function MeetingsWorkspace({ adapter = defaultAdapter, launchCont
   const [selectedJobId, setSelectedJobId] = useState(launchJobId);
   const [selectedCandidateId, setSelectedCandidateId] = useState(launchCandidateId);
   const [templateId, setTemplateId] = useState("candidate_screen");
+  const [showLinkedNotes, setShowLinkedNotes] = useState(false);
   const [recording, setRecording] = useState(null);
   const [includeSharedAudio, setIncludeSharedAudio] = useState(false);
   const [recordedAudio, setRecordedAudio] = useState(null);
@@ -356,6 +358,19 @@ export default function MeetingsWorkspace({ adapter = defaultAdapter, launchCont
     </CardContent></Card>
 
     <MeetingCaptureVariants launchContext={launchContext} recruiting={recruiting} selectedJob={selectedJob} selectedJobId={selectedJobId} setSelectedJobId={setSelectedJobId} selectedCandidate={selectedCandidate} selectedCandidateId={selectedCandidateId} setSelectedCandidateId={setSelectedCandidateId} recording={recording} beginRecording={beginRecording} finishRecording={finishRecording} recordedAudio={recordedAudio} selectedEvent={selectedEvent} transcribing={transcribing} includeSharedAudio={includeSharedAudio} setIncludeSharedAudio={setIncludeSharedAudio} pendingAudio={pendingAudio} retryTranscription={retryTranscription} transcript={transcript} setTranscript={setTranscript} notes={notes} setNotes={setNotes} segments={segments} speakers={speakers} speakerLabels={speakerLabels} onSpeakerLabelChange={renameSpeaker} saveDraft={saveDraft} createNotes={createNotes} makingNotes={makingNotes} />
+
+    <section className="rounded-lg border bg-card p-4" aria-label="Meeting notes tab">
+      <button type="button" aria-expanded={showLinkedNotes} onClick={() => setShowLinkedNotes((value) => !value)} className="min-h-11 rounded-md border px-3 text-sm font-semibold">Notes</button>
+      {showLinkedNotes ? (
+        loadedMeetingId ? (
+          <div className="mt-3">
+            <Suspense fallback={<p className="text-sm text-muted-foreground">Loading notes editor…</p>}>
+              <NotesPanel subjectType="meeting" subjectId={loadedMeetingId} defaultTitle={exportTitle} />
+            </Suspense>
+          </div>
+        ) : <p className="mt-3 text-sm text-muted-foreground">Save the meeting draft before attaching notes.</p>
+      ) : null}
+    </section>
 
     <Card><CardHeader><CardTitle>Recruiter template</CardTitle><CardDescription>Sections use transcript text only. Missing topics stay marked Not discussed.</CardDescription></CardHeader><CardContent className="grid gap-4">
       <Select value={templateId} onValueChange={setTemplateId}><SelectTrigger aria-label="Select meeting template" className="w-full sm:max-w-xs"><span>{MEETING_TEMPLATES.find((item) => item.id === templateId)?.label || "Select template"}</span></SelectTrigger><SelectContent>{MEETING_TEMPLATES.map((item) => <SelectItem key={item.id} value={item.id}>{item.label}</SelectItem>)}</SelectContent></Select>

@@ -62,6 +62,7 @@ export default function CandidateReview({ selectedJob, onSelectJob, onNavigateJo
         setActiveJobId(nextJob ? String(nextJob.id) : "");
         if (nextJob && onSelectJob) onSelectJob(nextJob);
         setDataError("");
+        setRefreshKey((key) => key + 1);
       })
       .catch((error) => {
         if (!active) return;
@@ -126,7 +127,7 @@ export default function CandidateReview({ selectedJob, onSelectJob, onNavigateJo
   );
 
   const swipeCandidates = useMemo(
-    () => shownCandidates.filter((candidate) => !candidate.decision && !candidate.isSubmitted),
+    () => shownCandidates.filter((candidate) => !candidate.decision && !candidate.isSubmitted && candidate.presentationState !== "pending"),
     [shownCandidates]
   );
 
@@ -327,7 +328,6 @@ export default function CandidateReview({ selectedJob, onSelectJob, onNavigateJo
             <button
               type="button"
               onClick={() => setActiveView("people")}
-              disabled={!currentJob}
               className={`flex items-center gap-1.5 px-3 py-1 rounded-md transition font-semibold disabled:opacity-50 ${
                 activeView === "people"
                   ? "bg-background text-foreground shadow-sm"
@@ -366,7 +366,7 @@ export default function CandidateReview({ selectedJob, onSelectJob, onNavigateJo
       ) : null}
 
       {/* 2. Main Content View Area or Explicit Unmatched Empty State */}
-      {!currentJob ? (
+      {!currentJob && activeView !== "people" ? (
         <div
           className="flex flex-1 flex-col items-center justify-center rounded-xl border border-dashed bg-card p-8 text-center text-muted-foreground"
           data-testid="unmatched-job-state"

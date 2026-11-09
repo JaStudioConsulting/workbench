@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { Briefcase, Copy, Check, MapPin, RefreshCw, Search, SlidersHorizontal, ArrowRight, ShieldCheck, X, CircleDollarSign, UserRoundSearch } from "lucide-react";
 import { Badge } from "../../components/ui/badge.tsx";
 import { Button } from "../../components/ui/button.tsx";
@@ -13,6 +13,7 @@ import { supabase } from "../../supabase-client.js";
 
 const DEFAULT_CENTER = [43.6532, -79.3832]; // Toronto, ON
 const DEFAULT_ZOOM = 10;
+const NotesPanel = lazy(() => import("../notes/NotesPanel.jsx"));
 
 export default function JobsMapView({ onSelectJobForWorkflow, onOpenJobReview }) {
   const [jobs, setJobs] = useState([]);
@@ -29,6 +30,7 @@ export default function JobsMapView({ onSelectJobForWorkflow, onOpenJobReview })
   const [unit, setUnit] = useState("km");
   const [regionFilter, setRegionFilter] = useState("ALL");
   const [selectedJob, setSelectedJob] = useState(null);
+  const [jobDetailsTab, setJobDetailsTab] = useState("details");
   const [copiedPitch, setCopiedPitch] = useState(false);
   const [mobileTab, setMobileTab] = useState("split"); // "split" | "list" | "map"
 
@@ -374,6 +376,7 @@ export default function JobsMapView({ onSelectJobForWorkflow, onOpenJobReview })
 
   const handleSelectJobCard = (job) => {
     setSelectedJob(job);
+    setJobDetailsTab("details");
     if (job.coords && mapInstanceRef.current) {
       mapInstanceRef.current.flyTo(job.coords, 11, { duration: 0.8 });
       const m = markersRef.current[job.id];
@@ -629,7 +632,7 @@ export default function JobsMapView({ onSelectJobForWorkflow, onOpenJobReview })
 
           {/* Job Details Drawer */}
           {selectedJob && (
-            <div className="absolute bottom-3 left-3 right-3 sm:right-auto sm:w-[380px] z-20 rounded-xl border bg-card/95 backdrop-blur p-4 shadow-xl">
+            <div className="absolute bottom-3 left-3 right-3 sm:right-auto sm:w-[380px] z-20 max-h-[80dvh] overflow-y-auto rounded-xl border bg-card/95 backdrop-blur p-4 shadow-xl">
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-1.5">
@@ -655,6 +658,18 @@ export default function JobsMapView({ onSelectJobForWorkflow, onOpenJobReview })
                 </button>
               </div>
 
+              <div role="tablist" aria-label="Job details" className="mt-3 flex gap-2 border-b">
+                <button type="button" role="tab" aria-selected={jobDetailsTab === "details"} onClick={() => setJobDetailsTab("details")} className="min-h-10 rounded-t-md border px-3 text-sm aria-selected:bg-muted">Details</button>
+                <button type="button" role="tab" aria-selected={jobDetailsTab === "notes"} onClick={() => setJobDetailsTab("notes")} className="min-h-10 rounded-t-md border px-3 text-sm aria-selected:bg-muted">Notes</button>
+              </div>
+              {jobDetailsTab === "notes" ? (
+                <div role="tabpanel" className="mt-3">
+                  <Suspense fallback={<p className="text-sm text-muted-foreground">Loading notes editor…</p>}>
+                    <NotesPanel subjectType="job" subjectId={String(selectedJob.originalJobId || "")} defaultTitle={selectedJob.title} />
+                  </Suspense>
+                </div>
+              ) : (
+              <div role="tabpanel">
               <div className="mt-2.5 space-y-1 text-xs text-muted-foreground">
                 <p className="flex items-start gap-1.5"><MapPin size={13} className="mt-0.5 shrink-0" aria-hidden="true" /><span><strong>Location:</strong> {selectedJob.displayLocation}</span></p>
                 {selectedJob.compensation && (
@@ -694,6 +709,8 @@ export default function JobsMapView({ onSelectJobForWorkflow, onOpenJobReview })
                   </Button>
                 )}
               </div>
+              </div>
+              )}
             </div>
           )}
         </div>

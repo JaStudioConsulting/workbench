@@ -22,6 +22,11 @@ import {
   logCandidateActivity,
   makeCompositeKey,
   mapLiveCandidate,
+  mapLivePresentation,
+  loadLiveReviewJobs,
+  loadLiveCandidatesForJob,
+  loadLivePresentations,
+  _setSupabaseClientForTesting,
   _resetStoreForTesting,
 } from "../src/features/candidate-review/candidateReviewService.js";
 import { SAMPLE_CANDIDATES, SAMPLE_JOBS } from "../src/features/candidate-review/sampleReviewData.js";
@@ -147,27 +152,411 @@ test("candidate review data layer returns sorted candidates and handles async de
   assert.equal(matchedAfterLog.activityTrail[0].note, "Spoke to candidate, interested in robotics role");
 });
 
-test("submission history is explicit, filterable, and session writes stay marked non-persistent", async () => {
+test("sample submission history stays in sample mode only and never invents a session record", async () => {
+  assert.equal(isSampleData(), true);
   const imported = getSubmissionHistory();
   assert.ok(imported.some((record) => record.source === "imported"));
   assert.ok(imported.every((record) => record.jobId && record.personId && record.submittedAt));
 
-  const result = await recordCandidateSubmission("DEMO-JOB-ROBOTICS", "DEMO-PERSON-001", {
-    client: "Synthetic Client",
-    location: "Toronto, ON",
-    submittedAt: "2026-11-02T08:00:00.000Z",
-  });
-  assert.equal(result.ok, true);
-  assert.equal(result.persisted, false);
-  assert.equal(result.submission.status, "Session only");
+  await assert.rejects(
+    recordCandidateSubmission("DEMO-JOB-ROBOTICS", "DEMO-PERSON-001", {
+      client: "Synthetic Client",
+      location: "Toronto, ON",
+      submittedAt: "2026-11-02T08:00:00.000Z",
+    }),
+    /Cannot record submission without a source-linked candidate/
+  );
 
   const history = getSubmissionHistory();
-  const sessionRecord = history.find((record) => record.personId === "DEMO-PERSON-001");
-  assert.equal(sessionRecord.source, "session");
-  assert.equal(sessionRecord.client, "Synthetic Client");
+  assert.equal(history.find((record) => record.personId === "DEMO-PERSON-001"), undefined);
 
   const candidate = getCandidatesForJob("DEMO-JOB-ROBOTICS").find((item) => item.id === "DEMO-PERSON-001");
-  assert.equal(candidate.isSubmitted, true);
+  assert.equal(candidate.isSubmitted, false);
+});
+
+test("presentations mapping preserves confirmed vs pending/failed state and unknown client/job fields", () => {
+  const serviceSource = fs.readFileSync(path.join(featureDir, "candidateReviewService.js"), "utf8");
+  assert.doesNotMatch(serviceSource, /candidateSubmissions/);
+  assert.match(serviceSource, /from\("presentations"\)/);
+
+  const confirmedKnown = mapLivePresentation({
+    id: "tracker_submissions:1",
+    presentation_state: "confirmed",
+    source: "tracker_submissions",
+    source_id: 1,
+    candidate_source: "submission",
+    candidate_source_id: 1,
+    candidate_key: "key-1",
+    candidate_name: "Candidate One",
+    client_name: "Client B",
+    job_id: 12,
+    job_title: "Accountant",
+    presented_on: "2026-10-01",
+    queued_at: null,
+    source_status: "Submitted",
+    submission_type: "Role Submission",
+    recruiter: "Ja",
+    note: null,
+  });
+  assert.equal(confirmedKnown.presentationState, "confirmed");
+  assert.equal(confirmedKnown.isConfirmed, true);
+  assert.equal(confirmedKnown.clientName, "Client B");
+  assert.equal(confirmedKnown.client, "Client B");
+  assert.equal(confirmedKnown.jobId, "12");
+  assert.equal(confirmedKnown.jobTitle, "Accountant");
+  assert.equal(confirmedKnown.presentedOn, "2026-10-01");
+  assert.equal(confirmedKnown.queuedAt, null);
+  assert.equal(confirmedKnown.sourceStatus, "Submitted");
+  assert.equal(confirmedKnown.candidate.isSubmitted, true);
+
+  const confirmedUnknowns = mapLivePresentation({
+    id: "tracker_submissions:3",
+    presentation_state: "confirmed",
+    source: "tracker_submissions",
+    source_id: 3,
+    candidate_source: "submission",
+    candidate_source_id: 3,
+    candidate_key: "key-3",
+    candidate_name: "Candidate Three",
+    client_name: null,
+    job_id: null,
+    job_title: null,
+    presented_on: "2026-10-03",
+    queued_at: null,
+    source_status: "Hired",
+    submission_type: "MPC",
+    recruiter: "Ja",
+    note: null,
+  });
+  assert.equal(confirmedUnknowns.presentationState, "confirmed");
+  assert.equal(confirmedUnknowns.isConfirmed, true);
+  assert.equal(confirmedUnknowns.clientName, null);
+  assert.equal(confirmedUnknowns.client, null);
+  assert.equal(confirmedUnknowns.jobId, null);
+  assert.equal(confirmedUnknowns.jobTitle, null);
+  assert.equal(confirmedUnknowns.sourceStatus, "Hired");
+  assert.equal(confirmedUnknowns.candidate.isSubmitted, true);
+
+  const pendingAction = mapLivePresentation({
+    id: "candidate_review_actions:100",
+    presentation_state: "pending",
+    source: "candidate_review_actions",
+    source_id: 100,
+    candidate_source: "sourcing",
+    candidate_source_id: 20,
+    candidate_key: "source-20",
+    candidate_name: "Source Candidate",
+    client_name: "Client A",
+    job_id: 10,
+    job_title: "Program Manager",
+    presented_on: null,
+    queued_at: "2026-11-08T18:00:00.000Z",
+    source_status: "waiting_for_loxo",
+    submission_type: null,
+    recruiter: null,
+    note: "Queued",
+  });
+  assert.equal(pendingAction.presentationState, "pending");
+  assert.equal(pendingAction.isConfirmed, false);
+  assert.equal(pendingAction.status, "Waiting for Loxo");
+  assert.equal(pendingAction.presentedOn, null);
+  assert.equal(pendingAction.queuedAt, "2026-11-08T18:00:00.000Z");
+  assert.equal(pendingAction.candidate.isSubmitted, false);
+  assert.equal(pendingAction.candidate.presentationState, "pending");
+
+  const failedAction = mapLivePresentation({
+    id: "candidate_review_actions:102",
+    presentation_state: "failed",
+    source: "candidate_review_actions",
+    source_id: 102,
+    candidate_source: "submission",
+    candidate_source_id: 2,
+    candidate_key: "key-2",
+    candidate_name: "Candidate Two",
+    client_name: "Client B",
+    job_id: 12,
+    job_title: "Accountant",
+    presented_on: null,
+    queued_at: "2026-11-08T19:00:00.000Z",
+    source_status: "failed",
+    submission_type: null,
+    recruiter: null,
+    note: "Failed",
+  });
+  assert.equal(failedAction.presentationState, "failed");
+  assert.equal(failedAction.isConfirmed, false);
+  assert.equal(failedAction.status, "Failed");
+  assert.equal(failedAction.presentedOn, null);
+  assert.equal(failedAction.candidate.isSubmitted, false);
+  assert.equal(failedAction.candidate.presentationState, "failed");
+});
+
+test("persisted presentations survive reload, keep queued actions pending, and never invent records on insert failure", async () => {
+  const db = {
+    jobs: [
+      {
+        job_id: 10,
+        job_title: "Program Manager",
+        company: "Client A",
+        location: "Toronto, ON",
+        compensation: "$120k",
+        status: "Active",
+        date_opened: "2026-10-01",
+        owners: "Ja",
+        loxo_link: "",
+      },
+    ],
+    feed: [
+      {
+        job_id: 10,
+        candidate_source: "sourcing",
+        candidate_source_id: 20,
+        candidate_key: "source-20",
+        candidate_name: "Source Candidate",
+        current_title: "Program Lead",
+        current_company: "North Operations",
+        location: "Toronto, ON",
+        stage: "Screening",
+        resume_text: "Experienced program lead.",
+      },
+      {
+        job_id: 10,
+        candidate_source: "submission",
+        candidate_source_id: 1,
+        candidate_key: "sub-1",
+        candidate_name: "Confirmed Candidate",
+        current_title: "Senior PM",
+        current_company: "East Systems",
+        location: "Ottawa, ON",
+        stage: "Submitted",
+        resume_text: "Senior PM resume.",
+      },
+    ],
+    actions: [],
+    presentations: [
+      {
+        id: "tracker_submissions:1",
+        presentation_state: "confirmed",
+        source: "tracker_submissions",
+        source_id: 1,
+        candidate_source: "submission",
+        candidate_source_id: 1,
+        candidate_key: "sub-1",
+        candidate_name: "Confirmed Candidate",
+        client_name: null,
+        job_id: null,
+        job_title: null,
+        presented_on: "2026-10-01",
+        queued_at: null,
+        source_status: "Submitted",
+        submission_type: "MPC",
+        recruiter: "Ja",
+        note: "Confirmed in Tracker",
+      },
+    ],
+    failNextInsert: false,
+    nextActionId: 100,
+  };
+
+  function createMockSupabase() {
+    return {
+      from(table) {
+        if (table === "tracker_jobs") {
+          return {
+            select() {
+              return {
+                eq() {
+                  return {
+                    order: async () => ({ data: db.jobs, error: null }),
+                  };
+                },
+              };
+            },
+          };
+        }
+        if (table === "candidate_review_feed") {
+          return {
+            select() {
+              return {
+                limit: async () => ({ data: db.feed, error: null }),
+                eq(_col, val) {
+                  return {
+                    limit: async () => ({
+                      data: db.feed.filter((row) => Number(row.job_id) === Number(val)),
+                      error: null,
+                    }),
+                  };
+                },
+              };
+            },
+          };
+        }
+        if (table === "candidate_review_actions") {
+          return {
+            select() {
+              return {
+                eq(_col, val) {
+                  return {
+                    order: async () => ({
+                      data: db.actions.filter((row) => Number(row.job_id) === Number(val)),
+                      error: null,
+                    }),
+                  };
+                },
+              };
+            },
+            insert: async (payload) => {
+              if (db.failNextInsert) {
+                return { data: null, error: { message: "RLS or network failure" } };
+              }
+              const id = db.nextActionId++;
+              const created_at = "2026-11-09T01:00:00.000Z";
+              const actionRow = { id, created_at, ...payload };
+              db.actions.unshift(actionRow);
+              if (payload.action_type === "activity" && String(payload.activity_type).toLowerCase() === "submitted") {
+                const candidateRow = db.feed.find(
+                  (item) =>
+                    item.candidate_source === payload.candidate_source &&
+                    Number(item.candidate_source_id) === Number(payload.candidate_source_id)
+                );
+                const jobRow = db.jobs.find((item) => Number(item.job_id) === Number(payload.job_id));
+                db.presentations.push({
+                  id: `candidate_review_actions:${id}`,
+                  presentation_state: payload.status === "failed" ? "failed" : "pending",
+                  source: "candidate_review_actions",
+                  source_id: id,
+                  candidate_source: payload.candidate_source,
+                  candidate_source_id: payload.candidate_source_id,
+                  candidate_key: candidateRow?.candidate_key ?? null,
+                  candidate_name: candidateRow?.candidate_name ?? null,
+                  client_name: jobRow?.company ?? null,
+                  job_id: payload.job_id,
+                  job_title: jobRow?.job_title ?? null,
+                  presented_on: null,
+                  queued_at: created_at,
+                  source_status: payload.status,
+                  submission_type: null,
+                  recruiter: null,
+                  note: payload.note ?? null,
+                });
+              }
+              return { data: actionRow, error: null };
+            },
+          };
+        }
+        if (table === "presentations") {
+          return {
+            select() {
+              return {
+                order() {
+                  return {
+                    range: async (from, to) => ({
+                      data: db.presentations
+                        .slice()
+                        .sort((a, b) => String(a.id).localeCompare(String(b.id)))
+                        .slice(from, to + 1),
+                      error: null,
+                    }),
+                  };
+                },
+              };
+            },
+          };
+        }
+        throw new Error(`Unexpected table: ${table}`);
+      },
+    };
+  }
+
+  _setSupabaseClientForTesting(createMockSupabase());
+  await loadLiveReviewJobs();
+  await loadLiveCandidatesForJob("10");
+
+  assert.equal(isSampleData(), false);
+
+  // Sample fixtures are excluded in live mode; only persisted presentations appear
+  const initialHistory = getSubmissionHistory();
+  assert.equal(initialHistory.length, 1);
+  assert.equal(initialHistory[0].id, "tracker_submissions:1");
+  assert.equal(initialHistory[0].presentationState, "confirmed");
+  assert.equal(initialHistory[0].clientName, null);
+  assert.equal(initialHistory[0].jobId, null);
+  assert.equal(initialHistory[0].jobTitle, null);
+
+  // Failed action insert throws error and never invents a session record
+  db.failNextInsert = true;
+  await assert.rejects(
+    recordCandidateSubmission("10", "sourcing:20", { note: "Should fail" }),
+    /Could not save the submission draft/
+  );
+  assert.equal(getSubmissionHistory().length, 1);
+  const afterFailedCandidate = getCandidatesForJob("10").find((c) => c.id === "sourcing:20");
+  assert.equal(afterFailedCandidate.isSubmitted, false);
+  assert.equal(afterFailedCandidate.presentationState, null);
+
+  // Successful action insert refreshes from persisted presentations and stays pending
+  db.failNextInsert = false;
+  const insertResult = await recordCandidateSubmission("10", "sourcing:20", {
+    note: "Queued for Client A",
+  });
+  assert.equal(insertResult.ok, true);
+  assert.equal(insertResult.persisted, true);
+  assert.equal(insertResult.submission.id, "candidate_review_actions:100");
+  assert.equal(insertResult.submission.presentationState, "pending");
+  assert.equal(insertResult.submission.isConfirmed, false);
+  assert.equal(insertResult.submission.status, "Waiting for Loxo");
+
+  const candidateAfterQueue = getCandidatesForJob("10").find((c) => c.id === "sourcing:20");
+  assert.equal(candidateAfterQueue.isSubmitted, false);
+  assert.equal(candidateAfterQueue.presentationState, "pending");
+  assert.equal(candidateAfterQueue.submission.status, "Waiting for Loxo");
+
+  // Simulate full browser reload: reset all in-memory stores and reload from Supabase
+  _resetStoreForTesting();
+  _setSupabaseClientForTesting(createMockSupabase());
+  await loadLiveReviewJobs();
+  await loadLiveCandidatesForJob("10");
+  await loadLivePresentations();
+
+  const reloadedHistory = getSubmissionHistory();
+  assert.equal(reloadedHistory.length, 2);
+  const reloadedPending = reloadedHistory.find((r) => r.id === "candidate_review_actions:100");
+  const reloadedConfirmed = reloadedHistory.find((r) => r.id === "tracker_submissions:1");
+  assert.equal(reloadedPending.presentationState, "pending");
+  assert.equal(reloadedPending.candidate.isSubmitted, false);
+  assert.equal(reloadedPending.status, "Waiting for Loxo");
+  assert.equal(reloadedConfirmed.presentationState, "confirmed");
+  assert.equal(reloadedConfirmed.candidate.isSubmitted, true);
+
+  const reloadedCandidate = getCandidatesForJob("10").find((c) => c.id === "sourcing:20");
+  assert.equal(reloadedCandidate.isSubmitted, false);
+  assert.equal(reloadedCandidate.presentationState, "pending");
+
+  db.feed.push({
+    job_id: 10,
+    candidate_source: "submission",
+    candidate_source_id: 2,
+    candidate_key: "sub-2",
+    candidate_name: "Stage Only Candidate",
+    stage: "Submitted",
+    resume_text: "",
+  });
+  await loadLiveCandidatesForJob("10");
+  const stageOnly = getCandidatesForJob("10").find((c) => c.id === "submission:2");
+  assert.equal(stageOnly.isSubmitted, false);
+  assert.equal(stageOnly.presentationState, null);
+
+  for (let index = 0; index < 1001; index += 1) {
+    db.presentations.push({
+      ...db.presentations[0],
+      id: `tracker_submissions:${1000 + index}`,
+      source_id: 1000 + index,
+      candidate_source_id: 1000 + index,
+      candidate_name: "Synthetic pagination record",
+    });
+  }
+  await loadLivePresentations();
+  assert.equal(getSubmissionHistory().length, 1003);
 });
 
 test("match selected jobs only by immutable ID with zero title fallback and explicit empty state", () => {
@@ -350,6 +739,13 @@ test("people view exposes fast queues and wanted actions while swipe stays unrev
   assert.match(peopleSource, /Mark submitted/);
   assert.match(peopleSource, /data-testid="submission-filters"/);
   assert.match(peopleSource, /Reach out anyway/);
+  assert.doesNotMatch(peopleSource, /Session only/);
+  assert.doesNotMatch(peopleSource, /candidate\.reviewJobTitle \|\| currentJob\?\.title/);
+  assert.match(peopleSource, /record\.presentationState === "confirmed"/);
+  assert.match(peopleSource, /candidate\.presentationState === "pending"/);
+  assert.match(peopleSource, /Waiting for Loxo/);
+  assert.match(peopleSource, /Job not recorded/);
+  assert.match(peopleSource, /Client not recorded/);
   assert.equal([...swipeSource.matchAll(/onNavigateIndex\(safeIndex \+ 1\)/g)].length, 1);
 });
 
