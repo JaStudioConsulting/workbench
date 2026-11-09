@@ -5,7 +5,6 @@ import { createGoogleWorkspaceHandlers } from "./src/google-workspace-routes.js"
 import { createGoogleApiHandlers } from "./src/google-api.js";
 import { prepareAfterCallWorkflow } from "./src/after-call.js";
 import { createMcpRequestHandler } from "./src/mcp.js";
-import { createReadOnlyNeo4jAdapter } from "./src/neo4j.js";
 import { discoverMcp, loadRecruitmentContext } from "./src/recruitment-package.js";
 import { createLocalTranscriptionAdapter, meetingAudioBody } from "./src/local-transcription.js";
 import { createNativeCaptureManager, parseByteRange } from "./src/native-capture.js";
@@ -65,7 +64,6 @@ export async function createApp({
   transcriptionAdapter = createLocalTranscriptionAdapter(),
   captureManager = createNativeCaptureManager(),
   mcpHandlerFactory = createMcpRequestHandler,
-  neo4j = createReadOnlyNeo4jAdapter(),
 } = {}) {
   const app = express();
   app.disable("x-powered-by");
@@ -93,7 +91,6 @@ export async function createApp({
     auth: configuredAuth.enabled ? "configured" : "unavailable",
     storage: "unavailable",
     gmail: "draft_only",
-    neo4j: neo4j.enabled ? "read_only" : "disabled",
     externalWrites: false,
   })));
 
