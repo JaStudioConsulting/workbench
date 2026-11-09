@@ -324,6 +324,13 @@ test('PostgreSQL full-text search covers candidates_all, leads, tracker_jobs, di
 
   // Apply migration 021_fulltext_search.sql
   await db.exec(await readFile(new URL('../migrations/021_fulltext_search.sql', import.meta.url), 'utf8'));
+  const executeGrants = (await db.query(`
+    SELECT
+      has_function_privilege('anon', 'public.search_workbench(text, integer)', 'EXECUTE') AS anon_search,
+      has_function_privilege('authenticated', 'public.search_workbench(text, integer)', 'EXECUTE') AS recruiter_search
+  `)).rows[0];
+  assert.equal(executeGrants.anon_search, false);
+  assert.equal(executeGrants.recruiter_search, true);
 
   const first = '11111111-1111-4111-8111-111111111111';
   const second = '22222222-2222-4222-8222-222222222222';
