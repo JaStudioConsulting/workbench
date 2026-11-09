@@ -154,7 +154,9 @@ export default function MeetingsWorkspace({ adapter = defaultAdapter, launchCont
       setTranscriptionMetadata({ status: launchContext.meeting.transcriptionStatus || "ready", warning: launchContext.meeting.transcriptionWarning || null, source: launchContext.meeting.transcriptionSource || null, model: launchContext.meeting.transcriptionModel || null });
       setLoadedMeetingId(launchContext.meeting.id || null);
       if (launchContext.meeting.templateId) setTemplateId(launchContext.meeting.templateId);
-      setStatus("Saved meeting loaded.");
+      setStatus(launchContext.meeting.transcriptExpiredAt
+        ? "Saved meeting loaded. Its transcript was removed under the one-year retention rule."
+        : "Saved meeting loaded.");
     }
   }, [launchCandidateId, launchContext, launchJobId]);
 
@@ -315,7 +317,12 @@ export default function MeetingsWorkspace({ adapter = defaultAdapter, launchCont
         recordingId: recordingMetadata?.id,
       });
       if (result?.persistence === "durable" && result?.draft?.id) setLoadedMeetingId(result.draft.id);
-      if (result?.persistence === "durable" && result?.draft?.id && !result.archiveRetained) setRecoveries((current) => current.filter((item) => item.id !== recordingMetadata?.id));
+      if (result?.persistence === "durable" && result?.draft?.id && result.draft.transcript?.trim() && !result.archiveRetained) {
+        setRecoveries((current) => current.filter((item) => item.id !== recordingMetadata?.id));
+        if (recordedAudio?.url) URL.revokeObjectURL(recordedAudio.url);
+        setRecordedAudio(null);
+        setPendingAudio(null);
+      }
       setStatus(result.warning || (result.persistence === "durable" ? "Meeting draft saved." : "Meeting draft saved for this session."));
       setArchiveCleanupWarning(result.archiveRetained ? "Recoverable audio could not be removed from this device and remains available for recovery." : "");
     } catch (saveError) { setError(saveError.message || "Meeting draft could not be saved."); }
