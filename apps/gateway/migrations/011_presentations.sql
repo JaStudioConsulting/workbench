@@ -65,11 +65,7 @@ LEFT JOIN public.tracker_sourcing sourcing
 LEFT JOIN public.tracker_submissions submission
   ON a.candidate_source = 'submission' AND submission.id = a.candidate_source_id
 WHERE a.action_type = 'activity'
-  AND lower(btrim(a.activity_type)) = 'submitted'
-  AND NOT (
-    a.candidate_source = 'submission'
-    AND EXISTS (SELECT 1 FROM tracker_confirmed confirmed WHERE confirmed.id = a.candidate_source_id)
-  );
+  AND lower(btrim(a.activity_type)) = 'submitted';
 
 COMMENT ON VIEW public.presentations IS
   'Confirmed Tracker presentation records plus pending or failed Workbench Submitted actions. Blank and ambiguous source facts remain unknown.';
