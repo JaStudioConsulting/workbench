@@ -53,7 +53,7 @@ export default function HomePage({ onNavigate = () => {}, recentMeetingsLoader }
   }, [requestId, recentMeetingsLoader]);
 
   if (state.phase === "loading") return <section className="min-h-80 rounded-lg border p-6" role="status">Loading today&apos;s work...</section>;
-  if (state.phase === "error") return <section className="rounded-lg border p-6" role="alert"><h2 className="font-semibold">Home could not be loaded</h2><p className="mt-1 text-sm text-muted-foreground">Live Workbench data is unavailable.</p><Button className="mt-4" variant="outline" onClick={() => setRequestId((value) => value + 1)}><RefreshCw size={15} />Retry</Button></section>;
+  if (state.phase === "error") return <section className="rounded-lg border p-6" role="alert"><h2 className="font-semibold">Home could not be loaded</h2><p className="mt-1 text-sm text-muted-foreground">Live Workbench data is unavailable.</p><Button className="mt-4 min-h-11" variant="outline" onClick={() => setRequestId((value) => value + 1)}><RefreshCw size={15} />Retry</Button></section>;
 
   const { data, meetings } = state;
   return (
