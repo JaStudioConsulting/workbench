@@ -97,15 +97,17 @@ export async function listAllOwnerNotes(options = {}) {
 }
 
 export async function createSubjectNote(subjectType, subjectId, title = "", options = {}) {
+  const { originKey = null, body: noteBody = null, ...requestOptions } = options;
   const subject = normalizeNoteSubject(subjectType, subjectId);
   if (!subject || subject.subject_type === null) throw new NotesClientError("This record has no verified notes link.", 400, "INVALID_SUBJECT");
   const body = NoteCreateRequestSchema.parse({
     title,
     subject_type: subject.subject_type,
     subject_id: subject.subject_id,
-    body: { type: "doc", content: [{ type: "paragraph" }] },
+    body: noteBody || { type: "doc", content: [{ type: "paragraph" }] },
+    origin_key: originKey,
   });
-  const payload = await request("/api/notes", { ...options, method: "POST", body });
+  const payload = await request("/api/notes", { ...requestOptions, method: "POST", body });
   return NoteResponseSchema.parse(payload).note;
 }
 

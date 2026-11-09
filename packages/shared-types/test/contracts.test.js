@@ -424,6 +424,7 @@ test("notes and boards create, autosave update, list query, record, and delete c
     subject_type: null,
     subject_id: null,
     body: {},
+    origin_key: null,
   });
 
   const candidateBoardCreate = BoardCreateRequestSchema.parse({
