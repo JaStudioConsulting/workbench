@@ -1,7 +1,5 @@
-// Data layer abstraction for Candidate Review
-// Allows sample fixture data to be swapped with Supabase later without modifying UI views
-
-import { SAMPLE_JOBS, SAMPLE_CANDIDATES } from "./sampleReviewData.js";
+// Data layer for live Candidate Review records.
+// Empty or unavailable sources never substitute synthetic records.
 import { PIPELINE_STAGE_ORDER } from "./constants.js";
 import { supabase } from "../../supabase-client.js";
 
@@ -156,12 +154,8 @@ export function makeCompositeKey(jobId, personId) {
   return `${String(jobId).trim()}::${String(personId).trim()}`;
 }
 
-export function isSampleData() {
-  return runtimeJobs.length === 0;
-}
-
 export function getReviewJobs() {
-  return runtimeJobs.length > 0 ? runtimeJobs : SAMPLE_JOBS;
+  return runtimeJobs;
 }
 
 export function getJobById(jobId) {
@@ -176,9 +170,7 @@ export function getCandidatesForJob(jobId) {
   const job = getJobById(jobId);
   if (!job) return []; // Unmatched job yields empty array
 
-  const source = runtimeJobs.length > 0
-    ? (runtimeCandidatesByJob.get(String(jobId)) || [])
-    : SAMPLE_CANDIDATES;
+  const source = runtimeCandidatesByJob.get(String(jobId)) || [];
   const matches = source.filter(
     (cand) => String(cand.jobId) === String(jobId)
   );
@@ -217,9 +209,7 @@ export function getCandidatesForJob(jobId) {
 
 export function getSubmissionHistory() {
   const records = [];
-  const candidateSource = runtimeJobs.length > 0
-    ? [...runtimeCandidatesByJob.values()].flat()
-    : SAMPLE_CANDIDATES;
+  const candidateSource = [...runtimeCandidatesByJob.values()].flat();
 
   for (const candidate of candidateSource) {
     const job = getJobById(candidate.jobId);
@@ -330,9 +320,7 @@ export async function recordCandidateSubmission(jobId, personId, details = {}, o
     throw new Error("Cannot record submission without valid jobId and personId");
   }
 
-  const candidateSource = runtimeJobs.length > 0
-    ? (runtimeCandidatesByJob.get(String(jobId)) || [])
-    : SAMPLE_CANDIDATES;
+  const candidateSource = runtimeCandidatesByJob.get(String(jobId)) || [];
   const candidate = candidateSource.find(
     (item) => String(item.jobId) === String(jobId) && String(item.id) === String(personId)
   );
@@ -477,11 +465,17 @@ export async function createCandidateDraft({ job, candidate, kind, body }) {
   return data;
 }
 
-export function _resetStoreForTesting() {
+export function _resetStoreForTesting({ jobs = [], candidates = [] } = {}) {
   candidateDecisions.clear();
   loggedActivities.clear();
   activityOutbox.clear();
   candidateSubmissions.clear();
-  runtimeJobs = [];
+  runtimeJobs = jobs.map((job) => ({ ...job }));
   runtimeCandidatesByJob.clear();
+  for (const candidate of candidates) {
+    const key = String(candidate.jobId);
+    const group = runtimeCandidatesByJob.get(key) || [];
+    group.push({ ...candidate });
+    runtimeCandidatesByJob.set(key, group);
+  }
 }
