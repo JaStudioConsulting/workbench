@@ -4,6 +4,7 @@ import { SidebarProvider, Sidebar, SidebarHeader, SidebarContent, SidebarGroup, 
 import { Skeleton } from "./components/ui/skeleton.tsx";
 import { startCandidateCallSession } from "./features/meetings/candidateCallSession.js";
 import { getMeetingStatus } from "./features/meetings/meetingGatewayClient.js";
+import HeaderSearch from "./features/search/HeaderSearch.jsx";
 
 const ContextPicker = lazy(() => import("./ContextPicker.jsx"));
 const EmptyWorkspace = lazy(() => import("./EmptyWorkspace.jsx"));
@@ -46,6 +47,8 @@ export default function App() {
   const [context, setContext] = useState("Independent recruiting");
   const [recruiting, setRecruiting] = useState(null);
   const [focusCandidateId, setFocusCandidateId] = useState("");
+  const [focusLeadId, setFocusLeadId] = useState("");
+  const [focusClient, setFocusClient] = useState(null);
   const [meetingLaunch, setMeetingLaunch] = useState(null);
   const callStartRef = useRef(false);
   const recordingLocked = ["starting", "recording", "finalizing"].includes(meetingLaunch?.phase);
@@ -53,14 +56,85 @@ export default function App() {
   const selectPage = (next) => {
     if (recordingLocked && next !== "Meetings") return;
     setFocusCandidateId("");
+    setFocusLeadId("");
+    setFocusClient(null);
     setPage(next);
   };
 
   // Opens one candidate for one job in Candidate Review (used by Pipeline and Home).
   const openCandidate = (jobId, personId) => {
     if (jobId) setRecruiting((prev) => ({ ...(prev || {}), job: { id: String(jobId) } }));
+    setFocusLeadId("");
+    setFocusClient(null);
     setFocusCandidateId(personId ? String(personId) : "");
     setPage("Candidate Review");
+  };
+
+  const navigateFromSearch = (target) => {
+    if (!target) return;
+    if (recordingLocked && target.page && target.page !== "Meetings") return;
+
+    if (target.entityType === "candidate" || (target.entityType === "note" && target.subjectType === "candidate")) {
+      setFocusLeadId("");
+      setFocusClient(null);
+      setFocusCandidateId(target.focusCandidateId || target.entityId || "");
+      setPage(target.page || "Candidates");
+      return;
+    }
+
+    if (target.entityType === "lead") {
+      setFocusCandidateId("");
+      setFocusClient(null);
+      setFocusLeadId(target.focusLeadId || target.entityId || "");
+      setPage("Leads");
+      return;
+    }
+
+    if (target.entityType === "client") {
+      setFocusCandidateId("");
+      setFocusLeadId("");
+      setFocusClient(
+        target.client || {
+          id: target.id,
+          entityId: target.entityId,
+          company: target.entityId,
+          jobTitles: null,
+          location: null,
+          status: null,
+          clientContact: null,
+        },
+      );
+      setPage("Leads");
+      return;
+    }
+
+    if (target.entityType === "job" || (target.entityType === "note" && target.subjectType === "job")) {
+      setFocusCandidateId("");
+      setFocusLeadId("");
+      setFocusClient(null);
+      if (target.job) {
+        setRecruiting((current) => ({ ...(current || {}), job: target.job }));
+      }
+      setPage("Jobs");
+      return;
+    }
+
+    if (target.entityType === "note" && target.subjectType === "meeting" && target.focusMeetingId) {
+      setFocusCandidateId("");
+      setFocusLeadId("");
+      setFocusClient(null);
+      setMeetingLaunch({
+        phase: "saved",
+        source: "search_note",
+        meeting: { id: target.focusMeetingId },
+      });
+      setPage("Meetings");
+      return;
+    }
+
+    if (target.page) {
+      selectPage(target.page);
+    }
   };
 
   const startCandidateCall = async ({ job, candidate }) => {
@@ -112,9 +186,9 @@ export default function App() {
       case "Home": return <HomePage onNavigate={navigateFromHome} recentMeetingsLoader={loadRecentMeetings} />;
       case "Candidates":
       case "Candidate Review":
-        return <CandidateReview key={page} initialView={page === "Candidates" ? "people" : "swipe"} selectedJob={recruiting?.job} focusCandidateId={page === "Candidate Review" ? focusCandidateId : ""} onSelectJob={(job) => setRecruiting((prev) => ({ ...(prev || {}), job }))} onNavigateJobsMap={() => selectPage("Jobs")} onStartCandidateCall={startCandidateCall} />;
+        return <CandidateReview key={page} initialView={page === "Candidates" ? "people" : "swipe"} selectedJob={recruiting?.job} focusCandidateId={focusCandidateId} onSelectJob={(job) => setRecruiting((prev) => ({ ...(prev || {}), job }))} onNavigateJobsMap={() => selectPage("Jobs")} onStartCandidateCall={startCandidateCall} />;
       case "Pipeline": return <PipelinePage onOpenCandidate={openCandidate} />;
-      case "Leads": return <LeadsPage />;
+      case "Leads": return <LeadsPage focusLeadId={focusLeadId} focusClient={focusClient} />;
       case "Jobs":
       case "Process":
         return <RecruitingWorkspace page={page} value={recruiting} onChange={setRecruiting} onOpenJobReview={openJobReview} />;
@@ -139,6 +213,7 @@ export default function App() {
         <header className="flex min-h-16 flex-wrap items-center gap-3 border-b px-4 py-3">
           <SidebarTrigger />
           <div className="min-w-0 flex-1"><h1 className="truncate text-xl font-semibold">{page}</h1></div>
+          <HeaderSearch onSelectResult={navigateFromSearch} onNavigatePage={selectPage} />
           <Suspense fallback={null}><ContextPicker value={context} onChange={setContext} /></Suspense>
         </header>
         <main className="flex min-w-0 flex-1 flex-col gap-4 overflow-x-clip p-4 md:p-6">

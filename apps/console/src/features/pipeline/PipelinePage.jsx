@@ -11,6 +11,9 @@ import {
   loadLiveReviewJobs,
   logCandidateActivity,
 } from "../candidate-review/candidateReviewService.js";
+import CandidatePresentationSummary, {
+  CandidatePresentationBadges,
+} from "../candidate-review/CandidatePresentationSummary.jsx";
 import { LOXO_PIPELINE_STAGES } from "../candidate-review/constants.js";
 import FitBadge from "./FitBadge.jsx";
 import { isInCanada } from "./location.js";
@@ -32,16 +35,29 @@ function CandidateCard({ job, candidate, waiting, onMove, onOpenCandidate }) {
         aria-label={`Move ${candidate.name} by drag and drop`}
       ><GripVertical size={16} /></button>
       <div className="min-w-0 flex-1">
-        <button
-          type="button"
-          className="w-full rounded-sm text-left font-semibold outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring"
-          onClick={() => onOpenCandidate?.(job.id, candidate.id)}
-        >{candidate.name || "Unnamed candidate"}</button>
+        <div className="flex flex-wrap items-center gap-1.5">
+          <button
+            type="button"
+            className="rounded-sm text-left font-semibold outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring"
+            onClick={() => onOpenCandidate?.(job.id, candidate.id)}
+          >{candidate.name || "Unnamed candidate"}</button>
+          <CandidatePresentationBadges
+            candidate={candidate}
+            jobId={job?.id}
+            prefix="pipeline"
+          />
+        </div>
         <p className="truncate text-sm text-muted-foreground">{candidate.title || "Title not recorded"}</p>
       </div>
       <FitBadge job={job} candidate={candidate} />
     </div>
     {candidate.location ? <p className="mt-2 flex items-center gap-1 text-xs text-muted-foreground"><MapPin size={12} /> {candidate.location}</p> : null}
+    <CandidatePresentationSummary
+      candidate={candidate}
+      jobId={job?.id}
+      prefix="pipeline"
+      compact
+    />
     <div className="mt-3 flex items-center gap-2">
       <label className="min-w-0 flex-1 text-xs text-muted-foreground">
         <span className="sr-only">Move {candidate.name} to stage</span>

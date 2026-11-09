@@ -1,13 +1,20 @@
-import { lazy, Suspense, useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { parseCandidateSourceKey } from "@ja/shared-types";
 import { AlertCircle, AlertTriangle, ExternalLink, FileText, Filter, Loader2, Mail, NotebookText, Pencil, Phone, Plus, Search, Send, ShieldAlert, Users } from "lucide-react";
 import { Badge } from "../../components/ui/badge.tsx";
 import { Button } from "../../components/ui/button.tsx";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "../../components/ui/select.tsx";
 import { LOXO_PIPELINE_STAGES, RESUME_INDICATOR_STATES } from "./constants.js";
 import { getOwnershipStatus, openBrandedResume } from "./brandResume.js";
-import { createCandidateDraft } from "./candidateReviewService.js";
+import {
+  createCandidateDraft,
+  enrichCandidatesWithPresentations,
+} from "./candidateReviewService.js";
 import CandidateWriteUpDialog from "./CandidateWriteUpDialog.jsx";
 import CandidateEditorDialog from "./CandidateEditorDialog.jsx";
+import CandidatePresentationSummary, {
+  CandidatePresentationBadges,
+} from "./CandidatePresentationSummary.jsx";
 import {
   describeCandidateProvenance,
   getCachedCandidateRecords,
@@ -29,7 +36,7 @@ function withinDateRange(value, start, end) {
   return (!start || day >= start) && (!end || day <= end);
 }
 
-export default function PeopleView({ candidates = [], currentJob, jobs = [], submissionHistory = [], onSelectCandidateToSwipe, onMarkSubmitted, onStartCandidateCall }) {
+export default function PeopleView({ candidates = [], currentJob, jobs = [], submissionHistory = [], onSelectCandidateToSwipe, onMarkSubmitted, onStartCandidateCall, focusCandidateId = "" }) {
   const [viewFilter, setViewFilter] = useState("all");
   const [searchTerm, setSearchTerm] = useState("");
   const [stageFilter, setStageFilter] = useState("ALL");
@@ -51,6 +58,8 @@ export default function PeopleView({ candidates = [], currentJob, jobs = [], sub
   const [ownershipOverrides, setOwnershipOverrides] = useState(() => new Set());
   const [actionError, setActionError] = useState("");
   const [submittingId, setSubmittingId] = useState("");
+  const focusedRowRef = useRef(null);
+  const focusKey = parseCandidateSourceKey(focusCandidateId)?.id ?? null;
 
   useEffect(() => {
     let active = true;
@@ -80,8 +89,13 @@ export default function PeopleView({ candidates = [], currentJob, jobs = [], sub
   }, []);
 
   const mergedCandidates = useMemo(
-    () => mergeCandidatesWithDirectory(candidates, directoryRecords),
-    [candidates, directoryRecords],
+    () =>
+      enrichCandidatesWithPresentations(
+        mergeCandidatesWithDirectory(candidates, directoryRecords),
+        submissionHistory,
+        { jobId: currentJob?.id ?? null }
+      ),
+    [candidates, directoryRecords, submissionHistory, currentJob?.id],
   );
 
   const counts = useMemo(() => ({
@@ -96,8 +110,14 @@ export default function PeopleView({ candidates = [], currentJob, jobs = [], sub
     const source = viewFilter === "submitted"
       ? submissionHistory.map((record) => {
           const isConfirmed = record.presentationState === "confirmed";
+          const enrichedCandidate =
+            enrichCandidatesWithPresentations(
+              [record.candidate],
+              submissionHistory,
+              { jobId: record.jobId ?? currentJob?.id ?? null }
+            )[0] || record.candidate;
           return {
-            ...record.candidate,
+            ...enrichedCandidate,
             submission: record,
             presentationState: record.presentationState || (isConfirmed ? "confirmed" : "pending"),
             isSubmitted: isConfirmed,
@@ -138,9 +158,24 @@ export default function PeopleView({ candidates = [], currentJob, jobs = [], sub
         candidate.client_context,
         candidate.reviewJobTitle,
         submission?.clientName ?? submission?.client,
+        ...(candidate.presentedClientLabels || []),
       ].filter(Boolean).join(" ").toLowerCase().includes(query);
     });
-  }, [mergedCandidates, onlyOthersReachedOut, searchTerm, stageFilter, submissionClient, submissionFrom, submissionHistory, submissionJobId, submissionLocation, submissionTo, viewFilter]);
+  }, [currentJob?.id, mergedCandidates, onlyOthersReachedOut, searchTerm, stageFilter, submissionClient, submissionFrom, submissionHistory, submissionJobId, submissionLocation, submissionTo, viewFilter]);
+
+  useEffect(() => {
+    if (!focusKey) return;
+    setViewFilter("all");
+    setSearchTerm("");
+    setStageFilter("ALL");
+    setOnlyOthersReachedOut(false);
+  }, [focusKey]);
+
+  useEffect(() => {
+    if (!focusKey || !filteredCandidates.some((candidate) => candidate.id === focusKey)) return;
+    focusedRowRef.current?.scrollIntoView?.({ block: "center" });
+    focusedRowRef.current?.focus?.({ preventScroll: true });
+  }, [focusKey, filteredCandidates]);
 
   const markSubmitted = async (candidate) => {
     setActionError("");
@@ -238,6 +273,11 @@ export default function PeopleView({ candidates = [], currentJob, jobs = [], sub
         </div>
       </div>
 
+      {focusKey && !directoryLoading && !mergedCandidates.some((candidate) => candidate.id === focusKey) ? (
+        <div role="status" data-testid="focused-candidate-missing" className="rounded-md border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900">
+          Candidate record with this exact source ID is not in the accessible directory.
+        </div>
+      ) : null}
       {directoryError ? <div role="alert" className="flex items-center gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-2 text-xs text-destructive" data-testid="candidates-directory-error"><AlertCircle size={14} />{directoryError}</div> : null}
       {saveNotice ? <div role="status" className="rounded-md border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-900" data-testid="people-candidate-save-status">{saveNotice}</div> : null}
       {actionError ? <div role="alert" className="flex items-center gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-2 text-xs text-destructive"><AlertCircle size={14} />{actionError}</div> : null}
@@ -272,7 +312,14 @@ export default function PeopleView({ candidates = [], currentJob, jobs = [], sub
                       : candidate.submission?.sourceStatus || "Confirmed";
 
               return (
-                <div key={recordKey} className="p-3.5">
+                <div
+                  key={recordKey}
+                  ref={candidate.id === focusKey ? focusedRowRef : undefined}
+                  tabIndex={candidate.id === focusKey ? -1 : undefined}
+                  data-candidate-id={candidate.id}
+                  data-testid={candidate.id === focusKey ? "focused-candidate-row" : undefined}
+                  className={candidate.id === focusKey ? "bg-amber-50 p-3.5 outline-none ring-2 ring-inset ring-amber-400" : "p-3.5"}
+                >
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div className="flex min-w-0 flex-1 items-center gap-3">
                       <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-foreground text-background text-sm font-bold">{candidate.initials}</div>
@@ -302,9 +349,22 @@ export default function PeopleView({ candidates = [], currentJob, jobs = [], sub
                               {provenance.badgeLabel}
                             </Badge>
                           ) : null}
+                          <CandidatePresentationBadges
+                            candidate={candidate}
+                            presentations={submissionHistory}
+                            jobId={candidate.reviewJobId || currentJob?.id || candidate.jobId}
+                            prefix="people"
+                          />
                           <span className="text-[10.5px] text-muted-foreground">{resumeInfo.symbol} {resumeInfo.label}</span>
                         </div>
                         <p className="mt-0.5 truncate text-xs text-muted-foreground">{candidate.title} at {candidate.employer} · {candidate.location}</p>
+                        <CandidatePresentationSummary
+                          candidate={candidate}
+                          presentations={submissionHistory}
+                          jobId={candidate.reviewJobId || currentJob?.id || candidate.jobId}
+                          prefix="people"
+                          compact
+                        />
                         {candidate.submission ? (
                           <p className="mt-1 text-[11px] text-foreground" data-testid="submission-history-row">
                             {candidate.submission.jobTitle || candidate.reviewJobTitle || "Job not recorded"} · {candidate.submission.clientName || candidate.submission.client || "Client not recorded"} · {submissionDateText}
@@ -337,7 +397,7 @@ export default function PeopleView({ candidates = [], currentJob, jobs = [], sub
                       </Button>
                       {lastActivity ? <span className="max-w-[180px] truncate text-[10.5px] text-muted-foreground">{lastActivity.type} · {lastActivity.date}</span> : null}
                       {candidate.otherContactsCount > 0 ? <Badge variant="outline" className="border-amber-400 bg-amber-50 text-[10.5px] text-amber-900"><AlertTriangle size={11} className="mr-1" />{candidate.otherContactsCount} other</Badge> : null}
-                      {candidate.isSubmitted ? <Badge className="bg-blue-700 text-white">Submitted</Badge> : candidate.presentationState === "pending" ? <Badge variant="outline" className="border-amber-400 bg-amber-50 text-amber-900">Waiting for Loxo</Badge> : candidate.presentationState === "failed" ? <Badge variant="outline" className="border-rose-400 bg-rose-50 text-rose-800">Submission failed</Badge> : candidate.decision === "want" ? <Badge className="bg-emerald-700 text-white">Wanted</Badge> : candidate.decision === "pass" ? <Badge variant="outline" className="border-rose-400 bg-rose-50 text-rose-800">Passed</Badge> : <Badge variant="outline">Unreviewed</Badge>}
+                      {candidate.isSubmitted ? <Badge className="bg-blue-700 text-white">Presented</Badge> : candidate.presentationState === "pending" ? <Badge variant="outline" className="border-amber-400 bg-amber-50 text-amber-900">Waiting for Loxo</Badge> : candidate.presentationState === "failed" ? <Badge variant="outline" className="border-rose-400 bg-rose-50 text-rose-800">Submission failed</Badge> : candidate.decision === "want" ? <Badge className="bg-emerald-700 text-white">Wanted</Badge> : candidate.decision === "pass" ? <Badge variant="outline" className="border-rose-400 bg-rose-50 text-rose-800">Passed</Badge> : <Badge variant="outline">Unreviewed</Badge>}
                     </div>
                   </div>
 

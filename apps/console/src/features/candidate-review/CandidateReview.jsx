@@ -135,6 +135,11 @@ export default function CandidateReview({ selectedJob, onSelectJob, onNavigateJo
   const focusedRef = useRef("");
   useEffect(() => {
     if (!focusCandidateId || dataLoading || focusedRef.current === String(focusCandidateId)) return;
+    if (initialView === "people") {
+      focusedRef.current = String(focusCandidateId);
+      setActiveView("people");
+      return;
+    }
     if (!candidates.some((item) => String(item.id) === String(focusCandidateId))) return;
     focusedRef.current = String(focusCandidateId);
     const swipeIndex = swipeCandidates.findIndex((item) => String(item.id) === String(focusCandidateId));
@@ -144,7 +149,7 @@ export default function CandidateReview({ selectedJob, onSelectJob, onNavigateJo
     } else {
       setActiveView("people");
     }
-  }, [focusCandidateId, dataLoading, candidates, swipeCandidates]);
+  }, [focusCandidateId, dataLoading, candidates, swipeCandidates, initialView]);
 
   const submissionHistory = useMemo(() => getSubmissionHistory(), [refreshKey]);
 
@@ -417,6 +422,7 @@ export default function CandidateReview({ selectedJob, onSelectJob, onNavigateJo
               onSelectCandidateToSwipe={handleSelectCandidateToSwipe}
               onMarkSubmitted={handleMarkSubmitted}
               onStartCandidateCall={onStartCandidateCall}
+              focusCandidateId={focusCandidateId}
             />
           )}
         </div>

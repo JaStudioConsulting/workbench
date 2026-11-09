@@ -23,6 +23,11 @@ import {
   makeCompositeKey,
   mapLiveCandidate,
   mapLivePresentation,
+  buildCandidateSourceKey,
+  extractCandidateSourceKey,
+  buildCandidatePresentationSummary,
+  enrichCandidateWithPresentations,
+  enrichCandidatesWithPresentations,
   loadLiveReviewJobs,
   loadLiveCandidatesForJob,
   loadLivePresentations,
@@ -1016,4 +1021,512 @@ test("live mapper keeps profile evidence in its own fields and invents no job hi
   assert.equal(candidate.profileSummary, "Summary from the source profile.");
   assert.equal(candidate.fitEvidence, "Fit evidence from the source profile.");
   assert.equal(candidate.fullResumeText, "Full resume text on file.");
+});
+
+test("Presented badge and client list join strictly by candidate_source:candidate_source_id, deduplicate repeated clients, and preserve unknowns", () => {
+  assert.equal(buildCandidateSourceKey("submission", 1), "submission:1");
+  assert.equal(buildCandidateSourceKey("sourcing", "20"), "sourcing:20");
+  assert.equal(buildCandidateSourceKey("submission", null), null);
+  assert.equal(buildCandidateSourceKey("invalid_source", 1), null);
+  assert.equal(
+    extractCandidateSourceKey({
+      id: "tracker_submissions:99",
+      candidate_source: null,
+      candidate_source_id: null,
+      candidate_name: "Same Name Candidate",
+    }),
+    null
+  );
+
+  const syntheticPresentations = [
+    // Confirmed presentation 1 for submission:1 (Maple Robotics, Hired)
+    {
+      id: "tracker_submissions:1",
+      presentation_state: "confirmed",
+      source: "tracker_submissions",
+      source_id: 1,
+      candidate_source: "submission",
+      candidate_source_id: 1,
+      candidate_key: "sub-1",
+      candidate_name: "Same Name Candidate",
+      client_name: "Maple Robotics",
+      job_id: 10,
+      job_title: "Controls Lead",
+      presented_on: "2026-10-15",
+      queued_at: null,
+      source_status: "Hired",
+    },
+    // Confirmed presentation 2 for submission:1 (repeated client in lowercase, earlier date/role)
+    {
+      id: "tracker_submissions:2",
+      presentation_state: "confirmed",
+      source: "tracker_submissions",
+      source_id: 2,
+      candidate_source: "submission",
+      candidate_source_id: 1,
+      candidate_key: "sub-1",
+      candidate_name: "Same Name Candidate",
+      client_name: "maple robotics",
+      job_id: 11,
+      job_title: "Automation Engineer",
+      presented_on: "2026-09-01",
+      queued_at: null,
+      source_status: "Submitted",
+    },
+    // Confirmed presentation 3 for submission:1 (second distinct client)
+    {
+      id: "tracker_submissions:3",
+      presentation_state: "confirmed",
+      source: "tracker_submissions",
+      source_id: 3,
+      candidate_source: "submission",
+      candidate_source_id: 1,
+      candidate_key: "sub-1",
+      candidate_name: "Same Name Candidate",
+      client_name: "Northern Steel",
+      job_id: 12,
+      job_title: "Maintenance Supervisor",
+      presented_on: "2026-08-12",
+      queued_at: null,
+      source_status: "Rejected",
+    },
+    // Pending Workbench action for submission:1 (must be labeled separately and excluded from presentedClients)
+    {
+      id: "candidate_review_actions:201",
+      presentation_state: "pending",
+      source: "candidate_review_actions",
+      source_id: 201,
+      candidate_source: "submission",
+      candidate_source_id: 1,
+      candidate_key: "sub-1",
+      candidate_name: "Same Name Candidate",
+      client_name: "Western Logistics",
+      job_id: 15,
+      job_title: "Operations Manager",
+      presented_on: null,
+      queued_at: "2026-11-08T18:00:00.000Z",
+      source_status: "waiting_for_loxo",
+    },
+    // Confirmed presentation with null/unknown client, job, and date for submission:5
+    {
+      id: "tracker_submissions:5",
+      presentation_state: "confirmed",
+      source: "tracker_submissions",
+      source_id: 5,
+      candidate_source: "submission",
+      candidate_source_id: 5,
+      candidate_key: "sub-5",
+      candidate_name: "Unknown Fields Candidate",
+      client_name: null,
+      job_id: null,
+      job_title: null,
+      presented_on: null,
+      queued_at: null,
+      source_status: "Submitted",
+    },
+    // Pending-only Workbench action for sourcing:20
+    {
+      id: "candidate_review_actions:202",
+      presentation_state: "pending",
+      source: "candidate_review_actions",
+      source_id: 202,
+      candidate_source: "sourcing",
+      candidate_source_id: 20,
+      candidate_key: "src-20",
+      candidate_name: "Pending Only Candidate",
+      client_name: "Summit Machining",
+      job_id: 10,
+      job_title: "Program Manager",
+      presented_on: null,
+      queued_at: "2026-11-08T19:00:00.000Z",
+      source_status: "waiting_for_loxo",
+    },
+    // Failed-only Workbench action for sourcing:21
+    {
+      id: "candidate_review_actions:203",
+      presentation_state: "failed",
+      source: "candidate_review_actions",
+      source_id: 203,
+      candidate_source: "sourcing",
+      candidate_source_id: 21,
+      candidate_key: "src-21",
+      candidate_name: "Failed Only Candidate",
+      client_name: null,
+      job_id: null,
+      job_title: null,
+      presented_on: null,
+      queued_at: null,
+      source_status: "failed",
+    },
+  ];
+
+  // 1. Confirmed candidate with repeated and multiple clients + pending action
+  const multiClientSummary = buildCandidatePresentationSummary(
+    {
+      id: "submission:1",
+      candidate_source: "submission",
+      candidate_source_id: 1,
+      name: "Same Name Candidate",
+    },
+    syntheticPresentations
+  );
+  assert.equal(multiClientSummary.isPresented, true);
+  assert.equal(multiClientSummary.isSubmitted, true);
+  assert.equal(multiClientSummary.presentationState, "confirmed");
+  assert.equal(multiClientSummary.badgeLabel, "Presented");
+  assert.equal(multiClientSummary.pendingBadgeLabel, "Pending confirmation");
+  assert.deepEqual(multiClientSummary.presentedClients, ["Maple Robotics", "Northern Steel"]);
+  assert.deepEqual(multiClientSummary.presentedClientLabels, ["Maple Robotics", "Northern Steel"]);
+  assert.equal(multiClientSummary.presentedClientSummaries.length, 2);
+  assert.equal(multiClientSummary.presentedClientSummaries[0].clientLabel, "Maple Robotics");
+  assert.equal(multiClientSummary.presentedClientSummaries[0].presentationCount, 2);
+  assert.equal(multiClientSummary.presentedClientSummaries[0].statusLabel, "Hired");
+  assert.equal(multiClientSummary.presentedClientSummaries[0].dateLabel, "2026-10-15");
+  assert.equal(multiClientSummary.presentedClientSummaries[1].clientLabel, "Northern Steel");
+  assert.equal(multiClientSummary.presentedClientSummaries[1].presentationCount, 1);
+  assert.equal(multiClientSummary.presentedClientSummaries[1].statusLabel, "Rejected");
+  assert.equal(multiClientSummary.presentedClientSummaries[1].dateLabel, "2026-08-12");
+  assert.equal(multiClientSummary.confirmedPresentations.length, 3);
+  assert.equal(multiClientSummary.pendingPresentations.length, 1);
+  assert.equal(multiClientSummary.pendingPresentations[0].clientLabel, "Western Logistics");
+  assert.equal(multiClientSummary.pendingPresentations[0].statusLabel, "Waiting for Loxo");
+  assert.equal(multiClientSummary.pendingPresentations[0].dateLabel, "Queued 2026-11-08");
+
+  // 2. Different candidate_source:candidate_source_id with identical name NEVER matches
+  const sameNameDifferentSource = buildCandidatePresentationSummary(
+    {
+      id: "sourcing:99",
+      candidate_source: "sourcing",
+      candidate_source_id: 99,
+      name: "Same Name Candidate",
+    },
+    syntheticPresentations
+  );
+  assert.equal(sameNameDifferentSource.isPresented, false);
+  assert.equal(sameNameDifferentSource.isSubmitted, false);
+  assert.equal(sameNameDifferentSource.badgeLabel, null);
+  assert.deepEqual(sameNameDifferentSource.presentedClients, []);
+  assert.deepEqual(sameNameDifferentSource.confirmedPresentations, []);
+
+  // 3. Confirmed presentation with unknown/null client, job, and date preserves nulls and labels
+  const unknownSummary = buildCandidatePresentationSummary(
+    {
+      id: "submission:5",
+      candidate_source: "submission",
+      candidate_source_id: 5,
+      name: "Unknown Fields Candidate",
+    },
+    syntheticPresentations
+  );
+  assert.equal(unknownSummary.isPresented, true);
+  assert.equal(unknownSummary.badgeLabel, "Presented");
+  assert.equal(unknownSummary.hasUnknownConfirmedClient, true);
+  assert.deepEqual(unknownSummary.presentedClients, []);
+  assert.deepEqual(unknownSummary.presentedClientLabels, ["Client not recorded"]);
+  assert.equal(unknownSummary.confirmedPresentations[0].clientName, null);
+  assert.equal(unknownSummary.confirmedPresentations[0].jobId, null);
+  assert.equal(unknownSummary.confirmedPresentations[0].jobTitle, null);
+  assert.equal(unknownSummary.confirmedPresentations[0].presentedOn, null);
+  assert.equal(unknownSummary.confirmedPresentations[0].clientLabel, "Client not recorded");
+  assert.equal(unknownSummary.confirmedPresentations[0].jobLabel, "Job not recorded");
+  assert.equal(unknownSummary.confirmedPresentations[0].dateLabel, "Date not recorded");
+  assert.equal(unknownSummary.confirmedPresentations[0].statusLabel, "Submitted");
+
+  // 4. Pending-only Workbench action never counts as Presented
+  const pendingSummary = buildCandidatePresentationSummary(
+    {
+      id: "sourcing:20",
+      candidate_source: "sourcing",
+      candidate_source_id: 20,
+      name: "Pending Only Candidate",
+    },
+    syntheticPresentations
+  );
+  assert.equal(pendingSummary.isPresented, false);
+  assert.equal(pendingSummary.isSubmitted, false);
+  assert.equal(pendingSummary.presentationState, "pending");
+  assert.equal(pendingSummary.badgeLabel, "Pending confirmation");
+  assert.deepEqual(pendingSummary.presentedClients, []);
+  assert.deepEqual(pendingSummary.presentedClientLabels, []);
+  assert.equal(pendingSummary.pendingPresentations.length, 1);
+  assert.equal(pendingSummary.pendingPresentations[0].clientLabel, "Summit Machining");
+  assert.equal(pendingSummary.pendingPresentations[0].jobLabel, "Program Manager");
+  assert.equal(pendingSummary.pendingPresentations[0].dateLabel, "Queued 2026-11-08");
+
+  // 5. Failed-only Workbench action with unknown fields never counts as Presented
+  const failedSummary = buildCandidatePresentationSummary(
+    {
+      id: "sourcing:21",
+      candidate_source: "sourcing",
+      candidate_source_id: 21,
+      name: "Failed Only Candidate",
+    },
+    syntheticPresentations
+  );
+  assert.equal(failedSummary.isPresented, false);
+  assert.equal(failedSummary.isSubmitted, false);
+  assert.equal(failedSummary.presentationState, "failed");
+  assert.equal(failedSummary.badgeLabel, "Submission failed");
+  assert.deepEqual(failedSummary.presentedClients, []);
+  assert.equal(failedSummary.failedPresentations.length, 1);
+  assert.equal(failedSummary.failedPresentations[0].clientLabel, "Client not recorded");
+  assert.equal(failedSummary.failedPresentations[0].jobLabel, "Job not recorded");
+  assert.equal(failedSummary.failedPresentations[0].dateLabel, "Date not recorded");
+
+  // 6. enrichCandidatesWithPresentations attaches presentation fields across candidate lists
+  const enrichedList = enrichCandidatesWithPresentations(
+    [
+      { id: "submission:1", candidate_source: "submission", candidate_source_id: 1, name: "Same Name Candidate" },
+      { id: "sourcing:20", candidate_source: "sourcing", candidate_source_id: 20, name: "Pending Only Candidate" },
+    ],
+    syntheticPresentations
+  );
+  assert.equal(enrichedList[0].isPresented, true);
+  assert.deepEqual(enrichedList[0].presentedClients, ["Maple Robotics", "Northern Steel"]);
+  assert.equal(enrichedList[1].isPresented, false);
+  assert.equal(enrichedList[1].presentationState, "pending");
+});
+
+test("CandidateCard, PeopleView, SwipeView, and CandidatePresentationSummary wire Presented badges and client lists without numeric fit scores or purple", () => {
+  const summarySource = fs.readFileSync(path.join(featureDir, "CandidatePresentationSummary.jsx"), "utf8");
+  const cardSource = fs.readFileSync(path.join(featureDir, "CandidateCard.jsx"), "utf8");
+  const peopleSource = fs.readFileSync(path.join(featureDir, "PeopleView.jsx"), "utf8");
+  const swipeSource = fs.readFileSync(path.join(featureDir, "SwipeView.jsx"), "utf8");
+
+  assert.match(summarySource, /data-testid=\{`\$\{prefix\}-presented-badge`\}/);
+  assert.match(summarySource, /data-testid=\{`\$\{prefix\}-pending-presentation-badge`\}/);
+  assert.match(summarySource, /data-testid=\{`\$\{prefix\}-failed-presentation-badge`\}/);
+  assert.match(summarySource, /data-testid=\{`\$\{prefix\}-presented-clients`\}/);
+  assert.match(summarySource, /data-testid=\{`\$\{prefix\}-presented-client-badge`\}/);
+  assert.match(summarySource, /data-testid=\{`\$\{prefix\}-confirmed-presentations`\}/);
+  assert.match(summarySource, /data-testid=\{`\$\{prefix\}-unconfirmed-presentations`\}/);
+  assert.match(summarySource, /Presented to: \{summary\.presentedClientLabels\.join\(", "\)\}/);
+
+  assert.match(cardSource, /<CandidatePresentationBadges/);
+  assert.match(cardSource, /<CandidatePresentationSummary/);
+  assert.match(cardSource, /prefix="card"/);
+
+  assert.match(peopleSource, /<CandidatePresentationBadges/);
+  assert.match(peopleSource, /<CandidatePresentationSummary/);
+  assert.match(peopleSource, /prefix="people"/);
+  assert.match(peopleSource, /enrichCandidatesWithPresentations/);
+
+  assert.match(swipeSource, /<CandidatePresentationBadges/);
+  assert.match(swipeSource, /prefix="swipe"/);
+
+  for (const src of [summarySource, cardSource, peopleSource, swipeSource]) {
+    assert.doesNotMatch(src, /purple|violet|indigo|fuchsia|#6b4ea8/i);
+  }
+});
+
+test("CandidatePresentationSummary compiles and renders confirmed, repeated-client, unknown, pending, and failed markup across card, people, and pipeline surfaces", async () => {
+  const { transformWithEsbuild } = await import("vite");
+  const React = await import("react");
+  const jsxRuntime = await import("react/jsx-runtime");
+  const { renderToStaticMarkup } = await import("react-dom/server");
+
+  const summaryPath = path.join(featureDir, "CandidatePresentationSummary.jsx");
+  const rawSource = fs.readFileSync(summaryPath, "utf8");
+  const compiled = await transformWithEsbuild(rawSource, "CandidatePresentationSummary.jsx", {
+    loader: "jsx",
+    jsx: "automatic",
+  });
+  assert.match(compiled.code, /function CandidatePresentationBadges/);
+  assert.match(compiled.code, /function CandidatePresentationSummary/);
+
+  // Replace relative imports with inline test doubles for Badge and service so we can execute rendered markup directly
+  const executableCode = compiled.code
+    .replace(
+      /import\s*\{\s*Badge\s*\}\s*from\s*"[^"]+";/,
+      'const Badge = ({ children, className, ...rest }) => React.createElement("span", { className, ...rest }, children);'
+    )
+    .replace(
+      /import\s*\{\s*buildCandidatePresentationSummary\s*\}\s*from\s*"[^"]+";/,
+      ""
+    );
+
+  const moduleFactory = new Function(
+    "React",
+    "useMemo",
+    "jsx",
+    "jsxs",
+    "Fragment",
+    "buildCandidatePresentationSummary",
+    `${executableCode.replace(/import\s+[^;]+;/g, "").replace(/export\s+default\s+function\s+CandidatePresentationSummary/, "function CandidatePresentationSummary").replace(/export\s+function\s+CandidatePresentationBadges/, "function CandidatePresentationBadges")}\nreturn { CandidatePresentationBadges, CandidatePresentationSummary };`
+  );
+  const { CandidatePresentationBadges, CandidatePresentationSummary } = moduleFactory(
+    React,
+    React.useMemo,
+    jsxRuntime.jsx,
+    jsxRuntime.jsxs,
+    jsxRuntime.Fragment,
+    buildCandidatePresentationSummary
+  );
+
+  const rows = [
+    {
+      id: "tracker_submissions:10",
+      presentation_state: "confirmed",
+      source: "tracker_submissions",
+      source_id: 10,
+      candidate_source: "submission",
+      candidate_source_id: 7,
+      client_name: "Client Alpha",
+      job_id: 101,
+      job_title: "Operations Manager",
+      presented_on: "2026-10-20",
+      source_status: "Hired",
+    },
+    {
+      id: "tracker_submissions:11",
+      presentation_state: "confirmed",
+      source: "tracker_submissions",
+      source_id: 11,
+      candidate_source: "submission",
+      candidate_source_id: 7,
+      client_name: "Client Alpha",
+      job_id: 102,
+      job_title: "Plant Manager",
+      presented_on: "2026-09-12",
+      source_status: "Submitted",
+    },
+    {
+      id: "tracker_submissions:12",
+      presentation_state: "confirmed",
+      source: "tracker_submissions",
+      source_id: 12,
+      candidate_source: "submission",
+      candidate_source_id: 7,
+      client_name: null,
+      job_id: null,
+      job_title: null,
+      presented_on: null,
+      source_status: "Rejected",
+    },
+    {
+      id: "candidate_review_actions:301",
+      presentation_state: "pending",
+      source: "candidate_review_actions",
+      source_id: 301,
+      candidate_source: "sourcing",
+      candidate_source_id: 88,
+      client_name: "Pending Client",
+      job_id: 201,
+      job_title: "Quality Lead",
+      presented_on: null,
+      queued_at: "2026-11-08T12:00:00.000Z",
+      source_status: "waiting_for_loxo",
+    },
+  ];
+
+  // Render confirmed candidate on card, people, and pipeline surfaces
+  for (const prefix of ["card", "people", "pipeline"]) {
+    const badgesHtml = renderToStaticMarkup(
+      React.createElement(CandidatePresentationBadges, {
+        candidate: { id: "submission:7", candidate_source: "submission", candidate_source_id: 7 },
+        presentations: rows,
+        prefix,
+      })
+    );
+    const summaryHtml = renderToStaticMarkup(
+      React.createElement(CandidatePresentationSummary, {
+        candidate: { id: "submission:7", candidate_source: "submission", candidate_source_id: 7 },
+        presentations: rows,
+        prefix,
+        compact: prefix !== "card",
+      })
+    );
+    assert.match(badgesHtml, new RegExp(`data-testid="${prefix}-presented-badge"`));
+    assert.match(badgesHtml, />Presented</);
+    assert.match(summaryHtml, new RegExp(`data-testid="${prefix}-presented-clients"`));
+    assert.match(summaryHtml, /Presented to: Client Alpha, Client not recorded/);
+    assert.match(summaryHtml, /Client Alpha \(2x\)/);
+    assert.match(summaryHtml, /Operations Manager/);
+    assert.match(summaryHtml, /Hired/);
+    assert.match(summaryHtml, /2026-10-20/);
+    assert.match(summaryHtml, /Job not recorded/);
+    assert.match(summaryHtml, /Date not recorded/);
+  }
+
+  // Render pending-only candidate: never renders Presented badge
+  const pendingBadgesHtml = renderToStaticMarkup(
+    React.createElement(CandidatePresentationBadges, {
+      candidate: { id: "sourcing:88", candidate_source: "sourcing", candidate_source_id: 88 },
+      presentations: rows,
+      prefix: "card",
+    })
+  );
+  const pendingSummaryHtml = renderToStaticMarkup(
+    React.createElement(CandidatePresentationSummary, {
+      candidate: { id: "sourcing:88", candidate_source: "sourcing", candidate_source_id: 88 },
+      presentations: rows,
+      prefix: "card",
+    })
+  );
+  assert.doesNotMatch(pendingBadgesHtml, /data-testid="card-presented-badge"/);
+  assert.match(pendingBadgesHtml, /data-testid="card-pending-presentation-badge"/);
+  assert.match(pendingBadgesHtml, /Pending confirmation/);
+  assert.doesNotMatch(pendingSummaryHtml, /Presented to:/);
+  assert.match(pendingSummaryHtml, /data-testid="card-unconfirmed-presentations"/);
+  assert.match(pendingSummaryHtml, /Pending Client/);
+  assert.match(pendingSummaryHtml, /Queued 2026-11-08/);
+});
+
+test("two Submitted actions for one source candidate retain separate job and client history", async () => {
+  const rows = [
+    {
+      id: "candidate_review_actions:501",
+      presentation_state: "pending",
+      source: "candidate_review_actions",
+      source_id: 501,
+      candidate_source: "sourcing",
+      candidate_source_id: 20,
+      job_id: 10,
+      job_title: "Controls Lead",
+      client_name: "Client A",
+      queued_at: "2026-11-08T10:00:00.000Z",
+      source_status: "waiting_for_loxo",
+    },
+    {
+      id: "candidate_review_actions:502",
+      presentation_state: "pending",
+      source: "candidate_review_actions",
+      source_id: 502,
+      candidate_source: "sourcing",
+      candidate_source_id: 20,
+      job_id: 11,
+      job_title: "Automation Manager",
+      client_name: "Client B",
+      queued_at: "2026-11-09T10:00:00.000Z",
+      source_status: "waiting_for_loxo",
+    },
+  ];
+  const query = {
+    select() { return this; },
+    order() { return this; },
+    async range(start, end) { return { data: rows.slice(start, end + 1), error: null }; },
+  };
+  _resetStoreForTesting();
+  _setSupabaseClientForTesting({
+    from(table) {
+      assert.equal(table, "presentations");
+      return query;
+    },
+  });
+  try {
+    await loadLivePresentations();
+    const history = getSubmissionHistory();
+    assert.equal(history.length, 2);
+    assert.deepEqual(history.map((item) => [item.id, item.jobId, item.clientName]), [
+      ["candidate_review_actions:502", "11", "Client B"],
+      ["candidate_review_actions:501", "10", "Client A"],
+    ]);
+    assert.ok(history.every((item) => item.personId === "sourcing:20" && item.presentationState === "pending"));
+    const summary = buildCandidatePresentationSummary("sourcing:20", history);
+    assert.equal(summary.pendingPresentations.length, 2);
+    assert.equal(summary.confirmedPresentations.length, 0);
+    assert.deepEqual(summary.pendingPresentations.map((item) => item.jobId), ["11", "10"]);
+  } finally {
+    _resetStoreForTesting();
+  }
 });

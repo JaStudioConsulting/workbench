@@ -16,7 +16,7 @@ const DEFAULT_ZOOM = 10;
 const NotesPanel = lazy(() => import("../notes/NotesPanel.jsx"));
 const BoardPanel = lazy(() => import("../board/BoardPanel.jsx"));
 
-export default function JobsMapView({ onSelectJobForWorkflow, onOpenJobReview }) {
+export default function JobsMapView({ onSelectJobForWorkflow, onOpenJobReview, focusJobId = "" }) {
   const [jobs, setJobs] = useState([]);
   const [loading, setLoading] = useState(false);
   const [dataSource, setDataSource] = useState("loading"); // "live" | "unavailable"
@@ -113,6 +113,16 @@ export default function JobsMapView({ onSelectJobForWorkflow, onOpenJobReview })
   useEffect(() => {
     loadJobs();
   }, []);
+
+  useEffect(() => {
+    if (!focusJobId || jobs.length === 0) return;
+    const matched = jobs.find(
+      (item) => String(item.originalJobId) === String(focusJobId) || String(item.id) === String(focusJobId),
+    );
+    if (matched) {
+      setSelectedJob(matched);
+    }
+  }, [focusJobId, jobs]);
 
   // 2. Dynamic Leaflet Map Initialization (safe for SSR / Sites worker builds)
   useEffect(() => {

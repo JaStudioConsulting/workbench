@@ -14,6 +14,7 @@ import { registerAiRoutes } from "./src/ai-routes.js";
 import { registerCandidateRoutes } from "./src/candidate-routes.js";
 import { registerMailRoutes } from "./src/mail-routes.js";
 import { registerNotesBoardsRoutes } from "./src/notes-boards-routes.js";
+import { registerSearchRoutes } from "./src/search-routes.js";
 
 function respondError(res, code, message, status = 503) {
   return res.status(status).json(errorEnvelope(code, message));
@@ -68,6 +69,8 @@ export async function createApp({
   candidateFetch,
   notesBoardsStore,
   notesBoardsFetch,
+  searchStore,
+  searchFetch,
   transcriptionAdapter = createLocalTranscriptionAdapter(),
   captureManager = createNativeCaptureManager(),
   mcpHandlerFactory = createMcpRequestHandler,
@@ -275,6 +278,12 @@ export async function createApp({
     authConfig: configuredAuth,
     notesBoardsStore,
     fetchImpl: notesBoardsFetch ?? candidateFetch,
+  });
+  registerSearchRoutes(app, {
+    env,
+    authConfig: configuredAuth,
+    searchStore,
+    fetchImpl: searchFetch ?? candidateFetch,
   });
   app.get("/api/mcp/discovery", authenticated, async (_req, res) => {
     try { return res.json(McpDiscoverySchema.parse(discoverMcp(recruiterAuthority))); }
