@@ -113,7 +113,7 @@ CREATE INDEX boards_owner_subject_idx ON public.boards (owner_id, subject_type, 
 CREATE FUNCTION public.touch_workbench_content_updated_at()
 RETURNS trigger LANGUAGE plpgsql SET search_path = '' AS $$
 BEGIN
-  NEW.updated_at = clock_timestamp();
+  NEW.updated_at = GREATEST(clock_timestamp(), OLD.updated_at + interval '1 millisecond');
   RETURN NEW;
 END;
 $$;
@@ -466,6 +466,8 @@ async function createPgliteNotesBoardsHarness() {
               const payload = JSON.parse(options.body);
               const idEq = url.searchParams.get("id")?.slice(3);
               const ownerEq = url.searchParams.get("owner_id")?.slice(3);
+              const updatedAtEq = url.searchParams.get("updated_at")?.slice(3);
+              assert.ok(updatedAtEq, "PATCH must atomically guard the last observed updated_at");
               const cols = Object.keys(payload);
               const setClause = cols
                 .map((col, idx) => (col === jsonCol ? `${col} = $${idx + 1}::jsonb` : `${col} = $${idx + 1}`))
@@ -474,11 +476,13 @@ async function createPgliteNotesBoardsHarness() {
                 ...cols.map((col) => (col === jsonCol ? JSON.stringify(payload[col]) : payload[col])),
                 idEq,
                 ownerEq,
+                updatedAtEq,
               ];
               const result = await db.query(
                 `UPDATE public.${table}
                  SET ${setClause}
                  WHERE id = $${cols.length + 1}::uuid AND owner_id = $${cols.length + 2}::uuid
+                   AND updated_at = $${cols.length + 3}::timestamptz
                  RETURNING *`,
                 values,
               );
