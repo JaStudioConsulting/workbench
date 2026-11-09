@@ -127,3 +127,256 @@ export const ErrorEnvelopeSchema = z.object({
 export function errorEnvelope(code, message) {
   return ErrorEnvelopeSchema.parse({ error: { code, message } });
 }
+
+export const CANDIDATE_SOURCES = Object.freeze([
+  "tracker_candidates",
+  "sourcing",
+  "submission",
+  "manual",
+]);
+
+export const TRACKER_CANDIDATE_SOURCES = Object.freeze([
+  "tracker_candidates",
+  "sourcing",
+  "submission",
+]);
+
+export const TRACKER_SOURCES = Object.freeze([
+  "tracker_candidates",
+  "tracker_sourcing",
+  "tracker_submissions",
+]);
+
+export const CANDIDATE_TO_TRACKER_SOURCE = Object.freeze({
+  tracker_candidates: "tracker_candidates",
+  sourcing: "tracker_sourcing",
+  submission: "tracker_submissions",
+  manual: null,
+});
+
+export const TRACKER_TO_CANDIDATE_SOURCE = Object.freeze({
+  tracker_candidates: "tracker_candidates",
+  tracker_sourcing: "sourcing",
+  tracker_submissions: "submission",
+});
+
+export const MANUAL_CANDIDATE_EDITABLE_FIELDS = Object.freeze([
+  "candidate_name",
+  "current_title",
+  "current_company",
+  "location",
+  "industry",
+  "shift",
+  "email",
+  "phone",
+  "compensation_target",
+  "current_compensation",
+  "notes",
+]);
+
+export const TRACKER_CANDIDATE_OVERLAY_FIELDS = Object.freeze([
+  ...MANUAL_CANDIDATE_EDITABLE_FIELDS,
+  "compensation_context",
+  "profile_url",
+  "role_context",
+  "client_context",
+]);
+
+export const CandidateSourceSchema = z.enum(CANDIDATE_SOURCES);
+export const TrackerSourceSchema = z.enum(TRACKER_SOURCES);
+export const SupabaseUserIdSchema = z.string().uuid();
+
+const POSITIVE_INT_ID_PATTERN = /^[1-9]\d*$/;
+
+export function parseCandidateSourceKey(value) {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  const parts = trimmed.split(":");
+  if (parts.length !== 2) return null;
+  const [candidateSource, rawSourceId] = parts;
+  if (!CANDIDATE_SOURCES.includes(candidateSource) || !rawSourceId) return null;
+
+  if (candidateSource === "manual") {
+    const parsedUuid = SupabaseUserIdSchema.safeParse(rawSourceId);
+    if (!parsedUuid.success) return null;
+    const normalizedUuid = parsedUuid.data.toLowerCase();
+    return Object.freeze({
+      id: `manual:${normalizedUuid}`,
+      candidate_source: "manual",
+      tracker_source: null,
+      candidate_source_id: normalizedUuid,
+      is_manual: true,
+    });
+  }
+
+  if (!POSITIVE_INT_ID_PATTERN.test(rawSourceId)) return null;
+  const numericId = Number(rawSourceId);
+  if (!Number.isSafeInteger(numericId) || numericId <= 0) return null;
+  return Object.freeze({
+    id: `${candidateSource}:${rawSourceId}`,
+    candidate_source: candidateSource,
+    tracker_source: CANDIDATE_TO_TRACKER_SOURCE[candidateSource],
+    candidate_source_id: rawSourceId,
+    is_manual: false,
+  });
+}
+
+export const CandidateIdSchema = z.string().trim().transform((value, ctx) => {
+  const parsed = parseCandidateSourceKey(value);
+  if (!parsed) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Candidate ID must be a valid candidate_source:candidate_source_id key",
+    });
+    return z.NEVER;
+  }
+  return parsed.id;
+});
+
+const CandidateNameSchema = z.string().trim().min(1, "Candidate name is required").max(300);
+
+function nullableCandidateField(max = 300) {
+  return z.string().trim().min(1).max(max).nullable().optional();
+}
+
+const CandidateEmailFieldSchema = z.string().trim().toLowerCase().email().max(320).nullable().optional();
+
+const CandidateProfileUrlFieldSchema = z.string()
+  .trim()
+  .url()
+  .max(2000)
+  .refine((value) => /^https?:\/\//i.test(value), "Profile URL must use http or https")
+  .nullable()
+  .optional();
+
+const manualEditableShape = {
+  current_title: nullableCandidateField(300),
+  current_company: nullableCandidateField(300),
+  location: nullableCandidateField(300),
+  industry: nullableCandidateField(300),
+  shift: nullableCandidateField(200),
+  email: CandidateEmailFieldSchema,
+  phone: nullableCandidateField(100),
+  compensation_target: nullableCandidateField(300),
+  current_compensation: nullableCandidateField(300),
+  notes: nullableCandidateField(20_000),
+};
+
+const trackerOverlayExtraShape = {
+  compensation_context: nullableCandidateField(500),
+  profile_url: CandidateProfileUrlFieldSchema,
+  role_context: nullableCandidateField(300),
+  client_context: nullableCandidateField(300),
+};
+
+export const CandidateCreateRequestSchema = z.object({
+  candidate_name: CandidateNameSchema,
+  ...manualEditableShape,
+}).strict();
+
+export const ManualCandidateCreateSchema = CandidateCreateRequestSchema;
+
+function hasAtLeastOneDefinedField(value) {
+  return Object.keys(value).some((key) => value[key] !== undefined);
+}
+
+export const ManualCandidateEditsSchema = z.object({
+  candidate_name: CandidateNameSchema.optional(),
+  ...manualEditableShape,
+}).strict().refine(hasAtLeastOneDefinedField, {
+  message: "At least one candidate field must be provided",
+});
+
+export const TrackerCandidateEditsSchema = z.object({
+  candidate_name: CandidateNameSchema.optional(),
+  ...manualEditableShape,
+  ...trackerOverlayExtraShape,
+}).strict().refine(hasAtLeastOneDefinedField, {
+  message: "At least one candidate edit field must be provided",
+});
+
+const WrappedCandidateEditRequestSchema = z.object({
+  edits: TrackerCandidateEditsSchema,
+  tracker_source: TrackerSourceSchema.optional(),
+  tracker_row: z.number().int().positive().optional(),
+}).strict();
+
+export const CandidateEditRequestSchema = z.union([
+  WrappedCandidateEditRequestSchema,
+  TrackerCandidateEditsSchema,
+]);
+
+export const CandidateRecordSchema = z.object({
+  id: CandidateIdSchema,
+  candidate_source: CandidateSourceSchema,
+  tracker_source: TrackerSourceSchema.nullable(),
+  candidate_source_id: z.string().min(1),
+  tracker_row: z.number().int().positive().nullable(),
+  candidate_name: z.string().min(1).nullable(),
+  current_title: z.string().nullable(),
+  current_company: z.string().nullable(),
+  location: z.string().nullable(),
+  industry: z.string().nullable(),
+  shift: z.string().nullable(),
+  email: z.string().nullable(),
+  phone: z.string().nullable(),
+  compensation_target: z.string().nullable(),
+  current_compensation: z.string().nullable(),
+  compensation_context: z.string().nullable(),
+  notes: z.string().nullable(),
+  profile_url: z.string().nullable(),
+  role_context: z.string().nullable(),
+  client_context: z.string().nullable(),
+  source_candidate_key: z.string().nullable(),
+  source_updated_at: z.string().datetime({ offset: true }).nullable(),
+  edited_at: z.string().datetime({ offset: true }).nullable(),
+  is_manual: z.boolean(),
+}).strict().superRefine((record, ctx) => {
+  const parsedKey = parseCandidateSourceKey(record.id);
+  if (!parsedKey) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["id"], message: "Invalid candidate source key" });
+    return;
+  }
+  if (record.candidate_source !== parsedKey.candidate_source) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["candidate_source"], message: "candidate_source does not match id prefix" });
+  }
+  if (record.candidate_source_id.toLowerCase() !== parsedKey.candidate_source_id.toLowerCase()) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["candidate_source_id"], message: "candidate_source_id does not match id suffix" });
+  }
+  if (record.tracker_source !== parsedKey.tracker_source) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["tracker_source"], message: "tracker_source does not match candidate_source" });
+  }
+  if (record.is_manual !== parsedKey.is_manual) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["is_manual"], message: "is_manual does not match candidate_source" });
+  }
+  if (parsedKey.is_manual) {
+    if (record.tracker_row !== null) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["tracker_row"], message: "Manual candidates cannot have tracker_row" });
+    }
+    if (!record.candidate_name || !record.candidate_name.trim()) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["candidate_name"], message: "Manual candidates must have candidate_name" });
+    }
+    for (const field of ["compensation_context", "profile_url", "role_context", "client_context", "source_candidate_key"]) {
+      if (record[field] !== null) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, path: [field], message: `Manual candidates cannot set ${field}` });
+      }
+    }
+  } else if (record.tracker_row === null || record.tracker_row <= 0) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["tracker_row"], message: "Tracker candidates require a positive tracker_row" });
+  }
+});
+
+export const CandidateListQuerySchema = z.object({
+  source: CandidateSourceSchema.optional(),
+  q: z.string().trim().max(200).optional(),
+  limit: z.coerce.number().int().min(1).max(500).default(100),
+  offset: z.coerce.number().int().min(0).max(10_000).default(0),
+}).strict();
+
+export const CandidateResponseSchema = z.object({
+  candidate: CandidateRecordSchema,
+}).strict();
+
+export const CandidateListResponseSchema = z.object({
+  candidates: z.array(CandidateRecordSchema).max(500),
+}).strict();
