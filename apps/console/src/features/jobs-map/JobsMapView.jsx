@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { Briefcase, Copy, Check, MapPin, RefreshCw, Search, SlidersHorizontal, ArrowRight, ShieldCheck, X, CircleDollarSign, UserRoundSearch } from "lucide-react";
 import { Badge } from "../../components/ui/badge.tsx";
+import { handleTabListKeyDown } from "../../components/handleTabListKeyDown.js";
 import { Button } from "../../components/ui/button.tsx";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../components/ui/card.tsx";
 import { Input } from "../../components/ui/input.tsx";
@@ -13,8 +14,10 @@ import { supabase } from "../../supabase-client.js";
 
 const DEFAULT_CENTER = [43.6532, -79.3832]; // Toronto, ON
 const DEFAULT_ZOOM = 10;
+const NotesPanel = lazy(() => import("../notes/NotesPanel.jsx"));
+const BoardPanel = lazy(() => import("../board/BoardPanel.jsx"));
 
-export default function JobsMapView({ onSelectJobForWorkflow, onOpenJobReview }) {
+export default function JobsMapView({ onSelectJobForWorkflow, onOpenJobReview, focusJobId = "" }) {
   const [jobs, setJobs] = useState([]);
   const [loading, setLoading] = useState(false);
   const [dataSource, setDataSource] = useState("loading"); // "live" | "unavailable"
@@ -29,8 +32,9 @@ export default function JobsMapView({ onSelectJobForWorkflow, onOpenJobReview })
   const [unit, setUnit] = useState("km");
   const [regionFilter, setRegionFilter] = useState("ALL");
   const [selectedJob, setSelectedJob] = useState(null);
+  const [jobDetailsTab, setJobDetailsTab] = useState("details");
   const [copiedPitch, setCopiedPitch] = useState(false);
-  const [mobileTab, setMobileTab] = useState("split"); // "split" | "list" | "map"
+  const [mobileTab, setMobileTab] = useState("list"); // "list" | "map"
 
   const mapContainerRef = useRef(null);
   const mapInstanceRef = useRef(null);
@@ -110,6 +114,16 @@ export default function JobsMapView({ onSelectJobForWorkflow, onOpenJobReview })
   useEffect(() => {
     loadJobs();
   }, []);
+
+  useEffect(() => {
+    if (!focusJobId || jobs.length === 0) return;
+    const matched = jobs.find(
+      (item) => String(item.originalJobId) === String(focusJobId) || String(item.id) === String(focusJobId),
+    );
+    if (matched) {
+      setSelectedJob(matched);
+    }
+  }, [focusJobId, jobs]);
 
   // 2. Dynamic Leaflet Map Initialization (safe for SSR / Sites worker builds)
   useEffect(() => {
@@ -374,6 +388,7 @@ export default function JobsMapView({ onSelectJobForWorkflow, onOpenJobReview })
 
   const handleSelectJobCard = (job) => {
     setSelectedJob(job);
+    setJobDetailsTab("details");
     if (job.coords && mapInstanceRef.current) {
       mapInstanceRef.current.flyTo(job.coords, 11, { duration: 0.8 });
       const m = markersRef.current[job.id];
@@ -404,28 +419,28 @@ export default function JobsMapView({ onSelectJobForWorkflow, onOpenJobReview })
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
           <Badge variant={dataSource === "live" ? "secondary" : "outline"} className="flex items-center gap-1.5 text-xs">
             <span className={`h-2 w-2 rounded-full ${dataSource === "live" ? "bg-emerald-500" : dataSource === "loading" ? "bg-amber-500" : "bg-rose-500"}`} />
             {dataSource === "live" ? "Tracker via Supabase" : dataSource === "loading" ? "Loading Tracker" : "Tracker unavailable"}
           </Badge>
 
-          <Button size="sm" variant="outline" onClick={loadJobs} disabled={loading} title="Refresh jobs data">
+          <Button size="sm" variant="outline" className="min-h-11 min-w-11" onClick={loadJobs} disabled={loading} title="Refresh jobs data">
             <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
             <span className="hidden sm:inline">Sync</span>
           </Button>
 
           {/* Mobile View Toggles */}
-          <div className="flex md:hidden rounded-lg border bg-muted p-0.5 text-xs">
+          <div className="flex lg:hidden rounded-lg border bg-muted p-0.5 text-xs">
             <button
               onClick={() => setMobileTab("list")}
-              className={`px-2.5 py-1 rounded-md transition ${mobileTab === "list" ? "bg-background shadow font-semibold" : "text-muted-foreground"}`}
+              className={`min-h-11 min-w-11 px-2.5 py-1 rounded-md transition ${mobileTab === "list" ? "bg-background shadow font-semibold" : "text-muted-foreground"}`}
             >
               List
             </button>
             <button
               onClick={() => setMobileTab("map")}
-              className={`px-2.5 py-1 rounded-md transition ${mobileTab === "map" ? "bg-background shadow font-semibold" : "text-muted-foreground"}`}
+              className={`min-h-11 min-w-11 px-2.5 py-1 rounded-md transition ${mobileTab === "map" ? "bg-background shadow font-semibold" : "text-muted-foreground"}`}
             >
               Map
             </button>
@@ -528,13 +543,13 @@ export default function JobsMapView({ onSelectJobForWorkflow, onOpenJobReview })
           <div className="flex rounded-md border bg-muted p-0.5 text-xs">
             <button
               onClick={() => setUnit("km")}
-              className={`px-2 py-0.5 rounded transition ${unit === "km" ? "bg-background shadow font-semibold" : "text-muted-foreground"}`}
+              className={`min-h-11 min-w-11 px-2 py-0.5 rounded transition ${unit === "km" ? "bg-background shadow font-semibold" : "text-muted-foreground"}`}
             >
               km
             </button>
             <button
               onClick={() => setUnit("mi")}
-              className={`px-2 py-0.5 rounded transition ${unit === "mi" ? "bg-background shadow font-semibold" : "text-muted-foreground"}`}
+              className={`min-h-11 min-w-11 px-2 py-0.5 rounded transition ${unit === "mi" ? "bg-background shadow font-semibold" : "text-muted-foreground"}`}
             >
               mi
             </button>
@@ -555,9 +570,9 @@ export default function JobsMapView({ onSelectJobForWorkflow, onOpenJobReview })
       </div>
 
       {/* 3. Main Split View (Job List + Map Viewport) */}
-      <div className="grid flex-1 min-h-0 gap-3 md:grid-cols-12 overflow-hidden">
+      <div className="grid flex-1 min-h-0 gap-3 lg:grid-cols-12 overflow-hidden">
         {/* Left Column: Ranked Jobs List */}
-        <div className={`md:col-span-5 lg:col-span-4 flex flex-col gap-2 overflow-hidden ${mobileTab === "map" ? "hidden md:flex" : "flex"}`}>
+        <div className={`lg:col-span-5 xl:col-span-4 flex flex-col gap-2 overflow-hidden ${mobileTab === "map" ? "hidden lg:flex" : "flex"}`}>
           <div className="flex items-center justify-between px-1">
             <p className="text-xs font-semibold text-muted-foreground">
               {filteredJobs.length} {filteredJobs.length === 1 ? "Role" : "Roles"} Found
@@ -624,12 +639,12 @@ export default function JobsMapView({ onSelectJobForWorkflow, onOpenJobReview })
         </div>
 
         {/* Right Column: Interactive Map + Slide-out Drawer */}
-        <div className={`md:col-span-7 lg:col-span-8 relative flex flex-col rounded-lg border overflow-hidden ${mobileTab === "list" ? "hidden md:flex" : "flex"}`}>
+        <div className={`lg:col-span-7 xl:col-span-8 relative flex flex-col rounded-lg border overflow-hidden ${mobileTab === "list" ? "hidden lg:flex" : "flex"}`}>
           <div ref={mapContainerRef} className="h-full w-full min-h-[400px] z-10" />
 
           {/* Job Details Drawer */}
           {selectedJob && (
-            <div className="absolute bottom-3 left-3 right-3 sm:right-auto sm:w-[380px] z-20 rounded-xl border bg-card/95 backdrop-blur p-4 shadow-xl">
+            <div className="absolute bottom-3 left-3 right-3 sm:right-auto sm:w-[380px] z-20 max-h-[80dvh] overflow-y-auto rounded-xl border bg-card/95 backdrop-blur p-4 shadow-xl">
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-1.5">
@@ -648,13 +663,32 @@ export default function JobsMapView({ onSelectJobForWorkflow, onOpenJobReview })
                 <button
                   type="button"
                   onClick={() => setSelectedJob(null)}
-                  className="rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+                  className="flex size-11 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
                   aria-label="Close job details"
                 >
                   <X size={16} />
                 </button>
               </div>
 
+              <div role="tablist" aria-label="Job details" onKeyDown={handleTabListKeyDown} className="mt-3 flex gap-2 border-b">
+                <button id="job-details-tab" type="button" role="tab" tabIndex={jobDetailsTab === "details" ? 0 : -1} aria-controls="job-details-panel" aria-selected={jobDetailsTab === "details"} onClick={() => setJobDetailsTab("details")} className="min-h-10 rounded-t-md border px-3 text-sm aria-selected:bg-muted">Details</button>
+                <button id="job-notes-tab" type="button" role="tab" tabIndex={jobDetailsTab === "notes" ? 0 : -1} aria-controls="job-details-panel" aria-selected={jobDetailsTab === "notes"} onClick={() => setJobDetailsTab("notes")} className="min-h-10 rounded-t-md border px-3 text-sm aria-selected:bg-muted">Notes</button>
+                <button id="job-board-tab" type="button" role="tab" tabIndex={jobDetailsTab === "board" ? 0 : -1} aria-controls="job-details-panel" aria-selected={jobDetailsTab === "board"} onClick={() => setJobDetailsTab("board")} className="min-h-10 rounded-t-md border px-3 text-sm aria-selected:bg-muted">Board</button>
+              </div>
+              {jobDetailsTab === "notes" ? (
+                <div id="job-details-panel" role="tabpanel" aria-labelledby="job-notes-tab" className="mt-3">
+                  <Suspense fallback={<p className="text-sm text-muted-foreground">Loading notes editor…</p>}>
+                    <NotesPanel subjectType="job" subjectId={String(selectedJob.originalJobId || "")} defaultTitle={selectedJob.title} />
+                  </Suspense>
+                </div>
+              ) : jobDetailsTab === "board" ? (
+                <div id="job-details-panel" role="tabpanel" aria-labelledby="job-board-tab" className="mt-3">
+                  <Suspense fallback={<p className="text-sm text-muted-foreground">Loading board editor…</p>}>
+                    <BoardPanel subjectType="job" subjectId={String(selectedJob.originalJobId || "")} defaultTitle={selectedJob.title} />
+                  </Suspense>
+                </div>
+              ) : (
+              <div id="job-details-panel" role="tabpanel" aria-labelledby="job-details-tab">
               <div className="mt-2.5 space-y-1 text-xs text-muted-foreground">
                 <p className="flex items-start gap-1.5"><MapPin size={13} className="mt-0.5 shrink-0" aria-hidden="true" /><span><strong>Location:</strong> {selectedJob.displayLocation}</span></p>
                 {selectedJob.compensation && (
@@ -694,6 +728,8 @@ export default function JobsMapView({ onSelectJobForWorkflow, onOpenJobReview })
                   </Button>
                 )}
               </div>
+              </div>
+              )}
             </div>
           )}
         </div>

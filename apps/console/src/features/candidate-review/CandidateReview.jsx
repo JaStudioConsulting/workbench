@@ -61,6 +61,7 @@ export default function CandidateReview({ selectedJob, onSelectJob, onNavigateJo
         setActiveJobId(nextJob ? String(nextJob.id) : "");
         if (nextJob && onSelectJob) onSelectJob(nextJob);
         setDataError("");
+        setRefreshKey((key) => key + 1);
       })
       .catch((error) => {
         if (!active) return;
@@ -125,7 +126,7 @@ export default function CandidateReview({ selectedJob, onSelectJob, onNavigateJo
   );
 
   const swipeCandidates = useMemo(
-    () => shownCandidates.filter((candidate) => !candidate.decision && !candidate.isSubmitted),
+    () => shownCandidates.filter((candidate) => !candidate.decision && !candidate.isSubmitted && candidate.presentationState !== "pending"),
     [shownCandidates]
   );
 
@@ -133,6 +134,11 @@ export default function CandidateReview({ selectedJob, onSelectJob, onNavigateJo
   const focusedRef = useRef("");
   useEffect(() => {
     if (!focusCandidateId || dataLoading || focusedRef.current === String(focusCandidateId)) return;
+    if (initialView === "people") {
+      focusedRef.current = String(focusCandidateId);
+      setActiveView("people");
+      return;
+    }
     if (!candidates.some((item) => String(item.id) === String(focusCandidateId))) return;
     focusedRef.current = String(focusCandidateId);
     const swipeIndex = swipeCandidates.findIndex((item) => String(item.id) === String(focusCandidateId));
@@ -142,7 +148,7 @@ export default function CandidateReview({ selectedJob, onSelectJob, onNavigateJo
     } else {
       setActiveView("people");
     }
-  }, [focusCandidateId, dataLoading, candidates, swipeCandidates]);
+  }, [focusCandidateId, dataLoading, candidates, swipeCandidates, initialView]);
 
   const submissionHistory = useMemo(() => getSubmissionHistory(), [refreshKey]);
 
@@ -306,7 +312,7 @@ export default function CandidateReview({ selectedJob, onSelectJob, onNavigateJo
               type="button"
               onClick={() => setActiveView("swipe")}
               disabled={!currentJob}
-              className={`flex items-center gap-1.5 px-3 py-1 rounded-md transition font-semibold disabled:opacity-50 ${
+              className={`flex min-h-11 items-center gap-1.5 px-3 py-1 rounded-md transition font-semibold disabled:opacity-50 ${
                 activeView === "swipe"
                   ? "bg-background text-foreground shadow-sm"
                   : "text-muted-foreground hover:text-foreground"
@@ -318,8 +324,7 @@ export default function CandidateReview({ selectedJob, onSelectJob, onNavigateJo
             <button
               type="button"
               onClick={() => setActiveView("people")}
-              disabled={!currentJob}
-              className={`flex items-center gap-1.5 px-3 py-1 rounded-md transition font-semibold disabled:opacity-50 ${
+              className={`flex min-h-11 items-center gap-1.5 px-3 py-1 rounded-md transition font-semibold disabled:opacity-50 ${
                 activeView === "people"
                   ? "bg-background text-foreground shadow-sm"
                   : "text-muted-foreground hover:text-foreground"
@@ -338,7 +343,7 @@ export default function CandidateReview({ selectedJob, onSelectJob, onNavigateJo
             type="button"
             aria-pressed={canadaPrefs.canadaOnly}
             onClick={() => updateCanadaPrefs({ canadaOnly: !canadaPrefs.canadaOnly })}
-            className={`rounded-full border px-3 py-1 text-xs font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${canadaPrefs.canadaOnly ? "border-foreground bg-foreground text-background" : "bg-background text-muted-foreground"}`}
+            className={`min-h-11 rounded-full border px-3 py-1 text-xs font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${canadaPrefs.canadaOnly ? "border-foreground bg-foreground text-background" : "bg-background text-muted-foreground"}`}
           >
             Canada only
           </button>
@@ -347,7 +352,7 @@ export default function CandidateReview({ selectedJob, onSelectJob, onNavigateJo
               type="button"
               aria-pressed={canadaPrefs.showUnknown}
               onClick={() => updateCanadaPrefs({ showUnknown: !canadaPrefs.showUnknown })}
-              className={`rounded-full border px-3 py-1 text-xs font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${canadaPrefs.showUnknown ? "border-amber-400 bg-amber-50 text-amber-900" : "bg-background text-muted-foreground"}`}
+              className={`min-h-11 rounded-full border px-3 py-1 text-xs font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${canadaPrefs.showUnknown ? "border-amber-400 bg-amber-50 text-amber-900" : "bg-background text-muted-foreground"}`}
             >
               Show unknown location
             </button>
@@ -357,7 +362,7 @@ export default function CandidateReview({ selectedJob, onSelectJob, onNavigateJo
       ) : null}
 
       {/* 2. Main Content View Area or Explicit Unmatched Empty State */}
-      {!currentJob ? (
+      {!currentJob && activeView !== "people" ? (
         <div
           className="flex flex-1 flex-col items-center justify-center rounded-xl border border-dashed bg-card p-8 text-center text-muted-foreground"
           data-testid="unmatched-job-state"
@@ -381,7 +386,7 @@ export default function CandidateReview({ selectedJob, onSelectJob, onNavigateJo
               variant="outline"
               size="sm"
               onClick={onNavigateJobsMap}
-              className="mt-4 text-xs font-semibold"
+              className="mt-4 min-h-11 text-xs font-semibold"
             >
               <MapPin size={13} className="mr-1.5" />
               View roles in Jobs Map
@@ -412,6 +417,7 @@ export default function CandidateReview({ selectedJob, onSelectJob, onNavigateJo
               onSelectCandidateToSwipe={handleSelectCandidateToSwipe}
               onMarkSubmitted={handleMarkSubmitted}
               onStartCandidateCall={onStartCandidateCall}
+              focusCandidateId={focusCandidateId}
             />
           )}
         </div>

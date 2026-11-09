@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { ExternalLink, FileDown, Mic, Printer, RefreshCw } from "lucide-react";
 import { Badge } from "../../components/ui/badge.tsx";
 import { Button } from "../../components/ui/button.tsx";
@@ -21,11 +21,14 @@ import {
 import { createMeetingAdapter } from "./meetingAdapter.js";
 import { downloadMeetingMarkdown, printMeetingPdf } from "./meetingExport.js";
 import { createMeetingDraft, formatSpeakerTranscript, groupCalendarEvents, safeJoinUrl } from "./meetingModel.js";
+import { syncMeetingDraftNotes } from "./meetingNotesSync.js";
 import { saveMeetingAndReleaseArchive } from "./meetingRetention.js";
 import { MEETING_TEMPLATES, renderMeetingTemplate } from "./meetingTemplates.js";
 import MeetingCaptureVariants from "./MeetingCaptureVariants.jsx";
 
 const defaultAdapter = createMeetingAdapter();
+const NotesPanel = lazy(() => import("../notes/NotesPanel.jsx"));
+const BoardPanel = lazy(() => import("../board/BoardPanel.jsx"));
 
 function browserCaptureMetadata(recording) {
   return {
@@ -75,6 +78,8 @@ export default function MeetingsWorkspace({ adapter = defaultAdapter, launchCont
   const [selectedJobId, setSelectedJobId] = useState(launchJobId);
   const [selectedCandidateId, setSelectedCandidateId] = useState(launchCandidateId);
   const [templateId, setTemplateId] = useState("candidate_screen");
+  const [showLinkedNotes, setShowLinkedNotes] = useState(false);
+  const [showLinkedBoard, setShowLinkedBoard] = useState(false);
   const [recording, setRecording] = useState(null);
   const [includeSharedAudio, setIncludeSharedAudio] = useState(false);
   const [recordedAudio, setRecordedAudio] = useState(null);
@@ -93,6 +98,7 @@ export default function MeetingsWorkspace({ adapter = defaultAdapter, launchCont
   const [error, setError] = useState("");
   const [status, setStatus] = useState("");
   const [archiveCleanupWarning, setArchiveCleanupWarning] = useState("");
+  const [notesWarning, setNotesWarning] = useState("");
   const [makingNotes, setMakingNotes] = useState(false);
 
   const loadCalendar = useCallback(() => {
@@ -290,7 +296,7 @@ export default function MeetingsWorkspace({ adapter = defaultAdapter, launchCont
   };
 
   const saveDraft = async () => {
-    setError(""); setStatus(""); setArchiveCleanupWarning("");
+    setError(""); setStatus(""); setArchiveCleanupWarning(""); setNotesWarning("");
     const jobForDraft = selectedJob || launchContext?.job || (recordingMetadata?.jobId ? { id: recordingMetadata.jobId, title: recordingMetadata.jobTitle } : null);
     const candidateForDraft = selectedCandidate || launchContext?.candidate || (recordingMetadata?.candidateId ? { id: recordingMetadata.candidateId, name: recordingMetadata.candidateName } : null);
     if (!jobForDraft || !candidateForDraft) { setError("Choose a real candidate and job before saving."); return; }
@@ -323,6 +329,17 @@ export default function MeetingsWorkspace({ adapter = defaultAdapter, launchCont
         setRecordedAudio(null);
         setPendingAudio(null);
       }
+      if (result?.persistence === "durable" && result?.draft?.id) {
+        const notesSync = await syncMeetingDraftNotes({
+          persistence: result.persistence,
+          draftId: result.draft.id,
+          candidateId: candidateForDraft.id,
+          label: draft.event?.title || candidateForDraft.name,
+          transcript,
+          notes,
+        });
+        setNotesWarning(notesSync.warning);
+      }
       setStatus(result.warning || (result.persistence === "durable" ? "Meeting draft saved." : "Meeting draft saved for this session."));
       setArchiveCleanupWarning(result.archiveRetained ? "Recoverable audio could not be removed from this device and remains available for recovery." : "");
     } catch (saveError) { setError(saveError.message || "Meeting draft could not be saved."); }
@@ -354,6 +371,7 @@ export default function MeetingsWorkspace({ adapter = defaultAdapter, launchCont
   return <div className="flex flex-col gap-4" data-testid="meetings-workspace">
     <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-lg font-semibold">Meetings</h2><p className="text-sm text-muted-foreground">Calendar, recording, transcript, and recruiting context in one place.</p></div><Badge variant="outline">Google Calendar read-only</Badge></div>
     {error ? <div role="alert" className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">{error}</div> : null}
+    {notesWarning ? <div role="alert" className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">{notesWarning}</div> : null}
     <div role="status" aria-atomic="true" className={status ? "rounded-md border border-emerald-700/30 bg-emerald-50 p-3 text-sm text-emerald-950" : "sr-only"}>{status}</div>
     <div role="status" aria-atomic="true" className={archiveCleanupWarning ? "rounded-md border border-amber-700/30 bg-amber-50 p-3 text-sm text-amber-950" : "sr-only"}>{archiveCleanupWarning}</div>
 
@@ -366,6 +384,29 @@ export default function MeetingsWorkspace({ adapter = defaultAdapter, launchCont
     </CardContent></Card>
 
     <MeetingCaptureVariants launchContext={launchContext} recruiting={recruiting} selectedJob={selectedJob} selectedJobId={selectedJobId} setSelectedJobId={setSelectedJobId} selectedCandidate={selectedCandidate} selectedCandidateId={selectedCandidateId} setSelectedCandidateId={setSelectedCandidateId} recording={recording} beginRecording={beginRecording} finishRecording={finishRecording} recordedAudio={recordedAudio} selectedEvent={selectedEvent} transcribing={transcribing} includeSharedAudio={includeSharedAudio} setIncludeSharedAudio={setIncludeSharedAudio} pendingAudio={pendingAudio} retryTranscription={retryTranscription} transcript={transcript} setTranscript={setTranscript} notes={notes} setNotes={setNotes} segments={segments} speakers={speakers} speakerLabels={speakerLabels} onSpeakerLabelChange={renameSpeaker} saveDraft={saveDraft} createNotes={createNotes} makingNotes={makingNotes} />
+
+    <section className="rounded-lg border bg-card p-4" aria-label="Meeting notes tab">
+      <button type="button" aria-expanded={showLinkedNotes} onClick={() => setShowLinkedNotes((value) => !value)} className="min-h-11 rounded-md border px-3 text-sm font-semibold">Notes</button>
+      <button type="button" aria-expanded={showLinkedBoard} onClick={() => setShowLinkedBoard((value) => !value)} className="ml-2 min-h-11 rounded-md border px-3 text-sm font-semibold">Board</button>
+      {showLinkedNotes ? (
+        loadedMeetingId ? (
+          <div className="mt-3">
+            <Suspense fallback={<p className="text-sm text-muted-foreground">Loading notes editor…</p>}>
+              <NotesPanel subjectType="meeting" subjectId={loadedMeetingId} defaultTitle={exportTitle} />
+            </Suspense>
+          </div>
+        ) : <p className="mt-3 text-sm text-muted-foreground">Save the meeting draft before attaching notes.</p>
+      ) : null}
+      {showLinkedBoard ? (
+        loadedMeetingId ? (
+          <div className="mt-3">
+            <Suspense fallback={<p className="text-sm text-muted-foreground">Loading board editor…</p>}>
+              <BoardPanel subjectType="meeting" subjectId={loadedMeetingId} defaultTitle={exportTitle} />
+            </Suspense>
+          </div>
+        ) : <p className="mt-3 text-sm text-muted-foreground">Save the meeting draft before attaching a board.</p>
+      ) : null}
+    </section>
 
     <Card><CardHeader><CardTitle>Recruiter template</CardTitle><CardDescription>Sections use transcript text only. Missing topics stay marked Not discussed.</CardDescription></CardHeader><CardContent className="grid gap-4">
       <Select value={templateId} onValueChange={setTemplateId}><SelectTrigger aria-label="Select meeting template" className="w-full sm:max-w-xs"><span>{MEETING_TEMPLATES.find((item) => item.id === templateId)?.label || "Select template"}</span></SelectTrigger><SelectContent>{MEETING_TEMPLATES.map((item) => <SelectItem key={item.id} value={item.id}>{item.label}</SelectItem>)}</SelectContent></Select>

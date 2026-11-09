@@ -101,6 +101,10 @@ test("Pipeline page loads live data, queues exact stage notes, and compiles", as
   assert.match(source, /DragDropProvider/);
   assert.match(source, /onOpenCandidate\?\.\(job\.id, candidate\.id\)/);
   assert.match(source, /Move \$\{candidate\.name\} to stage/);
+  assert.match(source, /<CandidatePresentationBadges/);
+  assert.match(source, /<CandidatePresentationSummary/);
+  assert.match(source, /prefix="pipeline"/);
+  assert.doesNotMatch(source, /purple|violet|indigo|fuchsia|#6b4ea8/i);
   const result = await transformWithEsbuild(source, "PipelinePage.jsx", { loader: "jsx", jsx: "automatic" });
   assert.match(result.code, /function PipelinePage/);
 });
