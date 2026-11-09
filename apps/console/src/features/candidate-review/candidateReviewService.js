@@ -4,6 +4,7 @@
 import { SAMPLE_JOBS, SAMPLE_CANDIDATES } from "./sampleReviewData.js";
 import { PIPELINE_STAGE_ORDER } from "./constants.js";
 import { supabase } from "../../supabase-client.js";
+import { parseCandidateSourceKey } from "@ja/shared-types";
 
 // In-memory local stores (in-memory only, no persistent browser storage)
 // Keyed strictly by composite key: jobId + "::" + loxoPersonId
@@ -21,6 +22,46 @@ function sourceIdentity(candidateId) {
   const sourceId = Number(rawId);
   if (!["sourcing", "submission"].includes(source) || !Number.isInteger(sourceId)) return null;
   return { source, sourceId };
+}
+
+export function buildCandidateSourceKey(candidateSource, candidateSourceId) {
+  if (typeof candidateSource !== "string" || candidateSourceId === null || candidateSourceId === undefined) {
+    return null;
+  }
+  const source = candidateSource.trim();
+  const rawId = String(candidateSourceId).trim();
+  return parseCandidateSourceKey(`${source}:${rawId}`)?.id ?? null;
+}
+
+export function extractCandidateSourceKey(entity) {
+  if (!entity) return null;
+  if (typeof entity === "string") {
+    const trimmed = entity.trim();
+    const colonIndex = trimmed.indexOf(":");
+    if (colonIndex <= 0) return null;
+    return buildCandidateSourceKey(trimmed.slice(0, colonIndex), trimmed.slice(colonIndex + 1));
+  }
+  if (typeof entity !== "object") return null;
+
+  const rawSource = entity.candidate_source ?? entity.candidateSource;
+  const rawSourceId = entity.candidate_source_id ?? entity.candidateSourceId;
+  if (
+    (rawSource !== undefined && rawSource !== null) ||
+    (rawSourceId !== undefined && rawSourceId !== null)
+  ) {
+    return buildCandidateSourceKey(rawSource, rawSourceId);
+  }
+
+  if (typeof entity.personId === "string" && entity.personId.trim()) {
+    const fromPersonId = extractCandidateSourceKey(entity.personId);
+    if (fromPersonId) return fromPersonId;
+  }
+
+  if (typeof entity.id === "string" && entity.id.trim()) {
+    return extractCandidateSourceKey(entity.id);
+  }
+
+  return null;
 }
 
 function initials(name) {
@@ -107,48 +148,142 @@ function findLoadedCandidate(jobId, personId) {
   return null;
 }
 
-export function mapLivePresentation(row, candidate = null) {
+export function normalizePresentationRecord(row, candidate = null) {
+  if (!row || typeof row !== "object") return null;
+  const rawState = row.presentation_state ?? row.presentationState;
+  const rawStatus = row.source_status ?? row.sourceStatus ?? null;
+  const source = row.source ? String(row.source).trim() : null;
   const presentationState =
-    row.presentation_state === "confirmed"
+    rawState === "confirmed" && source !== "candidate_review_actions"
       ? "confirmed"
-      : row.presentation_state === "failed"
+      : rawState === "failed" || rawStatus === "failed"
         ? "failed"
         : "pending";
   const isConfirmed = presentationState === "confirmed";
+
+  const candidateSource =
+    row.candidate_source !== undefined ? row.candidate_source : (row.candidateSource ?? null);
+  const candidateSourceId =
+    row.candidate_source_id !== undefined ? row.candidate_source_id : (row.candidateSourceId ?? null);
+  const hasExplicitSourceFields =
+    (candidateSource !== undefined && candidateSource !== null) ||
+    (candidateSourceId !== undefined && candidateSourceId !== null);
+
+  const sourceKeyFromRow = buildCandidateSourceKey(candidateSource, candidateSourceId);
   const personId =
-    row.candidate_source && row.candidate_source_id !== null && row.candidate_source_id !== undefined
-      ? `${row.candidate_source}:${row.candidate_source_id}`
-      : candidate?.id || null;
+    sourceKeyFromRow ||
+    (!hasExplicitSourceFields && row.personId ? extractCandidateSourceKey({ id: row.personId }) : null) ||
+    (source === "imported" && row.personId ? String(row.personId).trim() : null) ||
+    (!hasExplicitSourceFields ? extractCandidateSourceKey(candidate) : null) ||
+    null;
+
+  const rawJobId = row.job_id !== undefined ? row.job_id : row.jobId;
   const jobId =
-    row.job_id !== null && row.job_id !== undefined && String(row.job_id).trim() !== ""
-      ? String(row.job_id)
+    rawJobId !== null && rawJobId !== undefined && String(rawJobId).trim() !== ""
+      ? String(rawJobId).trim()
       : null;
+
+  const rawClientName =
+    row.client_name !== undefined
+      ? row.client_name
+      : row.clientName !== undefined
+        ? row.clientName
+        : row.client;
   const clientName =
-    row.client_name !== null && row.client_name !== undefined && String(row.client_name).trim() !== ""
-      ? String(row.client_name).trim()
+    rawClientName !== null && rawClientName !== undefined && String(rawClientName).trim() !== ""
+      ? String(rawClientName).trim()
       : null;
+
+  const rawJobTitle = row.job_title !== undefined ? row.job_title : row.jobTitle;
   const jobTitle =
-    row.job_title !== null && row.job_title !== undefined && String(row.job_title).trim() !== ""
-      ? String(row.job_title).trim()
+    rawJobTitle !== null && rawJobTitle !== undefined && String(rawJobTitle).trim() !== ""
+      ? String(rawJobTitle).trim()
       : null;
-  const presentedOn = row.presented_on ?? null;
-  const queuedAt = row.queued_at ?? null;
-  const sourceStatus = row.source_status ?? null;
+
+  const rawPresentedOn = row.presented_on !== undefined ? row.presented_on : row.presentedOn;
+  const presentedOn =
+    rawPresentedOn !== null && rawPresentedOn !== undefined && String(rawPresentedOn).trim() !== ""
+      ? String(rawPresentedOn).trim()
+      : null;
+
+  const rawQueuedAt = row.queued_at !== undefined ? row.queued_at : row.queuedAt;
+  const queuedAt =
+    rawQueuedAt !== null && rawQueuedAt !== undefined && String(rawQueuedAt).trim() !== ""
+      ? String(rawQueuedAt).trim()
+      : null;
+
+  const sourceStatus =
+    rawStatus !== null && rawStatus !== undefined && String(rawStatus).trim() !== ""
+      ? String(rawStatus).trim()
+      : null;
+
   const status = isConfirmed
     ? sourceStatus || "Submitted"
     : presentationState === "failed"
       ? "Failed"
       : "Waiting for Loxo";
 
+  const clientLabel = clientName || "Client not recorded";
+  const jobLabel = jobTitle || "Job not recorded";
+  const dateLabel = isConfirmed
+    ? presentedOn
+      ? String(presentedOn).slice(0, 10)
+      : "Date not recorded"
+    : queuedAt
+      ? `Queued ${String(queuedAt).slice(0, 10)}`
+      : "Date not recorded";
+  const statusLabel = isConfirmed
+    ? source === "imported"
+      ? "Imported"
+      : sourceStatus || "Submitted"
+    : presentationState === "failed"
+      ? "Submission failed"
+      : "Waiting for Loxo";
+
+  return {
+    id: String(row.id ?? `${source || "presentation"}:${personId || "unknown"}:${presentedOn || queuedAt || "unknown"}`),
+    presentationState,
+    isConfirmed,
+    source,
+    sourceId: row.source_id !== undefined ? row.source_id : (row.sourceId ?? null),
+    candidateSource: candidateSource ?? (sourceKeyFromRow ? sourceKeyFromRow.split(":")[0] : null),
+    candidateSourceId: candidateSourceId ?? null,
+    personId,
+    candidateKey: row.candidate_key !== undefined ? row.candidate_key : (row.candidateKey ?? null),
+    candidateName: row.candidate_name !== undefined ? row.candidate_name : (row.candidateName ?? null),
+    clientName,
+    client: clientName,
+    clientLabel,
+    jobId,
+    jobTitle,
+    jobLabel,
+    presentedOn,
+    queuedAt,
+    submittedAt: presentedOn ?? queuedAt ?? (row.submittedAt ?? null),
+    dateLabel,
+    sourceStatus,
+    status,
+    statusLabel,
+    submissionType: row.submission_type !== undefined ? row.submission_type : (row.submissionType ?? null),
+    recruiter: row.recruiter ?? null,
+    note: row.note ?? null,
+    location: row.location ?? candidate?.location ?? null,
+  };
+}
+
+export function mapLivePresentation(row, candidate = null) {
+  const normalized = normalizePresentationRecord(row, candidate);
+  const { presentationState, isConfirmed, personId, jobId, sourceStatus } = normalized;
+
   const matchedCandidate = candidate || findLoadedCandidate(jobId, personId);
   const baseCandidate = matchedCandidate || {
     id: personId || String(row.id),
-    candidateId: row.candidate_key || (personId ? personId.replace(":", "-") : String(row.id)),
-    candidateSource: row.candidate_source ?? null,
-    candidateSourceId: row.candidate_source_id ?? null,
+    candidateId: normalized.candidateKey || (personId ? personId.replace(":", "-") : String(row.id)),
+    candidateSource: normalized.candidateSource ?? null,
+    candidateSourceId: normalized.candidateSourceId ?? null,
     jobId,
-    name: row.candidate_name || "Unnamed candidate",
-    initials: initials(row.candidate_name),
+    name: normalized.candidateName || "Unnamed candidate",
+    initials: initials(normalized.candidateName),
     title: "Title not recorded",
     employer: "Company not recorded",
     location: "",
@@ -176,29 +311,8 @@ export function mapLivePresentation(row, candidate = null) {
   };
 
   const record = {
-    id: String(row.id),
-    presentationState,
-    isConfirmed,
-    source: row.source || null,
-    sourceId: row.source_id ?? null,
-    candidateSource: row.candidate_source ?? null,
-    candidateSourceId: row.candidate_source_id ?? null,
-    personId,
-    candidateKey: row.candidate_key ?? null,
-    candidateName: row.candidate_name ?? null,
-    clientName,
-    client: clientName,
-    jobId,
-    jobTitle,
-    presentedOn,
-    queuedAt,
-    submittedAt: presentedOn ?? queuedAt ?? null,
-    sourceStatus,
-    status,
-    submissionType: row.submission_type ?? null,
-    recruiter: row.recruiter ?? null,
-    note: row.note ?? null,
-    location: baseCandidate.location || null,
+    ...normalized,
+    location: baseCandidate.location || normalized.location || null,
   };
 
   return {
@@ -207,6 +321,7 @@ export function mapLivePresentation(row, candidate = null) {
       ...baseCandidate,
       submission: record,
       presentationState,
+      isPresented: isConfirmed,
       isSubmitted: isConfirmed,
     },
   };
@@ -233,6 +348,12 @@ export async function loadLivePresentations() {
   const rows = await fetchPresentationRows();
   liveModeActive = true;
   runtimePresentations = rows.map((row) => mapLivePresentation(row));
+  for (const [jobId, list] of runtimeCandidatesByJob.entries()) {
+    runtimeCandidatesByJob.set(
+      jobId,
+      list.map((cand) => enrichCandidateWithPresentations(cand, runtimePresentations, { jobId }))
+    );
+  }
   return runtimePresentations;
 }
 
@@ -302,12 +423,15 @@ export async function loadLiveCandidatesForJob(jobId) {
   }
 
   liveModeActive = true;
-  const candidates = (rows || []).map((row) => {
+  runtimePresentations = (presentations || []).map((row) => mapLivePresentation(row));
+  const rawCandidates = (rows || []).map((row) => {
     const key = `${row.candidate_source}:${row.candidate_source_id}`;
     return mapLiveCandidate(row, actionMap.get(key) || []);
   });
+  const candidates = rawCandidates.map((cand) =>
+    enrichCandidateWithPresentations(cand, runtimePresentations, { jobId })
+  );
   runtimeCandidatesByJob.set(String(jobId), candidates);
-  runtimePresentations = (presentations || []).map((row) => mapLivePresentation(row));
   return candidates;
 }
 
@@ -338,6 +462,230 @@ function sortPresentationRecords(records) {
   });
 }
 
+function buildEmptyPresentationSummary(candidateSourceKey = null) {
+  return {
+    candidateSourceKey,
+    isPresented: false,
+    isSubmitted: false,
+    presentationState: null,
+    badgeLabel: null,
+    pendingBadgeLabel: null,
+    failedBadgeLabel: null,
+    submission: null,
+    presentations: [],
+    confirmedPresentations: [],
+    pendingPresentations: [],
+    failedPresentations: [],
+    unconfirmedPresentations: [],
+    presentedClients: [],
+    presentedClientLabels: [],
+    presentedClientSummaries: [],
+    hasUnknownConfirmedClient: false,
+  };
+}
+
+export function buildCandidatePresentationSummary(
+  candidate,
+  presentationRecords = null,
+  { jobId = null } = {}
+) {
+  if (!candidate) return buildEmptyPresentationSummary(null);
+
+  const candidateKey =
+    typeof candidate === "string"
+      ? extractCandidateSourceKey(candidate)
+      : extractCandidateSourceKey(candidate);
+
+  const sampleMode = isSampleData() && !Array.isArray(presentationRecords);
+  const samplePersonId =
+    !candidateKey &&
+    sampleMode &&
+    typeof candidate === "object" &&
+    typeof candidate.id === "string" &&
+    /^DEMO-PERSON-/.test(candidate.id)
+      ? candidate.id
+      : null;
+
+  if (!candidateKey && !samplePersonId) {
+    return buildEmptyPresentationSummary(null);
+  }
+
+  const candidateRecords = [];
+  if (Array.isArray(presentationRecords)) {
+    candidateRecords.push(...presentationRecords);
+  } else if (!sampleMode) {
+    candidateRecords.push(...runtimePresentations);
+    if (typeof candidate === "object") {
+      if (Array.isArray(candidate.presentations)) candidateRecords.push(...candidate.presentations);
+      if (Array.isArray(candidate.confirmedPresentations)) candidateRecords.push(...candidate.confirmedPresentations);
+      if (Array.isArray(candidate.pendingPresentations)) candidateRecords.push(...candidate.pendingPresentations);
+      if (Array.isArray(candidate.failedPresentations)) candidateRecords.push(...candidate.failedPresentations);
+      if (candidate.submission && typeof candidate.submission === "object") {
+        candidateRecords.push(candidate.submission);
+      }
+    }
+  } else if (typeof candidate === "object") {
+    const job = candidate.jobId ? getJobById(candidate.jobId) : null;
+    for (const sub of candidate.submissionHistory || []) {
+      candidateRecords.push({
+        id: sub.id || `${candidate.jobId || "sample"}::${candidate.id}::${sub.submittedAt || "sample"}`,
+        presentation_state: "confirmed",
+        source: "imported",
+        personId: candidate.id,
+        job_id: candidate.jobId ?? null,
+        job_title: job?.title ?? null,
+        client_name: sub.client ?? job?.company ?? null,
+        presented_on: sub.submittedAt ? String(sub.submittedAt).slice(0, 10) : null,
+        submittedAt: sub.submittedAt ?? null,
+        source_status: "Submitted",
+        location: sub.location || job?.location || candidate.location || null,
+        note: sub.note ?? null,
+      });
+    }
+    if (candidate.submission && typeof candidate.submission === "object") {
+      candidateRecords.push(candidate.submission);
+    }
+  }
+
+  // Exact candidate_source:candidate_source_id join only (never match by candidate_name).
+  const byId = new Map();
+  for (const rawItem of candidateRecords) {
+    const record = normalizePresentationRecord(rawItem);
+    if (!record) continue;
+    if (candidateKey) {
+      if (record.personId !== candidateKey) continue;
+    } else if (samplePersonId) {
+      if (record.personId !== samplePersonId) continue;
+    } else {
+      continue;
+    }
+    if (!byId.has(record.id)) {
+      byId.set(record.id, record);
+    }
+  }
+
+  const sorted = sortPresentationRecords([...byId.values()]);
+  const confirmedPresentations = sorted.filter((item) => item.presentationState === "confirmed");
+  const pendingPresentations = sorted.filter((item) => item.presentationState === "pending");
+  const failedPresentations = sorted.filter((item) => item.presentationState === "failed");
+  const unconfirmedPresentations = sorted.filter((item) => item.presentationState !== "confirmed");
+
+  const clientGroups = new Map();
+  for (const record of confirmedPresentations) {
+    const groupKey = record.clientName
+      ? `client:${record.clientName.toLowerCase()}`
+      : "__unknown_client__";
+    const existing = clientGroups.get(groupKey);
+    if (!existing) {
+      clientGroups.set(groupKey, {
+        key: groupKey,
+        clientName: record.clientName,
+        clientLabel: record.clientLabel,
+        isUnknownClient: !record.clientName,
+        jobId: record.jobId,
+        jobTitle: record.jobTitle,
+        jobLabel: record.jobLabel,
+        presentedOn: record.presentedOn ? String(record.presentedOn).slice(0, 10) : null,
+        dateLabel: record.dateLabel,
+        sourceStatus: record.sourceStatus,
+        statusLabel: record.statusLabel,
+        presentationCount: 1,
+        records: [record],
+      });
+    } else {
+      existing.presentationCount += 1;
+      existing.records.push(record);
+    }
+  }
+
+  const presentedClientSummaries = [...clientGroups.values()];
+  const presentedClients = presentedClientSummaries
+    .filter((group) => !group.isUnknownClient)
+    .map((group) => group.clientName);
+  const hasUnknownConfirmedClient = clientGroups.has("__unknown_client__");
+  const presentedClientLabels = presentedClientSummaries.map((group) => group.clientLabel);
+
+  const stageIsSubmitted =
+    sampleMode &&
+    typeof candidate === "object" &&
+    (PIPELINE_STAGE_ORDER[candidate.stage] ?? -1) >= PIPELINE_STAGE_ORDER.Submitted;
+
+  const isPresented = confirmedPresentations.length > 0;
+  const isSubmitted = Boolean(isPresented || stageIsSubmitted);
+
+  const targetJobId = jobId ?? (typeof candidate === "object" ? candidate.jobId : null) ?? null;
+  const pickForJob = (list) =>
+    (targetJobId
+      ? list.find((item) => item.jobId !== null && String(item.jobId) === String(targetJobId))
+      : null) ||
+    list[0] ||
+    null;
+
+  const confirmedPrimary = pickForJob(confirmedPresentations);
+  const pendingPrimary = pickForJob(pendingPresentations);
+  const failedPrimary = pickForJob(failedPresentations);
+  const primaryPresentation = confirmedPrimary || pendingPrimary || failedPrimary || null;
+
+  const presentationState = isSubmitted
+    ? "confirmed"
+    : pendingPrimary
+      ? "pending"
+      : failedPrimary
+        ? "failed"
+        : null;
+
+  const badgeLabel = isPresented
+    ? "Presented"
+    : pendingPrimary
+      ? "Pending confirmation"
+      : failedPrimary
+        ? "Submission failed"
+        : null;
+
+  return {
+    candidateSourceKey: candidateKey,
+    isPresented,
+    isSubmitted,
+    presentationState,
+    badgeLabel,
+    pendingBadgeLabel: pendingPresentations.length > 0 ? "Pending confirmation" : null,
+    failedBadgeLabel: failedPresentations.length > 0 ? "Submission failed" : null,
+    submission: primaryPresentation,
+    presentations: sorted,
+    confirmedPresentations,
+    pendingPresentations,
+    failedPresentations,
+    unconfirmedPresentations,
+    presentedClients,
+    presentedClientLabels,
+    presentedClientSummaries,
+    hasUnknownConfirmedClient,
+  };
+}
+
+export function enrichCandidateWithPresentations(
+  candidate,
+  presentationRecords = null,
+  { jobId = null } = {}
+) {
+  if (!candidate || typeof candidate !== "object") return candidate;
+  const summary = buildCandidatePresentationSummary(candidate, presentationRecords, { jobId });
+  return {
+    ...candidate,
+    ...summary,
+  };
+}
+
+export function enrichCandidatesWithPresentations(
+  candidates = [],
+  presentationRecords = null,
+  { jobId = null } = {}
+) {
+  return (candidates || []).map((candidate) =>
+    enrichCandidateWithPresentations(candidate, presentationRecords, { jobId })
+  );
+}
+
 export function getCandidatesForJob(jobId) {
   if (!jobId) return [];
 
@@ -351,65 +699,24 @@ export function getCandidatesForJob(jobId) {
   const matches = source.filter(
     (cand) => String(cand.jobId) === String(jobId)
   );
-  const sortedPresentations = !sampleMode ? sortPresentationRecords(runtimePresentations) : [];
+  const sortedPresentations = !sampleMode ? sortPresentationRecords(runtimePresentations) : null;
 
   const enriched = matches.map((cand) => {
     const key = makeCompositeKey(jobId, cand.id);
     const decision = candidateDecisions.has(key) ? candidateDecisions.get(key) : (cand.decision || null);
     const additional = loggedActivities.get(key) || [];
-    const fullTrail = [...additional, ...cand.activityTrail];
+    const fullTrail = [...additional, ...(cand.activityTrail || [])];
 
     // Compute other contacts count (activities performed by someone other than Ja)
     const otherContactsCount = fullTrail.filter(
       (ev) => !ev.isJa && ev.actor && !ev.actorUnknown
     ).length;
 
-    if (sampleMode) {
-      const importedSubmission = cand.submissionHistory?.[0]
-        ? {
-            ...cand.submissionHistory[0],
-            presentationState: "confirmed",
-            isConfirmed: true,
-            source: "imported",
-          }
-        : null;
-      const stageIsSubmitted = (PIPELINE_STAGE_ORDER[cand.stage] ?? -1) >= PIPELINE_STAGE_ORDER.Submitted;
-      const isSubmitted = Boolean(importedSubmission || stageIsSubmitted);
-      return {
-        ...cand,
-        decision,
-        submission: importedSubmission,
-        presentationState: isSubmitted ? "confirmed" : null,
-        isSubmitted,
-        activityTrail: fullTrail,
-        otherContactsCount,
-      };
-    }
-
-    const matchingPresentations = sortedPresentations.filter((item) => {
-      if (item.personId !== cand.id) return false;
-      if (item.jobId !== null) return String(item.jobId) === String(jobId);
-      return cand.candidateSource === "submission" && item.source === "tracker_submissions";
-    });
-    const confirmedPresentation = matchingPresentations.find((item) => item.presentationState === "confirmed") || null;
-    const pendingPresentation = matchingPresentations.find((item) => item.presentationState === "pending") || null;
-    const failedPresentation = matchingPresentations.find((item) => item.presentationState === "failed") || null;
-    const primaryPresentation = confirmedPresentation || pendingPresentation || failedPresentation || null;
-    const isSubmitted = Boolean(confirmedPresentation);
-    const presentationState = isSubmitted
-      ? "confirmed"
-      : pendingPresentation
-        ? "pending"
-        : failedPresentation
-          ? "failed"
-          : null;
+    const withPresentations = enrichCandidateWithPresentations(cand, sortedPresentations, { jobId });
 
     return {
-      ...cand,
+      ...withPresentations,
       decision,
-      submission: primaryPresentation,
-      presentationState,
-      isSubmitted,
       activityTrail: fullTrail,
       otherContactsCount,
     };
@@ -428,32 +735,32 @@ export function getSubmissionHistory() {
     const records = [];
     for (const candidate of SAMPLE_CANDIDATES) {
       const job = getJobById(candidate.jobId);
+      const summary = buildCandidatePresentationSummary(candidate, null, { jobId: candidate.jobId });
       for (const submission of candidate.submissionHistory || []) {
-        const record = {
+        const record = normalizePresentationRecord({
           id: submission.id || `${candidate.jobId}::${candidate.id}::${submission.submittedAt}`,
-          presentationState: "confirmed",
-          isConfirmed: true,
-          jobId: candidate.jobId ?? null,
+          presentation_state: "confirmed",
+          job_id: candidate.jobId ?? null,
           personId: candidate.id,
-          jobTitle: job?.title ?? null,
-          clientName: submission.client ?? job?.company ?? null,
-          client: submission.client ?? job?.company ?? null,
+          job_title: job?.title ?? null,
+          client_name: submission.client ?? job?.company ?? null,
           location: submission.location || job?.location || candidate.location || null,
-          presentedOn: submission.submittedAt ? String(submission.submittedAt).slice(0, 10) : null,
-          queuedAt: null,
+          presented_on: submission.submittedAt ? String(submission.submittedAt).slice(0, 10) : null,
+          queued_at: null,
           submittedAt: submission.submittedAt,
-          sourceStatus: "Submitted",
-          status: "Submitted",
+          source_status: "Submitted",
           source: "imported",
           note: submission.note ?? null,
-        };
+        });
         records.push({
           ...record,
           candidate: {
             ...candidate,
+            ...summary,
             decision: null,
             submission: record,
             presentationState: "confirmed",
+            isPresented: true,
             isSubmitted: true,
           },
         });
@@ -470,6 +777,11 @@ export function getSubmissionHistory() {
       key && candidateDecisions.has(key)
         ? candidateDecisions.get(key)
         : (baseCandidate?.decision ?? null);
+    const summary = buildCandidatePresentationSummary(
+      { ...baseCandidate, id: record.personId || baseCandidate?.id },
+      runtimePresentations,
+      { jobId: record.jobId }
+    );
     const isConfirmed = record.presentationState === "confirmed";
     const location = matchedCandidate?.location || record.location || null;
     const nextRecord = {
@@ -480,6 +792,7 @@ export function getSubmissionHistory() {
       ...nextRecord,
       candidate: {
         ...baseCandidate,
+        ...summary,
         decision,
         submission: nextRecord,
         presentationState: record.presentationState,
