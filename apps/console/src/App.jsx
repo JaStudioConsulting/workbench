@@ -1,6 +1,6 @@
 import { lazy, Suspense, useRef, useState } from "react";
 import { Briefcase, CalendarDays, Columns3, Contact, GitBranch, Home, Mail, Settings, UserCheck, UserRound, Users } from "lucide-react";
-import { SidebarProvider, Sidebar, SidebarHeader, SidebarContent, SidebarGroup, SidebarGroupLabel, SidebarGroupContent, SidebarMenu, SidebarMenuItem, SidebarMenuButton, SidebarInset, SidebarTrigger } from "./components/ui/sidebar.tsx";
+import { SidebarProvider, Sidebar, SidebarHeader, SidebarContent, SidebarGroup, SidebarGroupLabel, SidebarGroupContent, SidebarMenu, SidebarMenuItem, SidebarMenuButton, SidebarInset, SidebarTrigger, useSidebar } from "./components/ui/sidebar.tsx";
 import { Skeleton } from "./components/ui/skeleton.tsx";
 import { startCandidateCallSession } from "./features/meetings/candidateCallSession.js";
 import { getMeetingStatus } from "./features/meetings/meetingGatewayClient.js";
@@ -25,6 +25,11 @@ const loadRecentMeetings = () => import("./features/meetings/meetingStore.js").t
 function PanelFallback() { return <div className="min-h-[520px] rounded-lg border p-6" role="status" aria-label="Loading workspace"><Skeleton className="h-6 w-48" /><Skeleton className="mt-4 h-24 w-full" /></div>; }
 
 function NavGroup({ label, items, page, onSelect, recordingLocked = false }) {
+  const { isMobile, setOpenMobile } = useSidebar();
+  const selectItem = (name) => {
+    onSelect(name);
+    if (isMobile && !(recordingLocked && name !== "Meetings")) setOpenMobile(false);
+  };
   return (
     <SidebarGroup>
       <SidebarGroupLabel>{label}</SidebarGroupLabel>
@@ -32,7 +37,7 @@ function NavGroup({ label, items, page, onSelect, recordingLocked = false }) {
         <SidebarMenu>
           {items.map(([name, Icon]) => (
             <SidebarMenuItem key={name}>
-              <SidebarMenuButton isActive={page === name} disabled={recordingLocked && name !== "Meetings"} title={recordingLocked && name !== "Meetings" ? "Stop the active recording before leaving Meetings" : undefined} onClick={() => onSelect(name)}><Icon /><span>{name}</span></SidebarMenuButton>
+              <SidebarMenuButton isActive={page === name} size="lg" disabled={recordingLocked && name !== "Meetings"} title={recordingLocked && name !== "Meetings" ? "Stop the active recording before leaving Meetings" : undefined} onClick={() => selectItem(name)}><Icon /><span>{name}</span></SidebarMenuButton>
             </SidebarMenuItem>
           ))}
         </SidebarMenu>
@@ -136,12 +141,12 @@ export default function App() {
         </SidebarContent>
       </Sidebar>
       <SidebarInset className="min-w-0">
-        <header className="flex min-h-16 flex-wrap items-center gap-3 border-b px-4 py-3">
+        <header className="flex min-h-16 flex-wrap items-center gap-3 border-b px-4 py-3 pt-[max(0.75rem,env(safe-area-inset-top))]">
           <SidebarTrigger />
           <div className="min-w-0 flex-1"><h1 className="truncate text-xl font-semibold">{page}</h1></div>
           <Suspense fallback={null}><ContextPicker value={context} onChange={setContext} /></Suspense>
         </header>
-        <main className="flex min-w-0 flex-1 flex-col gap-4 overflow-x-clip p-4 md:p-6">
+        <main className="flex min-w-0 flex-1 flex-col gap-4 overflow-x-clip p-4 pb-[max(1rem,env(safe-area-inset-bottom))] md:p-6">
           <Suspense fallback={<PanelFallback />}>{renderPage()}</Suspense>
         </main>
       </SidebarInset>
