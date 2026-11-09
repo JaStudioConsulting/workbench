@@ -82,32 +82,42 @@ export default function PeopleView({ candidates = [], currentJob, jobs = [], sub
 
   const counts = useMemo(() => ({
     all: mergedCandidates.length,
-    unreviewed: mergedCandidates.filter((candidate) => !candidate.decision && !candidate.isSubmitted).length,
-    wanted: mergedCandidates.filter((candidate) => candidate.decision === "want" && !candidate.isSubmitted).length,
+    unreviewed: mergedCandidates.filter((candidate) => !candidate.decision && !candidate.isSubmitted && candidate.presentationState !== "pending").length,
+    wanted: mergedCandidates.filter((candidate) => candidate.decision === "want" && !candidate.isSubmitted && candidate.presentationState !== "pending").length,
     passed: mergedCandidates.filter((candidate) => candidate.decision === "pass").length,
     submitted: submissionHistory.length,
   }), [mergedCandidates, submissionHistory]);
 
   const filteredCandidates = useMemo(() => {
     const source = viewFilter === "submitted"
-      ? submissionHistory.map((record) => ({ ...record.candidate, submission: record, isSubmitted: true, reviewJobId: record.jobId, reviewJobTitle: record.jobTitle }))
+      ? submissionHistory.map((record) => {
+          const isConfirmed = record.presentationState === "confirmed";
+          return {
+            ...record.candidate,
+            submission: record,
+            presentationState: record.presentationState || (isConfirmed ? "confirmed" : "pending"),
+            isSubmitted: isConfirmed,
+            reviewJobId: record.jobId ?? null,
+            reviewJobTitle: record.jobTitle ?? null,
+          };
+        })
       : mergedCandidates;
     const query = searchTerm.trim().toLowerCase();
     const locationQuery = submissionLocation.trim().toLowerCase();
     const clientQuery = submissionClient.trim().toLowerCase();
 
     return source.filter((candidate) => {
-      if (viewFilter === "unreviewed" && (candidate.decision || candidate.isSubmitted)) return false;
-      if (viewFilter === "wanted" && (candidate.decision !== "want" || candidate.isSubmitted)) return false;
+      if (viewFilter === "unreviewed" && (candidate.decision || candidate.isSubmitted || candidate.presentationState === "pending")) return false;
+      if (viewFilter === "wanted" && (candidate.decision !== "want" || candidate.isSubmitted || candidate.presentationState === "pending")) return false;
       if (viewFilter === "passed" && candidate.decision !== "pass") return false;
       if (stageFilter !== "ALL" && candidate.stage !== stageFilter) return false;
       if (onlyOthersReachedOut && (!candidate.otherContactsCount || candidate.otherContactsCount === 0)) return false;
       const submission = candidate.submission;
       if (viewFilter === "submitted") {
-        if (submissionJobId !== "ALL" && String(candidate.reviewJobId) !== String(submissionJobId)) return false;
+        if (submissionJobId !== "ALL" && String(candidate.reviewJobId ?? "") !== String(submissionJobId)) return false;
         if (locationQuery && !String(submission?.location || candidate.location || "").toLowerCase().includes(locationQuery)) return false;
-        if (clientQuery && !String(submission?.client || "").toLowerCase().includes(clientQuery)) return false;
-        if (!withinDateRange(submission?.submittedAt, submissionFrom, submissionTo)) return false;
+        if (clientQuery && !String(submission?.clientName ?? submission?.client ?? "").toLowerCase().includes(clientQuery)) return false;
+        if (!withinDateRange(submission?.presentedOn || submission?.queuedAt || submission?.submittedAt, submissionFrom, submissionTo)) return false;
       }
       if (!query) return true;
       return [
@@ -123,7 +133,7 @@ export default function PeopleView({ candidates = [], currentJob, jobs = [], sub
         candidate.role_context,
         candidate.client_context,
         candidate.reviewJobTitle,
-        submission?.client,
+        submission?.clientName ?? submission?.client,
       ].filter(Boolean).join(" ").toLowerCase().includes(query);
     });
   }, [mergedCandidates, onlyOthersReachedOut, searchTerm, stageFilter, submissionClient, submissionFrom, submissionHistory, submissionJobId, submissionLocation, submissionTo, viewFilter]);
@@ -238,9 +248,24 @@ export default function PeopleView({ candidates = [], currentJob, jobs = [], sub
               const lastActivity = candidate.activityTrail?.[0] || null;
               const ownership = getOwnershipStatus(candidate.activityTrail);
               const ownershipOverridden = ownershipOverrides.has(candidate.id);
-              const isUnreviewed = !candidate.decision && !candidate.isSubmitted;
+              const isUnreviewed = !candidate.decision && !candidate.isSubmitted && candidate.presentationState !== "pending";
               const provenance = describeCandidateProvenance(candidate, { mode: "edit" });
               const recordKey = `${candidate.reviewJobId || currentJob?.id || candidate.jobId || "directory"}:${candidate.id}:${candidate.submission?.id || "candidate"}`;
+              const submissionDateText = candidate.submission?.presentedOn
+                ? String(candidate.submission.presentedOn).slice(0, 10)
+                : candidate.submission?.queuedAt
+                  ? `Queued ${String(candidate.submission.queuedAt).slice(0, 10)}`
+                  : candidate.submission?.submittedAt
+                    ? String(candidate.submission.submittedAt).slice(0, 10)
+                    : "Date not recorded";
+              const submissionBadgeText =
+                candidate.submission?.presentationState === "pending"
+                  ? "Waiting for Loxo"
+                  : candidate.submission?.presentationState === "failed"
+                    ? "Failed"
+                    : candidate.submission?.source === "imported"
+                      ? "Imported"
+                      : candidate.submission?.sourceStatus || "Confirmed";
 
               return (
                 <div key={recordKey} className="p-3.5">
@@ -278,8 +303,8 @@ export default function PeopleView({ candidates = [], currentJob, jobs = [], sub
                         <p className="mt-0.5 truncate text-xs text-muted-foreground">{candidate.title} at {candidate.employer} · {candidate.location}</p>
                         {candidate.submission ? (
                           <p className="mt-1 text-[11px] text-foreground" data-testid="submission-history-row">
-                            {candidate.reviewJobTitle || currentJob?.title} · {candidate.submission.client} · {String(candidate.submission.submittedAt).slice(0, 10)}
-                            <Badge variant="outline" className="ml-2 text-[10px]">{candidate.submission.source === "session" || candidate.submission.status === "Session only" ? "Session only" : "Imported"}</Badge>
+                            {candidate.submission.jobTitle || candidate.reviewJobTitle || "Job not recorded"} · {candidate.submission.clientName || candidate.submission.client || "Client not recorded"} · {submissionDateText}
+                            <Badge variant="outline" className={`ml-2 text-[10px] ${candidate.submission.presentationState === "pending" ? "border-amber-400 bg-amber-50 text-amber-900" : candidate.submission.presentationState === "failed" ? "border-rose-400 bg-rose-50 text-rose-800" : ""}`}>{submissionBadgeText}</Badge>
                           </p>
                         ) : null}
                       </div>
@@ -302,7 +327,7 @@ export default function PeopleView({ candidates = [], currentJob, jobs = [], sub
                       </Button>
                       {lastActivity ? <span className="max-w-[180px] truncate text-[10.5px] text-muted-foreground">{lastActivity.type} · {lastActivity.date}</span> : null}
                       {candidate.otherContactsCount > 0 ? <Badge variant="outline" className="border-amber-400 bg-amber-50 text-[10.5px] text-amber-900"><AlertTriangle size={11} className="mr-1" />{candidate.otherContactsCount} other</Badge> : null}
-                      {candidate.isSubmitted ? <Badge className="bg-blue-700 text-white">Submitted</Badge> : candidate.decision === "want" ? <Badge className="bg-emerald-700 text-white">Wanted</Badge> : candidate.decision === "pass" ? <Badge variant="outline" className="border-rose-400 bg-rose-50 text-rose-800">Passed</Badge> : <Badge variant="outline">Unreviewed</Badge>}
+                      {candidate.isSubmitted ? <Badge className="bg-blue-700 text-white">Submitted</Badge> : candidate.presentationState === "pending" ? <Badge variant="outline" className="border-amber-400 bg-amber-50 text-amber-900">Waiting for Loxo</Badge> : candidate.presentationState === "failed" ? <Badge variant="outline" className="border-rose-400 bg-rose-50 text-rose-800">Submission failed</Badge> : candidate.decision === "want" ? <Badge className="bg-emerald-700 text-white">Wanted</Badge> : candidate.decision === "pass" ? <Badge variant="outline" className="border-rose-400 bg-rose-50 text-rose-800">Passed</Badge> : <Badge variant="outline">Unreviewed</Badge>}
                     </div>
                   </div>
 
