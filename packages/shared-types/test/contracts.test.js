@@ -14,6 +14,9 @@ import {
   GoogleWorkspaceSyncResponseSchema,
   ManualCandidateEditsSchema,
   McpDiscoverySchema,
+  SearchQuerySchema,
+  SearchResponseSchema,
+  SearchResultItemSchema,
   TrackerCandidateEditsSchema,
   parseCandidateSourceKey,
 } from "../src/index.js";
@@ -174,4 +177,183 @@ test("CandidateRecordSchema enforces provenance invariants between manual and Tr
     limit: 25,
     offset: 0,
   });
+});
+
+test("SearchQuerySchema validates query length and result limits across limit and max_per_group", () => {
+  assert.deepEqual(SearchQuerySchema.parse({ q: "  program manager  " }), {
+    q: "program manager",
+    limit: 20,
+    max_per_group: 20,
+  });
+  assert.deepEqual(SearchQuerySchema.parse({ q: "plant", limit: "12" }), {
+    q: "plant",
+    limit: 12,
+    max_per_group: 12,
+  });
+  assert.deepEqual(SearchQuerySchema.parse({ q: "plant", max_per_group: "15" }), {
+    q: "plant",
+    limit: 15,
+    max_per_group: 15,
+  });
+  assert.deepEqual(SearchQuerySchema.parse({ q: "plant", limit: "10", max_per_group: 10 }), {
+    q: "plant",
+    limit: 10,
+    max_per_group: 10,
+  });
+
+  // Reject blank, missing, overlong, or control-character queries
+  assert.throws(() => SearchQuerySchema.parse({}));
+  assert.throws(() => SearchQuerySchema.parse({ q: "" }));
+  assert.throws(() => SearchQuerySchema.parse({ q: "   " }));
+  assert.throws(() => SearchQuerySchema.parse({ q: "x".repeat(201) }));
+  assert.throws(() => SearchQuerySchema.parse({ q: "program\nmanager" }));
+
+  // Reject out-of-range or mismatched limits and unknown params
+  assert.throws(() => SearchQuerySchema.parse({ q: "plant", limit: 0 }));
+  assert.throws(() => SearchQuerySchema.parse({ q: "plant", limit: -5 }));
+  assert.throws(() => SearchQuerySchema.parse({ q: "plant", limit: 101 }));
+  assert.throws(() => SearchQuerySchema.parse({ q: "plant", max_per_group: 0 }));
+  assert.throws(() => SearchQuerySchema.parse({ q: "plant", max_per_group: 101 }));
+  assert.throws(() => SearchQuerySchema.parse({ q: "plant", limit: "abc" }));
+  assert.throws(() => SearchQuerySchema.parse({ q: "plant", limit: 10, max_per_group: 20 }));
+  assert.throws(() => SearchQuerySchema.parse({ q: "plant", extra: "forbidden" }));
+});
+
+test("SearchResultItemSchema and SearchResponseSchema preserve source IDs, nulls, and per-group invariants", () => {
+  const candidateItem = SearchResultItemSchema.parse({
+    id: "candidate:sourcing:20",
+    entity_type: "candidate",
+    entity_id: "sourcing:20",
+    title: null,
+    subtitle: "Program Manager",
+    company: null,
+    location: null,
+    status: "sourcing",
+    subject_type: null,
+    subject_id: null,
+    snippet: "Strong tier-1 background",
+    updated_at: "2026-11-08T17:00:00.000Z",
+    rank: 0.75,
+  });
+  assert.equal(candidateItem.title, null);
+  assert.equal(candidateItem.entity_id, "sourcing:20");
+
+  const leadItem = SearchResultItemSchema.parse({
+    id: "lead:cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+    entity_type: "lead",
+    entity_id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+    title: "Huron Mobility",
+    subtitle: "Program Manager",
+    company: "Huron Mobility",
+    location: null,
+    status: "Warm",
+    subject_type: null,
+    subject_id: null,
+    snippet: "Need program manager for EV line",
+    updated_at: "2026-11-08T17:05:00.000Z",
+    rank: 0.65,
+  });
+
+  const jobItem = SearchResultItemSchema.parse({
+    id: "job:501",
+    entity_type: "job",
+    entity_id: "501",
+    title: "Program Manager",
+    subtitle: "Apex Tooling",
+    company: "Apex Tooling",
+    location: "Guelph, ON",
+    status: "Active",
+    subject_type: null,
+    subject_id: null,
+    snippet: null,
+    updated_at: null,
+    rank: 0.6,
+  });
+
+  const clientItem = SearchResultItemSchema.parse({
+    id: "client:apex tooling",
+    entity_type: "client",
+    entity_id: "Apex Tooling",
+    title: "Apex Tooling",
+    subtitle: "Program Manager · Quality Manager",
+    company: "Apex Tooling",
+    location: "Guelph, ON",
+    status: "Active",
+    subject_type: null,
+    subject_id: null,
+    snippet: "Jordan Lee",
+    updated_at: "2026-11-08T17:10:00.000Z",
+    rank: 0.55,
+  });
+
+  const noteItem = SearchResultItemSchema.parse({
+    id: "note:eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+    entity_type: "note",
+    entity_id: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+    title: null,
+    subtitle: "candidate",
+    company: null,
+    location: null,
+    status: null,
+    subject_type: "candidate",
+    subject_id: "tracker_candidates:10",
+    snippet: "Program manager candidate ready for client presentation.",
+    updated_at: "2026-11-08T17:15:00.000Z",
+    rank: 0.5,
+  });
+
+  const parsedResponse = SearchResponseSchema.parse({
+    query: "program manager",
+    limit: 5,
+    results: [candidateItem, leadItem, jobItem, clientItem, noteItem],
+    groups: {
+      candidates: [candidateItem],
+      leads: [leadItem],
+      jobs: [jobItem],
+      clients: [clientItem],
+      notes: [noteItem],
+    },
+    candidates: [candidateItem],
+    leads: [leadItem],
+    jobs: [jobItem],
+    clients: [clientItem],
+    notes: [noteItem],
+  });
+  assert.equal(parsedResponse.results.length, 5);
+  assert.equal(parsedResponse.groups.candidates[0].id, "candidate:sourcing:20");
+
+  // Reject mismatched id prefix or invalid candidate source key
+  assert.throws(() =>
+    SearchResultItemSchema.parse({
+      ...candidateItem,
+      id: "candidate:tracker_candidates:20",
+    }),
+  );
+  assert.throws(() =>
+    SearchResultItemSchema.parse({
+      ...candidateItem,
+      status: "manual",
+    }),
+  );
+  assert.throws(() =>
+    SearchResultItemSchema.parse({
+      ...noteItem,
+      subject_id: "invalid-candidate-id",
+    }),
+  );
+  assert.throws(() =>
+    SearchResultItemSchema.parse({
+      ...noteItem,
+      subject_type: "candidate",
+      subject_id: null,
+    }),
+  );
+
+  // Reject response where group array does not match results or exceeds limit
+  assert.throws(() =>
+    SearchResponseSchema.parse({
+      ...parsedResponse,
+      candidates: [],
+    }),
+  );
 });
