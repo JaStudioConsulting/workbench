@@ -35,6 +35,11 @@ const ENTITY_ICONS = Object.freeze({
   note: FileText,
 });
 
+const defaultEvidenceLoader = async (searchState) => {
+  const { loadSearchEvidence } = await import("./searchEvidence.js");
+  return loadSearchEvidence(searchState);
+};
+
 const INITIAL_SEARCH_STATE = Object.freeze({
   phase: "idle",
   query: "",
@@ -48,11 +53,13 @@ export default function HeaderSearch({
   onSelectResult,
   onNavigatePage,
   searchRunner = runWorkbenchSearch,
+  evidenceLoader = defaultEvidenceLoader,
   debounceMs = 160,
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [state, setState] = useState(INITIAL_SEARCH_STATE);
+  const [evidence, setEvidence] = useState({ phase: "idle", byId: {} });
   const [retryCounter, setRetryCounter] = useState(0);
 
   const containerRef = useRef(null);
@@ -96,6 +103,7 @@ export default function HeaderSearch({
     if (!trimmed) {
       requestSeqRef.current += 1;
       setState(INITIAL_SEARCH_STATE);
+      setEvidence({ phase: "idle", byId: {} });
       return undefined;
     }
 
@@ -108,15 +116,31 @@ export default function HeaderSearch({
       query: trimmed,
       error: null,
     }));
+    setEvidence({ phase: "loading", byId: {} });
 
     const timer = window.setTimeout(() => {
       searchRunner(trimmed, { signal: controller.signal })
-        .then((nextState) => {
+        .then(async (nextState) => {
           if (requestSeqRef.current !== currentSeq) return;
           setState(nextState);
+          if (nextState.phase !== "ready") {
+            setEvidence({ phase: "idle", byId: {} });
+            return;
+          }
+          try {
+            const byId = await evidenceLoader(nextState);
+            if (requestSeqRef.current === currentSeq) {
+              setEvidence({ phase: "ready", byId: byId || {} });
+            }
+          } catch {
+            if (requestSeqRef.current === currentSeq) {
+              setEvidence({ phase: "unavailable", byId: {} });
+            }
+          }
         })
         .catch((error) => {
           if (error?.name === "AbortError" || requestSeqRef.current !== currentSeq) return;
+          setEvidence({ phase: "idle", byId: {} });
           setState({
             phase: "error",
             query: trimmed,
@@ -136,7 +160,7 @@ export default function HeaderSearch({
       window.clearTimeout(timer);
       controller.abort();
     };
-  }, [query, retryCounter, searchRunner, debounceMs]);
+  }, [query, retryCounter, searchRunner, evidenceLoader, debounceMs]);
 
   const handleQueryChange = (nextValue) => {
     setQuery(nextValue);
@@ -146,6 +170,7 @@ export default function HeaderSearch({
   const handleClear = () => {
     setQuery("");
     setState(INITIAL_SEARCH_STATE);
+    setEvidence({ phase: "idle", byId: {} });
     inputRef.current?.focus();
   };
 
@@ -358,6 +383,7 @@ export default function HeaderSearch({
                         group.items.map((item, index) => {
                           const rawItem = group.rawItems[index];
                           const metadataLine = formatResultMetadata(item);
+                          const candidateEvidence = item.entityType === "candidate" ? evidence.byId[item.entityId] : null;
                           return (
                             <CommandItem
                               key={item.id}
@@ -394,6 +420,36 @@ export default function HeaderSearch({
                                   <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
                                     {metadataLine}
                                   </p>
+                                ) : null}
+                                {item.entityType === "candidate" ? (
+                                  <div className="mt-1 space-y-0.5 text-[11px]" data-testid="search-candidate-evidence">
+                                    {evidence.phase === "loading" ? (
+                                      <p className="text-muted-foreground">Checking presentation history and open jobs...</p>
+                                    ) : candidateEvidence ? (
+                                      <>
+                                        <p className={candidateEvidence.presentationStatus === "presented" ? "font-semibold text-blue-800" : "text-muted-foreground"}>
+                                          {candidateEvidence.presentationLabel}
+                                        </p>
+                                        {candidateEvidence.pendingLabel ? <p className="text-amber-800">{candidateEvidence.pendingLabel}</p> : null}
+                                        {candidateEvidence.matchesStatus === "loaded" ? (
+                                          candidateEvidence.matches.length ? (
+                                            <ul className="space-y-0.5" data-testid="search-best-job-matches">
+                                              {candidateEvidence.matches.map((match) => (
+                                                <li key={match.jobId} className="text-foreground">
+                                                  <span className="font-semibold">{match.jobTitle}</span>
+                                                  {match.company ? ` · ${match.company}` : ""}
+                                                  {match.level ? ` · ${match.level}` : ""}
+                                                  {match.reasons.length ? ` · ${match.reasons.slice(0, 2).join("; ")}` : ""}
+                                                </li>
+                                              ))}
+                                            </ul>
+                                          ) : <p className="text-muted-foreground">No supported open job match</p>
+                                        ) : <p className="text-muted-foreground">Open job matches unavailable</p>}
+                                      </>
+                                    ) : (
+                                      <p className="text-muted-foreground">Presentation history and job matches unavailable</p>
+                                    )}
+                                  </div>
                                 ) : null}
                                 {item.snippet ? (
                                   <p className="mt-0.5 line-clamp-1 text-[11px] text-muted-foreground/90">

@@ -12,3 +12,20 @@ export {
   runWorkbenchSearch,
   searchWorkbench,
 } from "./searchClient.js";
+export {
+  FIT_LEVELS,
+  ROLE_LEVELS,
+  compareRoleLevels,
+  findBestJobMatches,
+  inferRoleLevel,
+  isOpenJob,
+  matchCandidatesForJob,
+  matchCandidatesToOpenJobs,
+  matchCandidateToJob,
+  matchCandidateToOpenJobs,
+  matchOpenJobs,
+  scoreFit,
+  canadianCity,
+  isInCanada,
+  province,
+} from "./jobMatcher.js";
