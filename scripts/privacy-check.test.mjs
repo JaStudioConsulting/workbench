@@ -35,9 +35,17 @@ test("only the exact approved logo path and hash bypass the asset restriction", 
   const fixture = await mkdtemp(path.join(os.tmpdir(), "workbench-logo-"));
   try {
     const assets = path.join(fixture, "apps/console/public/assets");
+    const icons = path.join(fixture, "apps/console/public/icons");
     await mkdir(assets, { recursive: true });
+    await mkdir(icons, { recursive: true });
     const logo = path.join(assets, "tttg_logo.png");
     await copyFile(fileURLToPath(new URL("../apps/console/public/assets/tttg_logo.png", import.meta.url)), logo);
+    for (const iconName of ["workbench-icon.svg", "apple-touch-icon.png", "workbench-icon-192.png", "workbench-icon-512.png"]) {
+      await copyFile(
+        fileURLToPath(new URL(`../apps/console/public/icons/${iconName}`, import.meta.url)),
+        path.join(icons, iconName),
+      );
+    }
     assert.deepEqual(await validateRepository(fixture), []);
     await copyFile(logo, path.join(assets, "other.png"));
     await writeFile(logo, "changed");
