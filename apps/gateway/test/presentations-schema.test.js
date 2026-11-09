@@ -51,16 +51,17 @@ test("presentations keep confirmed Tracker rows and pending actions distinct", a
       INSERT INTO public.tracker_sourcing VALUES (20, 'source-20', 'Source Candidate');
       INSERT INTO public.candidate_review_actions VALUES
         (100, 'waiting_for_loxo', 'sourcing', 20, 10, 'activity', 'Submitted', now(), 'Queued'),
-        (101, 'waiting_for_loxo', 'submission', 1, 12, 'activity', 'Submitted', now(), 'Duplicate'),
+        (101, 'waiting_for_loxo', 'submission', 1, 10, 'activity', 'Submitted', now(), 'Another client'),
         (102, 'failed', 'submission', 2, 12, 'activity', 'Submitted', now(), 'Failed'),
         (103, 'saved', 'sourcing', 20, 10, 'activity', 'Phone Call', now(), NULL);
     `);
     await db.query("SELECT set_config('request.jwt.claim.sub', '11111111-1111-4111-8111-111111111111', false)");
     await db.exec("SET ROLE authenticated");
     const rows = (await db.query("SELECT id, presentation_state, client_name, job_id, presented_on, queued_at FROM public.presentations ORDER BY id")).rows;
-    assert.equal(rows.length, 5);
+    assert.equal(rows.length, 6);
     assert.deepEqual(rows.map((row) => [row.id, row.presentation_state]), [
       ["candidate_review_actions:100", "pending"],
+      ["candidate_review_actions:101", "pending"],
       ["candidate_review_actions:102", "failed"],
       ["tracker_submissions:1", "confirmed"],
       ["tracker_submissions:3", "confirmed"],
@@ -69,6 +70,7 @@ test("presentations keep confirmed Tracker rows and pending actions distinct", a
     assert.equal(rows.find((row) => row.id === "tracker_submissions:1").job_id, 12);
     assert.equal(rows.find((row) => row.id === "tracker_submissions:3").client_name, null);
     assert.equal(rows.find((row) => row.id === "tracker_submissions:4").job_id, null);
+    assert.equal(rows.find((row) => row.id === "candidate_review_actions:101").client_name, "Client A");
     assert.equal(rows.find((row) => row.id === "candidate_review_actions:100").presented_on, null);
     assert.ok(rows.find((row) => row.id === "candidate_review_actions:100").queued_at);
 
