@@ -9,6 +9,9 @@ import LogActivityForm from "./LogActivityForm.jsx";
 import AlsoFitsDialog from "./AlsoFitsDialog.jsx";
 import CandidateWriteUpDialog from "./CandidateWriteUpDialog.jsx";
 import CandidateEditorDialog from "./CandidateEditorDialog.jsx";
+import CandidatePresentationSummary, {
+  CandidatePresentationBadges,
+} from "./CandidatePresentationSummary.jsx";
 import {
   applyCandidateRecordToUiCandidate,
   describeCandidateProvenance,
@@ -288,6 +291,12 @@ export default function CandidateCard({
                 </Badge>
               ) : null}
 
+              <CandidatePresentationBadges
+                candidate={candidate}
+                jobId={currentJob?.id}
+                prefix="card"
+              />
+
               {/* Candidate Decision Badge if already marked */}
               {candidate.decision && (
                 <Badge
@@ -339,6 +348,14 @@ export default function CandidateCard({
             <Plus size={12} className="mr-1" /> Add candidate
           </Button>
         </div>
+      </div>
+
+      <div className="mx-4 mt-2 empty:hidden">
+        <CandidatePresentationSummary
+          candidate={candidate}
+          jobId={currentJob?.id}
+          prefix="card"
+        />
       </div>
 
       {(candidate.industry || candidate.shift || candidate.compensation_target || candidate.current_compensation || candidate.compensation_context || candidate.role_context || candidate.client_context || candidate.notes) ? (
