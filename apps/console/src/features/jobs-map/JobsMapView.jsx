@@ -33,7 +33,7 @@ export default function JobsMapView({ onSelectJobForWorkflow, onOpenJobReview, f
   const [selectedJob, setSelectedJob] = useState(null);
   const [jobDetailsTab, setJobDetailsTab] = useState("details");
   const [copiedPitch, setCopiedPitch] = useState(false);
-  const [mobileTab, setMobileTab] = useState("split"); // "split" | "list" | "map"
+  const [mobileTab, setMobileTab] = useState("list"); // "list" | "map"
 
   const mapContainerRef = useRef(null);
   const mapInstanceRef = useRef(null);
@@ -418,28 +418,28 @@ export default function JobsMapView({ onSelectJobForWorkflow, onOpenJobReview, f
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
           <Badge variant={dataSource === "live" ? "secondary" : "outline"} className="flex items-center gap-1.5 text-xs">
             <span className={`h-2 w-2 rounded-full ${dataSource === "live" ? "bg-emerald-500" : dataSource === "loading" ? "bg-amber-500" : "bg-rose-500"}`} />
             {dataSource === "live" ? "Tracker via Supabase" : dataSource === "loading" ? "Loading Tracker" : "Tracker unavailable"}
           </Badge>
 
-          <Button size="sm" variant="outline" onClick={loadJobs} disabled={loading} title="Refresh jobs data">
+          <Button size="sm" variant="outline" className="min-h-11 min-w-11" onClick={loadJobs} disabled={loading} title="Refresh jobs data">
             <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
             <span className="hidden sm:inline">Sync</span>
           </Button>
 
           {/* Mobile View Toggles */}
-          <div className="flex md:hidden rounded-lg border bg-muted p-0.5 text-xs">
+          <div className="flex lg:hidden rounded-lg border bg-muted p-0.5 text-xs">
             <button
               onClick={() => setMobileTab("list")}
-              className={`px-2.5 py-1 rounded-md transition ${mobileTab === "list" ? "bg-background shadow font-semibold" : "text-muted-foreground"}`}
+              className={`min-h-11 min-w-11 px-2.5 py-1 rounded-md transition ${mobileTab === "list" ? "bg-background shadow font-semibold" : "text-muted-foreground"}`}
             >
               List
             </button>
             <button
               onClick={() => setMobileTab("map")}
-              className={`px-2.5 py-1 rounded-md transition ${mobileTab === "map" ? "bg-background shadow font-semibold" : "text-muted-foreground"}`}
+              className={`min-h-11 min-w-11 px-2.5 py-1 rounded-md transition ${mobileTab === "map" ? "bg-background shadow font-semibold" : "text-muted-foreground"}`}
             >
               Map
             </button>
@@ -542,13 +542,13 @@ export default function JobsMapView({ onSelectJobForWorkflow, onOpenJobReview, f
           <div className="flex rounded-md border bg-muted p-0.5 text-xs">
             <button
               onClick={() => setUnit("km")}
-              className={`px-2 py-0.5 rounded transition ${unit === "km" ? "bg-background shadow font-semibold" : "text-muted-foreground"}`}
+              className={`min-h-11 min-w-11 px-2 py-0.5 rounded transition ${unit === "km" ? "bg-background shadow font-semibold" : "text-muted-foreground"}`}
             >
               km
             </button>
             <button
               onClick={() => setUnit("mi")}
-              className={`px-2 py-0.5 rounded transition ${unit === "mi" ? "bg-background shadow font-semibold" : "text-muted-foreground"}`}
+              className={`min-h-11 min-w-11 px-2 py-0.5 rounded transition ${unit === "mi" ? "bg-background shadow font-semibold" : "text-muted-foreground"}`}
             >
               mi
             </button>
@@ -569,9 +569,9 @@ export default function JobsMapView({ onSelectJobForWorkflow, onOpenJobReview, f
       </div>
 
       {/* 3. Main Split View (Job List + Map Viewport) */}
-      <div className="grid flex-1 min-h-0 gap-3 md:grid-cols-12 overflow-hidden">
+      <div className="grid flex-1 min-h-0 gap-3 lg:grid-cols-12 overflow-hidden">
         {/* Left Column: Ranked Jobs List */}
-        <div className={`md:col-span-5 lg:col-span-4 flex flex-col gap-2 overflow-hidden ${mobileTab === "map" ? "hidden md:flex" : "flex"}`}>
+        <div className={`lg:col-span-5 xl:col-span-4 flex flex-col gap-2 overflow-hidden ${mobileTab === "map" ? "hidden lg:flex" : "flex"}`}>
           <div className="flex items-center justify-between px-1">
             <p className="text-xs font-semibold text-muted-foreground">
               {filteredJobs.length} {filteredJobs.length === 1 ? "Role" : "Roles"} Found
@@ -638,7 +638,7 @@ export default function JobsMapView({ onSelectJobForWorkflow, onOpenJobReview, f
         </div>
 
         {/* Right Column: Interactive Map + Slide-out Drawer */}
-        <div className={`md:col-span-7 lg:col-span-8 relative flex flex-col rounded-lg border overflow-hidden ${mobileTab === "list" ? "hidden md:flex" : "flex"}`}>
+        <div className={`lg:col-span-7 xl:col-span-8 relative flex flex-col rounded-lg border overflow-hidden ${mobileTab === "list" ? "hidden lg:flex" : "flex"}`}>
           <div ref={mapContainerRef} className="h-full w-full min-h-[400px] z-10" />
 
           {/* Job Details Drawer */}
@@ -662,7 +662,7 @@ export default function JobsMapView({ onSelectJobForWorkflow, onOpenJobReview, f
                 <button
                   type="button"
                   onClick={() => setSelectedJob(null)}
-                  className="rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+                  className="flex size-11 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
                   aria-label="Close job details"
                 >
                   <X size={16} />
