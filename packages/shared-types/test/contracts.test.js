@@ -1,6 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  BoardAutosaveRequestSchema,
+  BoardCreateRequestSchema,
+  BoardDeleteResponseSchema,
+  BoardListQuerySchema,
+  BoardRecordSchema,
+  BoardSceneSchema,
+  BoardUpdateRequestSchema,
   CandidateCreateRequestSchema,
   CandidateEditRequestSchema,
   CandidateIdSchema,
@@ -12,10 +19,22 @@ import {
   GoogleWorkspaceStartSchema,
   GoogleWorkspaceStatusSchema,
   GoogleWorkspaceSyncResponseSchema,
+  MAX_BOARD_ELEMENTS,
+  MAX_BOARD_SCENE_BYTES,
+  MAX_NOTE_BODY_BYTES,
   ManualCandidateEditsSchema,
   McpDiscoverySchema,
+  NoteAutosaveRequestSchema,
+  NoteBodySchema,
+  NoteCreateRequestSchema,
+  NoteDeleteResponseSchema,
+  NoteListQuerySchema,
+  NoteRecordSchema,
+  NoteUpdateRequestSchema,
   TrackerCandidateEditsSchema,
+  WorkbenchSubjectLinkSchema,
   parseCandidateSourceKey,
+  parseWorkbenchSubjectLink,
 } from "../src/index.js";
 
 test("shared contracts reject unsupported workflow input and standalone skills", () => {
@@ -173,5 +192,313 @@ test("CandidateRecordSchema enforces provenance invariants between manual and Tr
     source: "sourcing",
     limit: 25,
     offset: 0,
+  });
+});
+
+test("Workbench subject links allow candidate, job, meeting, or unlinked (null) exactly as migration 020 permits", () => {
+  assert.deepEqual(parseWorkbenchSubjectLink({ subject_type: null, subject_id: null }), {
+    subject_type: null,
+    subject_id: null,
+  });
+  assert.deepEqual(
+    WorkbenchSubjectLinkSchema.parse({
+      subject_type: "candidate",
+      subject_id: "manual:AAAAAAAA-AAAA-4AAA-8AAA-AAAAAAAAAAAA",
+    }),
+    {
+      subject_type: "candidate",
+      subject_id: "manual:aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    },
+  );
+  assert.deepEqual(
+    WorkbenchSubjectLinkSchema.parse({
+      subject_type: "candidate",
+      subject_id: "sourcing:12",
+    }),
+    {
+      subject_type: "candidate",
+      subject_id: "sourcing:12",
+    },
+  );
+  assert.deepEqual(
+    WorkbenchSubjectLinkSchema.parse({
+      subject_type: "job",
+      subject_id: "501",
+    }),
+    {
+      subject_type: "job",
+      subject_id: "501",
+    },
+  );
+  assert.deepEqual(
+    WorkbenchSubjectLinkSchema.parse({
+      subject_type: "meeting",
+      subject_id: "BBBBBBBB-BBBB-4BBB-8BBB-BBBBBBBBBBBB",
+    }),
+    {
+      subject_type: "meeting",
+      subject_id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+    },
+  );
+
+  // Reject half-links, unsupported subject_type values, and malformed subject_ids
+  assert.equal(parseWorkbenchSubjectLink({ subject_type: "candidate", subject_id: null }), null);
+  assert.equal(parseWorkbenchSubjectLink({ subject_type: null, subject_id: "sourcing:1" }), null);
+  assert.equal(parseWorkbenchSubjectLink({ subject_type: "none", subject_id: null }), null);
+  assert.equal(parseWorkbenchSubjectLink({ subject_type: "lead", subject_id: "11111111-1111-4111-8111-111111111111" }), null);
+  assert.equal(parseWorkbenchSubjectLink({ subject_type: "candidate", subject_id: "invalid:1" }), null);
+  assert.equal(parseWorkbenchSubjectLink({ subject_type: "job", subject_id: "0" }), null);
+  assert.equal(parseWorkbenchSubjectLink({ subject_type: "job", subject_id: "job-501" }), null);
+  assert.equal(parseWorkbenchSubjectLink({ subject_type: "meeting", subject_id: "not-a-uuid" }), null);
+  assert.throws(() => WorkbenchSubjectLinkSchema.parse({ subject_type: "candidate", subject_id: null }));
+  assert.throws(() => WorkbenchSubjectLinkSchema.parse({ subject_type: null, subject_id: "501" }));
+});
+
+test("editor JSON contracts validate in browser runtimes without Node Buffer", () => {
+  const originalBuffer = globalThis.Buffer;
+  try {
+    globalThis.Buffer = undefined;
+    assert.deepEqual(NoteBodySchema.parse({ type: "doc", content: [] }), { type: "doc", content: [] });
+    assert.deepEqual(BoardSceneSchema.parse({}), {});
+  } finally {
+    globalThis.Buffer = originalBuffer;
+  }
+});
+
+test("NoteBodySchema validates Novel/Tiptap editor JSON structure and enforces size and depth bounds", () => {
+  assert.deepEqual(NoteBodySchema.parse({}), {});
+
+  const validDoc = {
+    type: "doc",
+    content: [
+      {
+        type: "heading",
+        attrs: { level: 2 },
+        content: [{ type: "text", text: "Candidate Screen" }],
+      },
+      {
+        type: "paragraph",
+        content: [
+          { type: "text", marks: [{ type: "bold" }], text: "Strong launch experience" },
+          { type: "text", text: " across automotive tier-1 plants in Ontario." },
+        ],
+      },
+    ],
+  };
+  assert.deepEqual(NoteBodySchema.parse(validDoc), validDoc);
+
+  // Reject non-objects, non-doc roots, malformed nodes/marks, and oversized payloads
+  assert.throws(() => NoteBodySchema.parse(null));
+  assert.throws(() => NoteBodySchema.parse([]));
+  assert.throws(() => NoteBodySchema.parse("plain string"));
+  assert.throws(() => NoteBodySchema.parse({ type: "paragraph", content: [] }));
+  assert.throws(() => NoteBodySchema.parse({ type: "doc", content: "not-an-array" }));
+  assert.throws(() => NoteBodySchema.parse({ type: "doc", unknownKey: true }));
+  assert.throws(() => NoteBodySchema.parse({ type: "doc", content: [{ type: "" }] }));
+  assert.throws(() =>
+    NoteBodySchema.parse({
+      type: "doc",
+      content: [{ type: "text", text: "leaf", content: [{ type: "text", text: "nested" }] }],
+    }),
+  );
+  assert.throws(() =>
+    NoteBodySchema.parse({
+      type: "doc",
+      content: [{ type: "text", text: "bad mark", marks: [{ type: "" }] }],
+    }),
+  );
+
+  const oversizedDoc = {
+    type: "doc",
+    content: Array.from({ length: 8 }, () => ({
+      type: "paragraph",
+      content: [{ type: "text", text: "x".repeat(Math.ceil(MAX_NOTE_BODY_BYTES / 6)) }],
+    })),
+  };
+  assert.throws(() => NoteBodySchema.parse(oversizedDoc), /exceeds maximum size/);
+});
+
+test("BoardSceneSchema validates Excalidraw scene JSON, elements, appState, files, and size bounds", () => {
+  assert.deepEqual(BoardSceneSchema.parse({}), {});
+
+  const validScene = {
+    type: "excalidraw",
+    version: 2,
+    source: "https://console.test",
+    elements: [
+      {
+        id: "rect-1",
+        type: "rectangle",
+        x: 120,
+        y: 80,
+        width: 240,
+        height: 120,
+        angle: 0,
+        strokeColor: "#1e293b",
+        backgroundColor: "transparent",
+        strokeWidth: 2,
+        roughness: 1,
+        opacity: 100,
+        seed: 42,
+        version: 1,
+        versionNonce: 1001,
+        isDeleted: false,
+        locked: false,
+        groupIds: [],
+      },
+      {
+        id: "text-1",
+        type: "text",
+        x: 140,
+        y: 110,
+        width: 200,
+        height: 30,
+        text: "Reporting line to VP Ops",
+        fontSize: 20,
+      },
+    ],
+    appState: {
+      viewBackgroundColor: "#ffffff",
+      gridSize: 20,
+    },
+    files: {
+      "file-1": {
+        id: "file-1",
+        mimeType: "image/png",
+        dataURL: "data:image/png;base64,iVBORw0KGgo=",
+        created: 1762646400000,
+      },
+    },
+  };
+  assert.deepEqual(BoardSceneSchema.parse(validScene), validScene);
+
+  // Reject invalid root types, missing elements on non-empty scene, invalid element coordinates, and oversized scenes
+  assert.throws(() => BoardSceneSchema.parse(null));
+  assert.throws(() => BoardSceneSchema.parse([]));
+  assert.throws(() => BoardSceneSchema.parse({ appState: { viewBackgroundColor: "#ffffff" } }));
+  assert.throws(() => BoardSceneSchema.parse({ type: "other", elements: [] }));
+  assert.throws(() => BoardSceneSchema.parse({ elements: [{ id: "", type: "rectangle" }] }));
+  assert.throws(() => BoardSceneSchema.parse({ elements: [{ id: "el-1", type: "rectangle", x: "not-a-number" }] }));
+  assert.throws(() => BoardSceneSchema.parse({ elements: [], appState: [] }));
+  assert.throws(() => BoardSceneSchema.parse({ elements: [], files: "invalid" }));
+
+  const tooManyElements = {
+    elements: Array.from({ length: MAX_BOARD_ELEMENTS + 1 }, (_, idx) => ({
+      id: `el-${idx}`,
+      type: "rectangle",
+    })),
+  };
+  assert.throws(() => BoardSceneSchema.parse(tooManyElements), /cannot exceed/);
+
+  const oversizedScene = {
+    elements: [
+      {
+        id: "huge-text",
+        type: "text",
+        text: "diagram",
+      },
+    ],
+    files: {
+      "file-huge": {
+        id: "file-huge",
+        mimeType: "image/png",
+        dataURL: `data:image/png;base64,${"A".repeat(MAX_BOARD_SCENE_BYTES)}`,
+      },
+    },
+  };
+  assert.throws(() => BoardSceneSchema.parse(oversizedScene), /exceeds maximum size/);
+});
+
+test("notes and boards create, autosave update, list query, record, and delete contracts enforce owner and subject invariants", () => {
+  const ownerId = "11111111-1111-4111-8111-111111111111";
+  const noteId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+  const boardId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+
+  // Create defaults suitable for immediate autosave
+  const defaultNoteCreate = NoteCreateRequestSchema.parse({});
+  assert.deepEqual(defaultNoteCreate, {
+    title: "",
+    subject_type: null,
+    subject_id: null,
+    body: {},
+  });
+
+  const candidateBoardCreate = BoardCreateRequestSchema.parse({
+    title: "  Plant Org Chart  ",
+    subject_type: "candidate",
+    subject_id: "manual:CCCCCCCC-CCCC-4CCC-8CCC-CCCCCCCCCCCC",
+    scene: { elements: [{ id: "node-1", type: "rectangle", x: 0, y: 0, width: 100, height: 60 }] },
+  });
+  assert.equal(candidateBoardCreate.title, "Plant Org Chart");
+  assert.equal(candidateBoardCreate.subject_type, "candidate");
+  assert.equal(candidateBoardCreate.subject_id, "manual:cccccccc-cccc-4ccc-8ccc-cccccccccccc");
+
+  // Forbid owner_id or id on create/update
+  assert.throws(() => NoteCreateRequestSchema.parse({ title: "Spoof", owner_id: ownerId }));
+  assert.throws(() => BoardCreateRequestSchema.parse({ title: "Spoof", id: boardId }));
+
+  // Update / autosave schemas require at least one mutable field and paired subject links
+  assert.throws(() => NoteUpdateRequestSchema.parse({}));
+  assert.throws(() => NoteUpdateRequestSchema.parse({ expected_updated_at: "2026-11-09T01:00:00.000Z" }));
+  assert.throws(() => NoteUpdateRequestSchema.parse({ subject_type: "job" }));
+  assert.throws(() => BoardUpdateRequestSchema.parse({ subject_id: "501" }));
+
+  const autosaveNotePatch = NoteAutosaveRequestSchema.parse({
+    body: { type: "doc", content: [{ type: "paragraph", content: [{ type: "text", text: "Autosaved line" }] }] },
+    expected_updated_at: "2026-11-09T01:00:00.000Z",
+  });
+  assert.equal(autosaveNotePatch.expected_updated_at, "2026-11-09T01:00:00.000Z");
+
+  const unlinkBoardPatch = BoardAutosaveRequestSchema.parse({
+    subject_type: null,
+    subject_id: null,
+  });
+  assert.deepEqual(unlinkBoardPatch, { subject_type: null, subject_id: null });
+
+  // List query validation
+  assert.deepEqual(
+    NoteListQuerySchema.parse({ subject_type: "candidate", subject_id: "sourcing:2", limit: "25" }),
+    { subject_type: "candidate", subject_id: "sourcing:2", limit: 25, offset: 0 },
+  );
+  assert.deepEqual(
+    BoardListQuerySchema.parse({ unlinked: "true" }),
+    { unlinked: true, limit: 50, offset: 0 },
+  );
+  assert.throws(() => NoteListQuerySchema.parse({ subject_id: "sourcing:2" }));
+  assert.throws(() => NoteListQuerySchema.parse({ unlinked: "true", subject_type: "job" }));
+  assert.throws(() => BoardListQuerySchema.parse({ subject_type: "job", subject_id: "not-an-int" }));
+
+  // Full records and delete responses
+  const validNoteRecord = NoteRecordSchema.parse({
+    id: noteId,
+    owner_id: ownerId,
+    title: "Screen notes",
+    subject_type: "job",
+    subject_id: "501",
+    body: { type: "doc", content: [] },
+    created_at: "2026-11-09T01:00:00.000Z",
+    updated_at: "2026-11-09T01:05:00.000Z",
+  });
+  assert.equal(validNoteRecord.id, noteId);
+
+  const validBoardRecord = BoardRecordSchema.parse({
+    id: boardId,
+    owner_id: ownerId,
+    title: "Org map",
+    subject_type: null,
+    subject_id: null,
+    scene: { elements: [] },
+    created_at: "2026-11-09T01:00:00.000Z",
+    updated_at: "2026-11-09T01:05:00.000Z",
+  });
+  assert.equal(validBoardRecord.id, boardId);
+
+  assert.deepEqual(NoteDeleteResponseSchema.parse({ deleted: true, id: noteId.toUpperCase() }), {
+    deleted: true,
+    id: noteId,
+  });
+  assert.deepEqual(BoardDeleteResponseSchema.parse({ deleted: true, id: boardId.toUpperCase() }), {
+    deleted: true,
+    id: boardId,
   });
 });
