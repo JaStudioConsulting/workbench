@@ -1,5 +1,5 @@
 import { lazy, Suspense, useRef, useState } from "react";
-import { Briefcase, CalendarDays, Columns3, Contact, GitBranch, Home, Mail, Settings, UserCheck, UserRound, Users } from "lucide-react";
+import { Briefcase, CalendarDays, Columns3, Contact, GitBranch, Home, Mail, Settings, StickyNote, UserCheck, UserRound, Users } from "lucide-react";
 import { SidebarProvider, Sidebar, SidebarHeader, SidebarContent, SidebarGroup, SidebarGroupLabel, SidebarGroupContent, SidebarMenu, SidebarMenuItem, SidebarMenuButton, SidebarInset, SidebarTrigger } from "./components/ui/sidebar.tsx";
 import { Skeleton } from "./components/ui/skeleton.tsx";
 import { startCandidateCallSession } from "./features/meetings/candidateCallSession.js";
@@ -17,8 +17,9 @@ const LeadsPage = lazy(() => import("./features/leads/LeadsPage.jsx"));
 const MailPage = lazy(() => import("./features/mail/MailPage.jsx"));
 const SettingsPage = lazy(() => import("./features/settings/SettingsPage.jsx"));
 const ProfilePage = lazy(() => import("./features/profile/ProfilePage.jsx"));
+const NotesDirectory = lazy(() => import("./features/notes/NotesDirectory.jsx"));
 
-const workAreas = [["Home", Home], ["Candidates", Users], ["Candidate Review", UserCheck], ["Pipeline", Columns3], ["Leads", Contact], ["Jobs", Briefcase], ["Meetings", CalendarDays], ["Mail", Mail]];
+const workAreas = [["Home", Home], ["Candidates", Users], ["Candidate Review", UserCheck], ["Pipeline", Columns3], ["Leads", Contact], ["Jobs", Briefcase], ["Meetings", CalendarDays], ["Notes", StickyNote], ["Mail", Mail]];
 const supporting = [["Process", GitBranch], ["Settings", Settings], ["Profile", UserRound]];
 
 const loadRecentMeetings = () => import("./features/meetings/meetingStore.js").then((module) => module.listRecentMeetings());
@@ -49,6 +50,7 @@ export default function App() {
   const [focusCandidateId, setFocusCandidateId] = useState("");
   const [focusLeadId, setFocusLeadId] = useState("");
   const [focusClient, setFocusClient] = useState(null);
+  const [focusNote, setFocusNote] = useState(null);
   const [meetingLaunch, setMeetingLaunch] = useState(null);
   const callStartRef = useRef(false);
   const recordingLocked = ["starting", "recording", "finalizing"].includes(meetingLaunch?.phase);
@@ -58,6 +60,7 @@ export default function App() {
     setFocusCandidateId("");
     setFocusLeadId("");
     setFocusClient(null);
+    setFocusNote(null);
     setPage(next);
   };
 
@@ -74,9 +77,19 @@ export default function App() {
     if (!target) return;
     if (recordingLocked && target.page && target.page !== "Meetings") return;
 
-    if (target.entityType === "candidate" || (target.entityType === "note" && target.subjectType === "candidate")) {
+    if (target.entityType === "note") {
+      setFocusCandidateId("");
       setFocusLeadId("");
       setFocusClient(null);
+      setFocusNote({ noteId: target.focusNoteId || target.entityId || "" });
+      setPage("Notes");
+      return;
+    }
+
+    if (target.entityType === "candidate") {
+      setFocusLeadId("");
+      setFocusClient(null);
+      setFocusNote(null);
       setFocusCandidateId(target.focusCandidateId || target.entityId || "");
       setPage(target.page || "Candidates");
       return;
@@ -108,10 +121,11 @@ export default function App() {
       return;
     }
 
-    if (target.entityType === "job" || (target.entityType === "note" && target.subjectType === "job")) {
+    if (target.entityType === "job") {
       setFocusCandidateId("");
       setFocusLeadId("");
       setFocusClient(null);
+      setFocusNote(null);
       if (target.job) {
         setRecruiting((current) => ({ ...(current || {}), job: target.job }));
       }
@@ -119,21 +133,36 @@ export default function App() {
       return;
     }
 
-    if (target.entityType === "note" && target.subjectType === "meeting" && target.focusMeetingId) {
-      setFocusCandidateId("");
-      setFocusLeadId("");
-      setFocusClient(null);
-      setMeetingLaunch({
-        phase: "saved",
-        source: "search_note",
-        meeting: { id: target.focusMeetingId },
-      });
-      setPage("Meetings");
-      return;
-    }
-
     if (target.page) {
       selectPage(target.page);
+    }
+  };
+
+  // Opens the record a note is attached to. Only links that passed the subject-link rules reach here.
+  const openNoteSubject = (link) => {
+    if (!link) return;
+    if (recordingLocked && link.page !== "Meetings") return;
+    setFocusLeadId("");
+    setFocusClient(null);
+    setFocusNote(null);
+    if (link.type === "candidate") {
+      setFocusCandidateId(link.id);
+      setPage("Candidates");
+      return;
+    }
+    if (link.type === "job") {
+      setFocusCandidateId("");
+      setRecruiting((current) => ({
+        ...(current || {}),
+        job: { id: link.id, loxoJobId: link.id, title: null, company: null, location: null, status: null, description: null },
+      }));
+      setPage("Jobs");
+      return;
+    }
+    if (link.type === "meeting") {
+      setFocusCandidateId("");
+      setMeetingLaunch({ phase: "saved", source: "note_directory", meeting: { id: link.id } });
+      setPage("Meetings");
     }
   };
 
@@ -193,6 +222,7 @@ export default function App() {
       case "Process":
         return <RecruitingWorkspace page={page} value={recruiting} onChange={setRecruiting} onOpenJobReview={openJobReview} />;
       case "Meetings": return <MeetingsWorkspace launchContext={meetingLaunch} onLaunchChange={updateMeetingLaunch} />;
+      case "Notes": return <NotesDirectory focusRequest={focusNote} onOpenSubject={openNoteSubject} />;
       case "Mail": return <MailPage />;
       case "Settings": return <SettingsPage meetingsStatusLoader={getMeetingStatus} />;
       case "Profile": return <ProfilePage />;

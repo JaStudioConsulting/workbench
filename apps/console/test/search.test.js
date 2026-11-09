@@ -477,7 +477,7 @@ test("formatSearchResultItem and resolveSearchNavigation preserve source IDs and
     focusLeadId: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
   });
 
-  // 5. Note navigation to linked candidate, job, meeting, or unlinked
+  // 5. Every note hit opens the Notes directory with that exact note focused, linked or unlinked
   assert.deepEqual(
     resolveSearchNavigation({
       id: "note:eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
@@ -487,13 +487,12 @@ test("formatSearchResultItem and resolveSearchNavigation preserve source IDs and
       subject_id: "tracker_candidates:10",
     }),
     {
-      page: "Candidates",
+      page: "Notes",
       entityType: "note",
       id: "note:eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
       entityId: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
       subjectType: "candidate",
       subjectId: "tracker_candidates:10",
-      focusCandidateId: "tracker_candidates:10",
       focusNoteId: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
     },
   );
@@ -507,7 +506,7 @@ test("formatSearchResultItem and resolveSearchNavigation preserve source IDs and
       subject_id: null,
     }),
     {
-      page: null,
+      page: "Notes",
       entityType: "note",
       id: "note:11111111-2222-4333-8444-555555555555",
       entityId: "11111111-2222-4333-8444-555555555555",

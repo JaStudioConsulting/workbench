@@ -468,67 +468,17 @@ export function resolveSearchNavigation(item) {
   }
 
   if (entityType === "note") {
-    const subjectType = item.subject_type ?? item.subjectType ?? null;
+    // Every note hit opens the Notes directory with this note focused, including unlinked notes.
+    // The stored subject is kept only as a label; navigation never follows it.
     const rawSubjectId = item.subject_id ?? item.subjectId ?? null;
     const subjectId = typeof rawSubjectId === "string" && rawSubjectId.trim() ? rawSubjectId.trim() : null;
-
-    if (subjectType === "candidate" && subjectId) {
-      const parsed = parseCandidateSourceKey(subjectId);
-      const resolvedCandidateId = parsed ? parsed.id : subjectId;
-      return Object.freeze({
-        page: "Candidates",
-        entityType: "note",
-        id: id || `note:${entityId.toLowerCase()}`,
-        entityId: entityId.toLowerCase(),
-        subjectType: "candidate",
-        subjectId: resolvedCandidateId,
-        focusCandidateId: resolvedCandidateId,
-        focusNoteId: entityId.toLowerCase(),
-      });
-    }
-
-    if (subjectType === "job" && subjectId) {
-      return Object.freeze({
-        page: "Jobs",
-        entityType: "note",
-        id: id || `note:${entityId.toLowerCase()}`,
-        entityId: entityId.toLowerCase(),
-        subjectType: "job",
-        subjectId,
-        focusJobId: subjectId,
-        focusNoteId: entityId.toLowerCase(),
-        job: Object.freeze({
-          id: subjectId,
-          loxoJobId: subjectId,
-          title: null,
-          company: null,
-          location: null,
-          status: null,
-          description: null,
-        }),
-      });
-    }
-
-    if (subjectType === "meeting" && subjectId) {
-      return Object.freeze({
-        page: "Meetings",
-        entityType: "note",
-        id: id || `note:${entityId.toLowerCase()}`,
-        entityId: entityId.toLowerCase(),
-        subjectType: "meeting",
-        subjectId,
-        focusMeetingId: subjectId,
-        focusNoteId: entityId.toLowerCase(),
-      });
-    }
-
     return Object.freeze({
-      page: null,
+      page: "Notes",
       entityType: "note",
       id: id || `note:${entityId.toLowerCase()}`,
       entityId: entityId.toLowerCase(),
-      subjectType: null,
-      subjectId: null,
+      subjectType: subjectId ? (item.subject_type ?? item.subjectType ?? null) : null,
+      subjectId,
       focusNoteId: entityId.toLowerCase(),
     });
   }

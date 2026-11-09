@@ -71,6 +71,31 @@ export async function listSubjectNotes(subjectType, subjectId, options = {}) {
   }
 }
 
+// Gateway list limits: `limit` 1..200 and `offset` 0..10000 (see NoteListQuerySchema).
+export const NOTE_DIRECTORY_PAGE_SIZE = 100;
+export const NOTE_DIRECTORY_MAX_OFFSET = 10_000;
+
+// Loads every note the signed-in owner can see through GET /api/notes pages.
+// Returns truncated: true when the offset ceiling is reached before a short page.
+export async function listAllOwnerNotes(options = {}) {
+  const pageSize = options.pageSize ?? NOTE_DIRECTORY_PAGE_SIZE;
+  const byId = new Map();
+  let truncated = false;
+  for (let offset = 0; ; offset += pageSize) {
+    if (offset > NOTE_DIRECTORY_MAX_OFFSET) {
+      truncated = true;
+      break;
+    }
+    const query = new URLSearchParams({ limit: String(pageSize), offset: String(offset) });
+    const payload = NoteListResponseSchema.parse(await request(`/api/notes?${query}`, options));
+    for (const note of payload.notes) {
+      if (!byId.has(note.id)) byId.set(note.id, note);
+    }
+    if (payload.notes.length < pageSize) break;
+  }
+  return { notes: [...byId.values()], truncated };
+}
+
 export async function createSubjectNote(subjectType, subjectId, title = "", options = {}) {
   const subject = normalizeNoteSubject(subjectType, subjectId);
   if (!subject || subject.subject_type === null) throw new NotesClientError("This record has no verified notes link.", 400, "INVALID_SUBJECT");
