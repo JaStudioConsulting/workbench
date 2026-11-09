@@ -62,6 +62,7 @@ export default function CandidateReview({ selectedJob, onSelectJob, onNavigateJo
         setActiveJobId(nextJob ? String(nextJob.id) : "");
         if (nextJob && onSelectJob) onSelectJob(nextJob);
         setDataError("");
+        setRefreshKey((key) => key + 1);
       })
       .catch((error) => {
         if (!active) return;
@@ -126,7 +127,7 @@ export default function CandidateReview({ selectedJob, onSelectJob, onNavigateJo
   );
 
   const swipeCandidates = useMemo(
-    () => shownCandidates.filter((candidate) => !candidate.decision && !candidate.isSubmitted),
+    () => shownCandidates.filter((candidate) => !candidate.decision && !candidate.isSubmitted && candidate.presentationState !== "pending"),
     [shownCandidates]
   );
 
