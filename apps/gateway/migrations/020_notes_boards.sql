@@ -52,7 +52,7 @@ CREATE INDEX boards_owner_subject_idx ON public.boards (owner_id, subject_type, 
 CREATE FUNCTION public.touch_workbench_content_updated_at()
 RETURNS trigger LANGUAGE plpgsql SET search_path = '' AS $$
 BEGIN
-  NEW.updated_at = now();
+  NEW.updated_at = GREATEST(clock_timestamp(), OLD.updated_at + interval '1 millisecond');
   RETURN NEW;
 END;
 $$;
