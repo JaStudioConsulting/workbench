@@ -13,7 +13,7 @@ await db.exec(`
   CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS
     $$ SELECT NULLIF(current_setting('request.jwt.claim.sub', true), '')::uuid $$;
   CREATE FUNCTION public.is_authorized_recruiter() RETURNS boolean LANGUAGE sql STABLE AS
-    $$ SELECT true $$;
+    $$ SELECT auth.uid() <> '33333333-3333-4333-8333-333333333333'::uuid $$;
   CREATE TABLE public.tracker_candidates (
     id bigint PRIMARY KEY, tracker_row integer UNIQUE NOT NULL, candidate_name text NOT NULL,
     current_title text, current_company text, location text, industry text, shift text,
@@ -44,6 +44,15 @@ await db.exec(`
     compensation_target text, current_compensation text, notes text,
     updated_at timestamptz NOT NULL DEFAULT now()
   );
+  ALTER TABLE public.tracker_candidates ENABLE ROW LEVEL SECURITY;
+  ALTER TABLE public.tracker_sourcing ENABLE ROW LEVEL SECURITY;
+  ALTER TABLE public.tracker_submissions ENABLE ROW LEVEL SECURITY;
+  CREATE POLICY tracker_candidates_authorized ON public.tracker_candidates
+    FOR SELECT TO authenticated USING (public.is_authorized_recruiter());
+  CREATE POLICY tracker_sourcing_authorized ON public.tracker_sourcing
+    FOR SELECT TO authenticated USING (public.is_authorized_recruiter());
+  CREATE POLICY tracker_submissions_authorized ON public.tracker_submissions
+    FOR SELECT TO authenticated USING (public.is_authorized_recruiter());
   ALTER TABLE public.candidate_edits ENABLE ROW LEVEL SECURITY;
   ALTER TABLE public.candidates_manual ENABLE ROW LEVEL SECURITY;
   CREATE POLICY candidate_edits_owner ON public.candidate_edits TO authenticated
@@ -85,6 +94,12 @@ await db.query("SELECT set_config('request.jwt.claim.sub', $1, false)", [second]
 await db.exec('SET ROLE authenticated');
 rows = (await db.query("SELECT id, current_title, notes FROM public.candidates_all ORDER BY id")).rows;
 assert.deepEqual(rows, [{ id: 'tracker_candidates:1', current_title: 'Reimported Title', notes: 'Reimported Note' }]);
+
+await db.exec('RESET ROLE');
+await db.query("SELECT set_config('request.jwt.claim.sub', '33333333-3333-4333-8333-333333333333', false)");
+await db.exec('SET ROLE authenticated');
+rows = (await db.query('SELECT id FROM public.candidates_all')).rows;
+assert.deepEqual(rows, []);
 
 await db.close();
 });
