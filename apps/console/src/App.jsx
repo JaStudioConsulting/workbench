@@ -1,4 +1,4 @@
-import { lazy, Suspense, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { Briefcase, CalendarDays, Columns3, Contact, GitBranch, Home, Mail, Settings, StickyNote, UserCheck, UserRound, Users } from "lucide-react";
 import { SidebarProvider, Sidebar, SidebarHeader, SidebarContent, SidebarGroup, SidebarGroupLabel, SidebarGroupContent, SidebarMenu, SidebarMenuItem, SidebarMenuButton, SidebarInset, SidebarTrigger, useSidebar } from "./components/ui/sidebar.tsx";
 import { Skeleton } from "./components/ui/skeleton.tsx";
@@ -58,7 +58,13 @@ export default function App() {
   const [focusNote, setFocusNote] = useState(null);
   const [meetingLaunch, setMeetingLaunch] = useState(null);
   const callStartRef = useRef(false);
+  const pageHeadingRef = useRef(null);
   const recordingLocked = ["starting", "recording", "finalizing"].includes(meetingLaunch?.phase);
+
+  useEffect(() => {
+    document.title = `${page} — JA Workbench`;
+    if (page !== "Home") pageHeadingRef.current?.focus();
+  }, [page]);
 
   const selectPage = (next) => {
     if (recordingLocked && next !== "Meetings") return;
@@ -237,6 +243,7 @@ export default function App() {
 
   return (
     <SidebarProvider>
+      <a href="#workbench-main" className="sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-50 focus:rounded-md focus:bg-background focus:px-4 focus:py-2 focus:text-foreground focus:shadow-lg focus:outline focus:outline-2 focus:outline-offset-2 focus:outline-ring">Skip to content</a>
       <Sidebar>
         <SidebarHeader><div className="px-2 py-3 text-lg font-semibold">JA <span className="text-muted-foreground">Workbench</span></div></SidebarHeader>
         <SidebarContent>
@@ -247,11 +254,11 @@ export default function App() {
       <SidebarInset className="min-w-0">
         <header className="flex min-h-16 flex-wrap items-center gap-3 border-b px-4 py-3 pt-[max(0.75rem,env(safe-area-inset-top))]">
           <SidebarTrigger />
-          <div className="min-w-0 flex-1"><h1 className="truncate text-xl font-semibold">{page}</h1></div>
+          <div className="min-w-0 flex-1"><h1 ref={pageHeadingRef} tabIndex={-1} className="truncate text-xl font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">{page}</h1></div>
           <HeaderSearch onSelectResult={navigateFromSearch} onNavigatePage={selectPage} />
           <Suspense fallback={null}><ContextPicker value={context} onChange={setContext} /></Suspense>
         </header>
-        <main className="flex min-w-0 flex-1 flex-col gap-4 overflow-x-clip p-4 pb-[max(1rem,env(safe-area-inset-bottom))] md:p-6">
+        <main id="workbench-main" tabIndex={-1} className="flex min-w-0 flex-1 flex-col gap-4 overflow-x-clip p-4 pb-[max(1rem,env(safe-area-inset-bottom))] md:p-6">
           <Suspense fallback={<PanelFallback />}>{renderPage()}</Suspense>
         </main>
       </SidebarInset>

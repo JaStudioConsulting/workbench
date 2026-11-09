@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { Briefcase, Copy, Check, MapPin, RefreshCw, Search, SlidersHorizontal, ArrowRight, ShieldCheck, X, CircleDollarSign, UserRoundSearch } from "lucide-react";
 import { Badge } from "../../components/ui/badge.tsx";
+import { handleTabListKeyDown } from "../../components/handleTabListKeyDown.js";
 import { Button } from "../../components/ui/button.tsx";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../components/ui/card.tsx";
 import { Input } from "../../components/ui/input.tsx";
@@ -669,25 +670,25 @@ export default function JobsMapView({ onSelectJobForWorkflow, onOpenJobReview, f
                 </button>
               </div>
 
-              <div role="tablist" aria-label="Job details" className="mt-3 flex gap-2 border-b">
-                <button type="button" role="tab" aria-selected={jobDetailsTab === "details"} onClick={() => setJobDetailsTab("details")} className="min-h-10 rounded-t-md border px-3 text-sm aria-selected:bg-muted">Details</button>
-                <button type="button" role="tab" aria-selected={jobDetailsTab === "notes"} onClick={() => setJobDetailsTab("notes")} className="min-h-10 rounded-t-md border px-3 text-sm aria-selected:bg-muted">Notes</button>
-                <button type="button" role="tab" aria-selected={jobDetailsTab === "board"} onClick={() => setJobDetailsTab("board")} className="min-h-10 rounded-t-md border px-3 text-sm aria-selected:bg-muted">Board</button>
+              <div role="tablist" aria-label="Job details" onKeyDown={handleTabListKeyDown} className="mt-3 flex gap-2 border-b">
+                <button id="job-details-tab" type="button" role="tab" tabIndex={jobDetailsTab === "details" ? 0 : -1} aria-controls="job-details-panel" aria-selected={jobDetailsTab === "details"} onClick={() => setJobDetailsTab("details")} className="min-h-10 rounded-t-md border px-3 text-sm aria-selected:bg-muted">Details</button>
+                <button id="job-notes-tab" type="button" role="tab" tabIndex={jobDetailsTab === "notes" ? 0 : -1} aria-controls="job-details-panel" aria-selected={jobDetailsTab === "notes"} onClick={() => setJobDetailsTab("notes")} className="min-h-10 rounded-t-md border px-3 text-sm aria-selected:bg-muted">Notes</button>
+                <button id="job-board-tab" type="button" role="tab" tabIndex={jobDetailsTab === "board" ? 0 : -1} aria-controls="job-details-panel" aria-selected={jobDetailsTab === "board"} onClick={() => setJobDetailsTab("board")} className="min-h-10 rounded-t-md border px-3 text-sm aria-selected:bg-muted">Board</button>
               </div>
               {jobDetailsTab === "notes" ? (
-                <div role="tabpanel" className="mt-3">
+                <div id="job-details-panel" role="tabpanel" aria-labelledby="job-notes-tab" className="mt-3">
                   <Suspense fallback={<p className="text-sm text-muted-foreground">Loading notes editor…</p>}>
                     <NotesPanel subjectType="job" subjectId={String(selectedJob.originalJobId || "")} defaultTitle={selectedJob.title} />
                   </Suspense>
                 </div>
               ) : jobDetailsTab === "board" ? (
-                <div role="tabpanel" className="mt-3">
+                <div id="job-details-panel" role="tabpanel" aria-labelledby="job-board-tab" className="mt-3">
                   <Suspense fallback={<p className="text-sm text-muted-foreground">Loading board editor…</p>}>
                     <BoardPanel subjectType="job" subjectId={String(selectedJob.originalJobId || "")} defaultTitle={selectedJob.title} />
                   </Suspense>
                 </div>
               ) : (
-              <div role="tabpanel">
+              <div id="job-details-panel" role="tabpanel" aria-labelledby="job-details-tab">
               <div className="mt-2.5 space-y-1 text-xs text-muted-foreground">
                 <p className="flex items-start gap-1.5"><MapPin size={13} className="mt-0.5 shrink-0" aria-hidden="true" /><span><strong>Location:</strong> {selectedJob.displayLocation}</span></p>
                 {selectedJob.compensation && (

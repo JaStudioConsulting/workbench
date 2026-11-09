@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useMemo, useState, useRef } from "react";
 import { ExternalLink, MapPin, Tag, Check, ShieldAlert, AlertCircle, FileText, Loader2, NotebookText, Pencil, Plus, Send } from "lucide-react";
 import { Badge } from "../../components/ui/badge.tsx";
+import { handleTabListKeyDown } from "../../components/handleTabListKeyDown.js";
 import { Button } from "../../components/ui/button.tsx";
 import { RESUME_INDICATOR_STATES } from "./constants.js";
 import ResumeSection from "./ResumeSection.jsx";
@@ -415,27 +416,23 @@ export default function CandidateCard({
         </div>
       ) : null}
 
-      <div role="tablist" aria-label="Candidate details" className="flex shrink-0 gap-2 border-b px-4 pt-2">
-        <button type="button" role="tab" aria-selected={activeTab === "profile"} onClick={() => setActiveTab("profile")} className="min-h-10 rounded-t-md border px-3 text-sm aria-selected:bg-muted">Profile</button>
-        <button type="button" role="tab" aria-selected={activeTab === "notes"} onClick={() => { setNotesOpened(true); setActiveTab("notes"); }} className="min-h-10 rounded-t-md border px-3 text-sm aria-selected:bg-muted">Notes</button>
-        <button type="button" role="tab" aria-selected={activeTab === "board"} onClick={() => { setBoardOpened(true); setActiveTab("board"); }} className="min-h-10 rounded-t-md border px-3 text-sm aria-selected:bg-muted">Board</button>
+      <div role="tablist" aria-label="Candidate details" onKeyDown={handleTabListKeyDown} className="flex shrink-0 gap-2 border-b px-4 pt-2">
+        <button id="candidate-profile-tab" type="button" role="tab" tabIndex={activeTab === "profile" ? 0 : -1} aria-controls="candidate-profile-panel" aria-selected={activeTab === "profile"} onClick={() => setActiveTab("profile")} className="min-h-10 rounded-t-md border px-3 text-sm aria-selected:bg-muted">Profile</button>
+        <button id="candidate-notes-tab" type="button" role="tab" tabIndex={activeTab === "notes" ? 0 : -1} aria-controls="candidate-notes-panel" aria-selected={activeTab === "notes"} onClick={() => { setNotesOpened(true); setActiveTab("notes"); }} className="min-h-10 rounded-t-md border px-3 text-sm aria-selected:bg-muted">Notes</button>
+        <button id="candidate-board-tab" type="button" role="tab" tabIndex={activeTab === "board" ? 0 : -1} aria-controls="candidate-board-panel" aria-selected={activeTab === "board"} onClick={() => { setBoardOpened(true); setActiveTab("board"); }} className="min-h-10 rounded-t-md border px-3 text-sm aria-selected:bg-muted">Board</button>
       </div>
-      {notesOpened ? (
-        <div role="tabpanel" hidden={activeTab !== "notes"} className={activeTab === "notes" ? "min-h-0 flex-1 overflow-y-auto p-4 select-text" : "hidden"}>
-          <Suspense fallback={<p className="text-sm text-muted-foreground">Loading notes editor…</p>}>
-            <NotesPanel subjectType="candidate" subjectId={candidate.id} defaultTitle={candidate.name} />
-          </Suspense>
-        </div>
-      ) : null}
-      {boardOpened ? (
-        <div role="tabpanel" hidden={activeTab !== "board"} className={activeTab === "board" ? "min-h-0 flex-1 overflow-y-auto p-4 select-text" : "hidden"}>
-          <Suspense fallback={<p className="text-sm text-muted-foreground">Loading board editor…</p>}>
-            <BoardPanel subjectType="candidate" subjectId={candidate.id} defaultTitle={candidate.name} />
-          </Suspense>
-        </div>
-      ) : null}
+      <div id="candidate-notes-panel" role="tabpanel" aria-labelledby="candidate-notes-tab" hidden={activeTab !== "notes"} className={activeTab === "notes" ? "min-h-0 flex-1 overflow-y-auto p-4 select-text" : "hidden"}>
+        {notesOpened ? <Suspense fallback={<p className="text-sm text-muted-foreground">Loading notes editor…</p>}>
+          <NotesPanel subjectType="candidate" subjectId={candidate.id} defaultTitle={candidate.name} />
+        </Suspense> : null}
+      </div>
+      <div id="candidate-board-panel" role="tabpanel" aria-labelledby="candidate-board-tab" hidden={activeTab !== "board"} className={activeTab === "board" ? "min-h-0 flex-1 overflow-y-auto p-4 select-text" : "hidden"}>
+        {boardOpened ? <Suspense fallback={<p className="text-sm text-muted-foreground">Loading board editor…</p>}>
+          <BoardPanel subjectType="candidate" subjectId={candidate.id} defaultTitle={candidate.name} />
+        </Suspense> : null}
+      </div>
       {/* 2. Main Two-Column Body with internal scrolling */}
-      <div role="tabpanel" hidden={activeTab !== "profile"} className={activeTab === "profile" ? "grid flex-1 min-h-0 gap-4 overflow-hidden p-4 lg:grid-cols-12" : "hidden"}>
+      <div id="candidate-profile-panel" role="tabpanel" aria-labelledby="candidate-profile-tab" hidden={activeTab !== "profile"} className={activeTab === "profile" ? "grid flex-1 min-h-0 gap-4 overflow-hidden p-4 lg:grid-cols-12" : "hidden"}>
         {/* Left Column: Also Fits Tags + Resume Section */}
         <div className="lg:col-span-7 flex flex-col gap-3 min-h-0 overflow-y-auto pr-1">
           {/* "Also Fits" Tags (Source produced only) */}
