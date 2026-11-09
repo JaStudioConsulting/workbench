@@ -27,6 +27,7 @@ import { FitBadge, getResumeSource } from "./externals.js";
 
 const LOXO_PEOPLE_BASE_URL = "https://app.loxo.co/people/";
 const NotesPanel = lazy(() => import("../notes/NotesPanel.jsx"));
+const BoardPanel = lazy(() => import("../board/BoardPanel.jsx"));
 
 export default function CandidateCard({
   candidate: rawCandidate,
@@ -53,6 +54,7 @@ export default function CandidateCard({
   const [showOutreach, setShowOutreach] = useState(false);
   const [activeTab, setActiveTab] = useState("profile");
   const [notesOpened, setNotesOpened] = useState(false);
+  const [boardOpened, setBoardOpened] = useState(false);
   const [ticked, setTicked] = useState(() => new Set());
   const startXRef = useRef(0);
 
@@ -118,7 +120,8 @@ export default function CandidateCard({
       e.target.closest("textarea") ||
       e.target.closest("select") ||
       e.target.closest("[role='dialog']") ||
-      e.target.closest(".workbench-notes-panel")
+      e.target.closest(".workbench-notes-panel") ||
+      e.target.closest(".workbench-board-panel")
     ) {
       return;
     }
@@ -398,11 +401,19 @@ export default function CandidateCard({
       <div role="tablist" aria-label="Candidate details" className="flex shrink-0 gap-2 border-b px-4 pt-2">
         <button type="button" role="tab" aria-selected={activeTab === "profile"} onClick={() => setActiveTab("profile")} className="min-h-10 rounded-t-md border px-3 text-sm aria-selected:bg-muted">Profile</button>
         <button type="button" role="tab" aria-selected={activeTab === "notes"} onClick={() => { setNotesOpened(true); setActiveTab("notes"); }} className="min-h-10 rounded-t-md border px-3 text-sm aria-selected:bg-muted">Notes</button>
+        <button type="button" role="tab" aria-selected={activeTab === "board"} onClick={() => { setBoardOpened(true); setActiveTab("board"); }} className="min-h-10 rounded-t-md border px-3 text-sm aria-selected:bg-muted">Board</button>
       </div>
       {notesOpened ? (
         <div role="tabpanel" hidden={activeTab !== "notes"} className={activeTab === "notes" ? "min-h-0 flex-1 overflow-y-auto p-4 select-text" : "hidden"}>
           <Suspense fallback={<p className="text-sm text-muted-foreground">Loading notes editor…</p>}>
             <NotesPanel subjectType="candidate" subjectId={candidate.id} defaultTitle={candidate.name} />
+          </Suspense>
+        </div>
+      ) : null}
+      {boardOpened ? (
+        <div role="tabpanel" hidden={activeTab !== "board"} className={activeTab === "board" ? "min-h-0 flex-1 overflow-y-auto p-4 select-text" : "hidden"}>
+          <Suspense fallback={<p className="text-sm text-muted-foreground">Loading board editor…</p>}>
+            <BoardPanel subjectType="candidate" subjectId={candidate.id} defaultTitle={candidate.name} />
           </Suspense>
         </div>
       ) : null}

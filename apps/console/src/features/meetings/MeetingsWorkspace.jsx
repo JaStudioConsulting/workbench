@@ -27,6 +27,7 @@ import MeetingCaptureVariants from "./MeetingCaptureVariants.jsx";
 
 const defaultAdapter = createMeetingAdapter();
 const NotesPanel = lazy(() => import("../notes/NotesPanel.jsx"));
+const BoardPanel = lazy(() => import("../board/BoardPanel.jsx"));
 
 function browserCaptureMetadata(recording) {
   return {
@@ -77,6 +78,7 @@ export default function MeetingsWorkspace({ adapter = defaultAdapter, launchCont
   const [selectedCandidateId, setSelectedCandidateId] = useState(launchCandidateId);
   const [templateId, setTemplateId] = useState("candidate_screen");
   const [showLinkedNotes, setShowLinkedNotes] = useState(false);
+  const [showLinkedBoard, setShowLinkedBoard] = useState(false);
   const [recording, setRecording] = useState(null);
   const [includeSharedAudio, setIncludeSharedAudio] = useState(false);
   const [recordedAudio, setRecordedAudio] = useState(null);
@@ -361,6 +363,7 @@ export default function MeetingsWorkspace({ adapter = defaultAdapter, launchCont
 
     <section className="rounded-lg border bg-card p-4" aria-label="Meeting notes tab">
       <button type="button" aria-expanded={showLinkedNotes} onClick={() => setShowLinkedNotes((value) => !value)} className="min-h-11 rounded-md border px-3 text-sm font-semibold">Notes</button>
+      <button type="button" aria-expanded={showLinkedBoard} onClick={() => setShowLinkedBoard((value) => !value)} className="ml-2 min-h-11 rounded-md border px-3 text-sm font-semibold">Board</button>
       {showLinkedNotes ? (
         loadedMeetingId ? (
           <div className="mt-3">
@@ -369,6 +372,15 @@ export default function MeetingsWorkspace({ adapter = defaultAdapter, launchCont
             </Suspense>
           </div>
         ) : <p className="mt-3 text-sm text-muted-foreground">Save the meeting draft before attaching notes.</p>
+      ) : null}
+      {showLinkedBoard ? (
+        loadedMeetingId ? (
+          <div className="mt-3">
+            <Suspense fallback={<p className="text-sm text-muted-foreground">Loading board editor…</p>}>
+              <BoardPanel subjectType="meeting" subjectId={loadedMeetingId} defaultTitle={exportTitle} />
+            </Suspense>
+          </div>
+        ) : <p className="mt-3 text-sm text-muted-foreground">Save the meeting draft before attaching a board.</p>
       ) : null}
     </section>
 

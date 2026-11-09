@@ -14,6 +14,7 @@ import { supabase } from "../../supabase-client.js";
 const DEFAULT_CENTER = [43.6532, -79.3832]; // Toronto, ON
 const DEFAULT_ZOOM = 10;
 const NotesPanel = lazy(() => import("../notes/NotesPanel.jsx"));
+const BoardPanel = lazy(() => import("../board/BoardPanel.jsx"));
 
 export default function JobsMapView({ onSelectJobForWorkflow, onOpenJobReview }) {
   const [jobs, setJobs] = useState([]);
@@ -661,11 +662,18 @@ export default function JobsMapView({ onSelectJobForWorkflow, onOpenJobReview })
               <div role="tablist" aria-label="Job details" className="mt-3 flex gap-2 border-b">
                 <button type="button" role="tab" aria-selected={jobDetailsTab === "details"} onClick={() => setJobDetailsTab("details")} className="min-h-10 rounded-t-md border px-3 text-sm aria-selected:bg-muted">Details</button>
                 <button type="button" role="tab" aria-selected={jobDetailsTab === "notes"} onClick={() => setJobDetailsTab("notes")} className="min-h-10 rounded-t-md border px-3 text-sm aria-selected:bg-muted">Notes</button>
+                <button type="button" role="tab" aria-selected={jobDetailsTab === "board"} onClick={() => setJobDetailsTab("board")} className="min-h-10 rounded-t-md border px-3 text-sm aria-selected:bg-muted">Board</button>
               </div>
               {jobDetailsTab === "notes" ? (
                 <div role="tabpanel" className="mt-3">
                   <Suspense fallback={<p className="text-sm text-muted-foreground">Loading notes editor…</p>}>
                     <NotesPanel subjectType="job" subjectId={String(selectedJob.originalJobId || "")} defaultTitle={selectedJob.title} />
+                  </Suspense>
+                </div>
+              ) : jobDetailsTab === "board" ? (
+                <div role="tabpanel" className="mt-3">
+                  <Suspense fallback={<p className="text-sm text-muted-foreground">Loading board editor…</p>}>
+                    <BoardPanel subjectType="job" subjectId={String(selectedJob.originalJobId || "")} defaultTitle={selectedJob.title} />
                   </Suspense>
                 </div>
               ) : (

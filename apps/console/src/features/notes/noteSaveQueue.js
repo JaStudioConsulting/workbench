@@ -31,6 +31,7 @@ export function createNoteSaveQueue(save) {
 }
 
 async function saveSession(session, save) {
+  if (session.discarded) return { ok: true, saved: null };
   if (!hasUnsavedChanges(session)) return { ok: true, saved: null };
   const target = session.version;
   const snapshot = structuredClone({ title: session.title, body: session.body });

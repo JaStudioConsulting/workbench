@@ -20,6 +20,7 @@ import { getResumeSource } from "./externals.js";
 
 const LOXO_PEOPLE_BASE_URL = "https://app.loxo.co/people/";
 const NotesPanel = lazy(() => import("../notes/NotesPanel.jsx"));
+const BoardPanel = lazy(() => import("../board/BoardPanel.jsx"));
 const VIEW_TABS = [["all", "All"], ["unreviewed", "Unreviewed"], ["wanted", "Wanted"], ["passed", "Passed"], ["submitted", "Submitted"]];
 
 function withinDateRange(value, start, end) {
@@ -40,6 +41,7 @@ export default function PeopleView({ candidates = [], currentJob, jobs = [], sub
   const [submissionTo, setSubmissionTo] = useState("");
   const [writeUpCandidate, setWriteUpCandidate] = useState(null);
   const [notesCandidateId, setNotesCandidateId] = useState(null);
+  const [boardCandidateId, setBoardCandidateId] = useState(null);
   const [outreachCandidate, setOutreachCandidate] = useState(null);
   const [editorState, setEditorState] = useState(null); // { mode: "create" | "edit", candidate }
   const [directoryRecords, setDirectoryRecords] = useState(() => getCachedCandidateRecords());
@@ -316,6 +318,9 @@ export default function PeopleView({ candidates = [], currentJob, jobs = [], sub
                       <Button type="button" size="sm" variant="outline" aria-expanded={notesCandidateId === candidate.id} onClick={(event) => { event.stopPropagation(); setNotesCandidateId((current) => current === candidate.id ? null : candidate.id); }} className="h-8 px-2.5 text-xs font-semibold">
                         <NotebookText size={12} className="mr-1" /> Notes
                       </Button>
+                      <Button type="button" size="sm" variant="outline" aria-expanded={boardCandidateId === candidate.id} onClick={(event) => { event.stopPropagation(); setBoardCandidateId((current) => current === candidate.id ? null : candidate.id); }} className="h-8 px-2.5 text-xs font-semibold">
+                        Board
+                      </Button>
                       <Button
                         type="button"
                         size="sm"
@@ -355,6 +360,13 @@ export default function PeopleView({ candidates = [], currentJob, jobs = [], sub
                     <div className="mt-3" onClick={(event) => event.stopPropagation()}>
                       <Suspense fallback={<p className="text-sm text-muted-foreground">Loading notes editor…</p>}>
                         <NotesPanel subjectType="candidate" subjectId={candidate.id} defaultTitle={candidate.name} />
+                      </Suspense>
+                    </div>
+                  ) : null}
+                  {boardCandidateId === candidate.id ? (
+                    <div className="mt-3" onClick={(event) => event.stopPropagation()}>
+                      <Suspense fallback={<p className="text-sm text-muted-foreground">Loading board editor…</p>}>
+                        <BoardPanel subjectType="candidate" subjectId={candidate.id} defaultTitle={candidate.name} />
                       </Suspense>
                     </div>
                   ) : null}
