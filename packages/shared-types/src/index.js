@@ -380,3 +380,856 @@ export const CandidateResponseSchema = z.object({
 export const CandidateListResponseSchema = z.object({
   candidates: z.array(CandidateRecordSchema).max(500),
 }).strict();
+
+export const WORKBENCH_SUBJECT_TYPES = Object.freeze([
+  "candidate",
+  "job",
+  "meeting",
+]);
+
+export const NOTE_SUBJECT_TYPES = WORKBENCH_SUBJECT_TYPES;
+export const BOARD_SUBJECT_TYPES = WORKBENCH_SUBJECT_TYPES;
+
+export const WorkbenchSubjectTypeSchema = z.enum(WORKBENCH_SUBJECT_TYPES);
+export const NoteSubjectTypeSchema = WorkbenchSubjectTypeSchema;
+export const BoardSubjectTypeSchema = WorkbenchSubjectTypeSchema;
+
+export const NoteIdSchema = SupabaseUserIdSchema.transform((value) => value.toLowerCase());
+export const BoardIdSchema = SupabaseUserIdSchema.transform((value) => value.toLowerCase());
+export const MeetingSubjectIdSchema = SupabaseUserIdSchema.transform((value) => value.toLowerCase());
+
+export const JobSubjectIdSchema = z.string().trim().refine((value) => {
+  if (!POSITIVE_INT_ID_PATTERN.test(value)) return false;
+  const numericId = Number(value);
+  return Number.isSafeInteger(numericId) && numericId > 0;
+}, "Job subject_id must be a positive integer string");
+
+export const MAX_WORKBENCH_TITLE_LENGTH = 300;
+export const MAX_NOTE_BODY_BYTES = 64 * 1024;
+export const MAX_NOTE_BODY_DEPTH = 16;
+export const MAX_NOTE_BODY_NODES = 2_000;
+export const MAX_NOTE_TEXT_LENGTH = 20_000;
+export const MAX_BOARD_SCENE_BYTES = 96 * 1024;
+export const MAX_BOARD_SCENE_DEPTH = 16;
+export const MAX_BOARD_ELEMENTS = 1_000;
+export const MAX_BOARD_FILES = 50;
+
+const FORBIDDEN_OBJECT_KEYS = new Set(["__proto__", "constructor", "prototype"]);
+const IDENTIFIER_TOKEN_PATTERN = /^[a-zA-Z0-9_:-]{1,100}$/;
+
+function isPlainJsonObject(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const proto = Object.getPrototypeOf(value);
+  return proto === Object.prototype || proto === null;
+}
+
+function measureJsonTree(root, { maxDepth, maxNodes }) {
+  let nodeCount = 0;
+
+  function visit(current, depth) {
+    if (depth > maxDepth) {
+      return { ok: false, reason: `JSON structure exceeds maximum depth of ${maxDepth}` };
+    }
+    if (current === null) return { ok: true };
+    const valueType = typeof current;
+    if (valueType === "string" || valueType === "boolean") return { ok: true };
+    if (valueType === "number") {
+      return Number.isFinite(current)
+        ? { ok: true }
+        : { ok: false, reason: "JSON numbers must be finite" };
+    }
+    if (Array.isArray(current)) {
+      nodeCount += 1;
+      if (nodeCount > maxNodes) {
+        return { ok: false, reason: `JSON structure exceeds maximum of ${maxNodes} container nodes` };
+      }
+      for (const item of current) {
+        const res = visit(item, depth + 1);
+        if (!res.ok) return res;
+      }
+      return { ok: true };
+    }
+    if (isPlainJsonObject(current)) {
+      nodeCount += 1;
+      if (nodeCount > maxNodes) {
+        return { ok: false, reason: `JSON structure exceeds maximum of ${maxNodes} container nodes` };
+      }
+      for (const key of Object.keys(current)) {
+        if (FORBIDDEN_OBJECT_KEYS.has(key)) {
+          return { ok: false, reason: `Forbidden JSON property key: ${key}` };
+        }
+        const res = visit(current[key], depth + 1);
+        if (!res.ok) return res;
+      }
+      return { ok: true };
+    }
+    return { ok: false, reason: "Unsupported JSON value type" };
+  }
+
+  return visit(root, 0);
+}
+
+function utf8ByteLength(value) {
+  try {
+    return new TextEncoder().encode(JSON.stringify(value)).byteLength;
+  } catch {
+    return Number.POSITIVE_INFINITY;
+  }
+}
+
+export function parseWorkbenchSubjectLink(input) {
+  if (!input || typeof input !== "object") return null;
+  const rawType = input.subject_type;
+  const rawId = input.subject_id;
+
+  if (rawType == null && rawId == null) {
+    return Object.freeze({ subject_type: null, subject_id: null });
+  }
+  if ((rawType == null) !== (rawId == null)) {
+    return null;
+  }
+  if (typeof rawType !== "string" || typeof rawId !== "string") {
+    return null;
+  }
+
+  const subjectType = rawType.trim();
+  const trimmedId = rawId.trim();
+  if (!WORKBENCH_SUBJECT_TYPES.includes(subjectType) || !trimmedId || /[\r\n\0]/.test(trimmedId)) {
+    return null;
+  }
+
+  if (subjectType === "candidate") {
+    const parsedCandidate = parseCandidateSourceKey(trimmedId);
+    if (!parsedCandidate) return null;
+    return Object.freeze({
+      subject_type: "candidate",
+      subject_id: parsedCandidate.id,
+    });
+  }
+
+  if (subjectType === "job") {
+    if (!POSITIVE_INT_ID_PATTERN.test(trimmedId)) return null;
+    const numericId = Number(trimmedId);
+    if (!Number.isSafeInteger(numericId) || numericId <= 0) return null;
+    return Object.freeze({
+      subject_type: "job",
+      subject_id: trimmedId,
+    });
+  }
+
+  if (subjectType === "meeting") {
+    const parsedUuid = SupabaseUserIdSchema.safeParse(trimmedId);
+    if (!parsedUuid.success) return null;
+    return Object.freeze({
+      subject_type: "meeting",
+      subject_id: parsedUuid.data.toLowerCase(),
+    });
+  }
+
+  return null;
+}
+
+export const WorkbenchSubjectLinkSchema = z.object({
+  subject_type: WorkbenchSubjectTypeSchema.nullable(),
+  subject_id: z.string().trim().min(1).max(200).nullable(),
+}).strict().superRefine((value, ctx) => {
+  const parsed = parseWorkbenchSubjectLink(value);
+  if (!parsed) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: value.subject_type == null ? ["subject_type"] : ["subject_id"],
+      message: "subject_type and subject_id must both be null or a valid candidate, job, or meeting reference",
+    });
+  }
+}).transform((value) => parseWorkbenchSubjectLink(value));
+
+const ALLOWED_NOTE_ROOT_KEYS = new Set(["type", "content", "attrs"]);
+const ALLOWED_NOTE_NODE_KEYS = new Set(["type", "attrs", "content", "marks", "text"]);
+const ALLOWED_NOTE_MARK_KEYS = new Set(["type", "attrs"]);
+
+function validateNoteEditorNode(node, path, depth) {
+  if (depth > MAX_NOTE_BODY_DEPTH) {
+    return { ok: false, path, message: `Note editor node exceeds maximum depth of ${MAX_NOTE_BODY_DEPTH}` };
+  }
+  if (!isPlainJsonObject(node)) {
+    return { ok: false, path, message: "Note content node must be a JSON object" };
+  }
+  for (const key of Object.keys(node)) {
+    if (!ALLOWED_NOTE_NODE_KEYS.has(key) || FORBIDDEN_OBJECT_KEYS.has(key)) {
+      return { ok: false, path: [...path, key], message: `Unsupported note editor node key: ${key}` };
+    }
+  }
+  if (typeof node.type !== "string" || !IDENTIFIER_TOKEN_PATTERN.test(node.type.trim())) {
+    return { ok: false, path: [...path, "type"], message: "Note editor node requires a valid type string" };
+  }
+  if (node.attrs !== undefined && node.attrs !== null && !isPlainJsonObject(node.attrs)) {
+    return { ok: false, path: [...path, "attrs"], message: "Note editor node attrs must be a JSON object or null" };
+  }
+  if (node.text !== undefined) {
+    if (typeof node.text !== "string") {
+      return { ok: false, path: [...path, "text"], message: "Note editor node text must be a string" };
+    }
+    if (node.text.length > MAX_NOTE_TEXT_LENGTH) {
+      return { ok: false, path: [...path, "text"], message: `Note text node exceeds ${MAX_NOTE_TEXT_LENGTH} characters` };
+    }
+    if (node.content !== undefined) {
+      return { ok: false, path: [...path, "content"], message: "Note text leaf node cannot also contain child content" };
+    }
+  }
+  if (node.marks !== undefined) {
+    if (!Array.isArray(node.marks) || node.marks.length > 32) {
+      return { ok: false, path: [...path, "marks"], message: "Note editor node marks must be an array of at most 32 marks" };
+    }
+    for (let i = 0; i < node.marks.length; i += 1) {
+      const mark = node.marks[i];
+      if (!isPlainJsonObject(mark)) {
+        return { ok: false, path: [...path, "marks", i], message: "Note mark must be a JSON object" };
+      }
+      for (const key of Object.keys(mark)) {
+        if (!ALLOWED_NOTE_MARK_KEYS.has(key) || FORBIDDEN_OBJECT_KEYS.has(key)) {
+          return { ok: false, path: [...path, "marks", i, key], message: `Unsupported note mark key: ${key}` };
+        }
+      }
+      if (typeof mark.type !== "string" || !IDENTIFIER_TOKEN_PATTERN.test(mark.type.trim())) {
+        return { ok: false, path: [...path, "marks", i, "type"], message: "Note mark requires a valid type string" };
+      }
+      if (mark.attrs !== undefined && mark.attrs !== null && !isPlainJsonObject(mark.attrs)) {
+        return { ok: false, path: [...path, "marks", i, "attrs"], message: "Note mark attrs must be a JSON object or null" };
+      }
+    }
+  }
+  if (node.content !== undefined) {
+    if (!Array.isArray(node.content)) {
+      return { ok: false, path: [...path, "content"], message: "Note editor node content must be an array" };
+    }
+    for (let i = 0; i < node.content.length; i += 1) {
+      const childCheck = validateNoteEditorNode(node.content[i], [...path, "content", i], depth + 1);
+      if (!childCheck.ok) return childCheck;
+    }
+  }
+  return { ok: true };
+}
+
+export const NoteBodySchema = z.custom((value) => isPlainJsonObject(value), {
+  message: "Note body must be a JSON object",
+}).superRefine((value, ctx) => {
+  if (!isPlainJsonObject(value)) return;
+
+  const byteSize = utf8ByteLength(value);
+  if (byteSize > MAX_NOTE_BODY_BYTES) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: `Note body exceeds maximum size of ${MAX_NOTE_BODY_BYTES} bytes`,
+    });
+    return;
+  }
+
+  const treeCheck = measureJsonTree(value, {
+    maxDepth: MAX_NOTE_BODY_DEPTH,
+    maxNodes: MAX_NOTE_BODY_NODES,
+  });
+  if (!treeCheck.ok) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: treeCheck.reason,
+    });
+    return;
+  }
+
+  const keys = Object.keys(value);
+  if (keys.length === 0) {
+    return;
+  }
+
+  for (const key of keys) {
+    if (!ALLOWED_NOTE_ROOT_KEYS.has(key)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: [key],
+        message: `Unsupported note body root key: ${key}`,
+      });
+      return;
+    }
+  }
+
+  if (value.type !== "doc") {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["type"],
+      message: 'Non-empty note body must have root type "doc"',
+    });
+    return;
+  }
+
+  if (value.attrs !== undefined && value.attrs !== null && !isPlainJsonObject(value.attrs)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["attrs"],
+      message: "Note body attrs must be a JSON object or null",
+    });
+    return;
+  }
+
+  if (value.content !== undefined) {
+    if (!Array.isArray(value.content)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["content"],
+        message: "Note body content must be an array of editor nodes",
+      });
+      return;
+    }
+    for (let i = 0; i < value.content.length; i += 1) {
+      const check = validateNoteEditorNode(value.content[i], ["content", i], 1);
+      if (!check.ok) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: check.path,
+          message: check.message,
+        });
+        return;
+      }
+    }
+  }
+});
+
+const ALLOWED_BOARD_SCENE_ROOT_KEYS = new Set([
+  "type",
+  "version",
+  "source",
+  "elements",
+  "appState",
+  "files",
+]);
+
+const EXCALIDRAW_NUMERIC_FIELDS = [
+  "x",
+  "y",
+  "width",
+  "height",
+  "angle",
+  "strokeWidth",
+  "roughness",
+  "opacity",
+  "seed",
+  "version",
+  "versionNonce",
+  "updated",
+  "fontSize",
+  "baseline",
+  "lineHeight",
+];
+
+const EXCALIDRAW_STRING_FIELDS = [
+  "strokeColor",
+  "backgroundColor",
+  "fillStyle",
+  "strokeStyle",
+  "text",
+  "originalText",
+  "link",
+  "frameId",
+  "containerId",
+  "fileId",
+  "status",
+  "index",
+];
+
+function validateExcalidrawElement(element, index) {
+  if (!isPlainJsonObject(element)) {
+    return { ok: false, path: ["elements", index], message: "Excalidraw element must be a JSON object" };
+  }
+  if (typeof element.id !== "string" || !element.id.trim() || element.id.length > 200) {
+    return { ok: false, path: ["elements", index, "id"], message: "Excalidraw element requires a non-empty string id" };
+  }
+  if (typeof element.type !== "string" || !IDENTIFIER_TOKEN_PATTERN.test(element.type.trim())) {
+    return { ok: false, path: ["elements", index, "type"], message: "Excalidraw element requires a valid type string" };
+  }
+  for (const field of EXCALIDRAW_NUMERIC_FIELDS) {
+    const val = element[field];
+    if (val !== undefined && val !== null && (typeof val !== "number" || !Number.isFinite(val))) {
+      return { ok: false, path: ["elements", index, field], message: `Excalidraw element ${field} must be a finite number` };
+    }
+  }
+  for (const field of ["isDeleted", "locked"]) {
+    const val = element[field];
+    if (val !== undefined && typeof val !== "boolean") {
+      return { ok: false, path: ["elements", index, field], message: `Excalidraw element ${field} must be a boolean` };
+    }
+  }
+  for (const field of EXCALIDRAW_STRING_FIELDS) {
+    const val = element[field];
+    if (val !== undefined && val !== null && (typeof val !== "string" || val.length > 10_000)) {
+      return { ok: false, path: ["elements", index, field], message: `Excalidraw element ${field} must be a string of at most 10000 characters` };
+    }
+  }
+  for (const field of ["groupIds", "points", "scale"]) {
+    const val = element[field];
+    if (val !== undefined && val !== null && !Array.isArray(val)) {
+      return { ok: false, path: ["elements", index, field], message: `Excalidraw element ${field} must be an array` };
+    }
+  }
+  return { ok: true };
+}
+
+export const BoardSceneSchema = z.custom((value) => isPlainJsonObject(value), {
+  message: "Board scene must be a JSON object",
+}).superRefine((value, ctx) => {
+  if (!isPlainJsonObject(value)) return;
+
+  const byteSize = utf8ByteLength(value);
+  if (byteSize > MAX_BOARD_SCENE_BYTES) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: `Board scene exceeds maximum size of ${MAX_BOARD_SCENE_BYTES} bytes`,
+    });
+    return;
+  }
+
+  const treeCheck = measureJsonTree(value, {
+    maxDepth: MAX_BOARD_SCENE_DEPTH,
+    maxNodes: MAX_BOARD_ELEMENTS * 8,
+  });
+  if (!treeCheck.ok) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: treeCheck.reason,
+    });
+    return;
+  }
+
+  const keys = Object.keys(value);
+  if (keys.length === 0) {
+    return;
+  }
+
+  for (const key of keys) {
+    if (!ALLOWED_BOARD_SCENE_ROOT_KEYS.has(key)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: [key],
+        message: `Unsupported board scene root key: ${key}`,
+      });
+      return;
+    }
+  }
+
+  if (value.type !== undefined && value.type !== "excalidraw") {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["type"],
+      message: 'Board scene type must be "excalidraw" when provided',
+    });
+    return;
+  }
+
+  if (
+    value.version !== undefined
+    && (typeof value.version !== "number" || !Number.isInteger(value.version) || value.version < 1 || value.version > 1_000)
+  ) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["version"],
+      message: "Board scene version must be a positive integer",
+    });
+    return;
+  }
+
+  if (value.source !== undefined && (typeof value.source !== "string" || value.source.length > 500)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["source"],
+      message: "Board scene source must be a string of at most 500 characters",
+    });
+    return;
+  }
+
+  if (!Array.isArray(value.elements)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["elements"],
+      message: "Non-empty board scene must include an elements array",
+    });
+    return;
+  }
+
+  if (value.elements.length > MAX_BOARD_ELEMENTS) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["elements"],
+      message: `Board scene elements cannot exceed ${MAX_BOARD_ELEMENTS} items`,
+    });
+    return;
+  }
+
+  for (let i = 0; i < value.elements.length; i += 1) {
+    const check = validateExcalidrawElement(value.elements[i], i);
+    if (!check.ok) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: check.path,
+        message: check.message,
+      });
+      return;
+    }
+  }
+
+  if (value.appState !== undefined && value.appState !== null && !isPlainJsonObject(value.appState)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["appState"],
+      message: "Board scene appState must be a JSON object or null",
+    });
+    return;
+  }
+
+  if (value.files !== undefined && value.files !== null) {
+    if (!isPlainJsonObject(value.files)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["files"],
+        message: "Board scene files must be a JSON object or null",
+      });
+      return;
+    }
+    const fileEntries = Object.entries(value.files);
+    if (fileEntries.length > MAX_BOARD_FILES) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["files"],
+        message: `Board scene files cannot exceed ${MAX_BOARD_FILES} entries`,
+      });
+      return;
+    }
+    for (const [fileKey, fileVal] of fileEntries) {
+      if (!isPlainJsonObject(fileVal)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["files", fileKey],
+          message: "Board scene file entry must be a JSON object",
+        });
+        return;
+      }
+      if (fileVal.id !== undefined && (typeof fileVal.id !== "string" || !fileVal.id.trim() || fileVal.id.length > 200)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["files", fileKey, "id"],
+          message: "Board scene file id must be a non-empty string",
+        });
+        return;
+      }
+      if (fileVal.mimeType !== undefined && (typeof fileVal.mimeType !== "string" || !fileVal.mimeType.trim() || fileVal.mimeType.length > 200)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["files", fileKey, "mimeType"],
+          message: "Board scene file mimeType must be a non-empty string",
+        });
+        return;
+      }
+      if (fileVal.dataURL !== undefined && typeof fileVal.dataURL !== "string") {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["files", fileKey, "dataURL"],
+          message: "Board scene file dataURL must be a string",
+        });
+        return;
+      }
+    }
+  }
+});
+
+const WorkbenchTitleSchema = z.string()
+  .trim()
+  .max(MAX_WORKBENCH_TITLE_LENGTH, `Title must be at most ${MAX_WORKBENCH_TITLE_LENGTH} characters`)
+  .refine((value) => !/[\r\n\0]/.test(value), "Title cannot contain control characters");
+
+function refineWorkbenchRecordSubject(record, ctx) {
+  const parsed = parseWorkbenchSubjectLink({
+    subject_type: record.subject_type,
+    subject_id: record.subject_id,
+  });
+  if (!parsed) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: record.subject_type == null ? ["subject_type"] : ["subject_id"],
+      message: "subject_type and subject_id must both be null or a valid candidate, job, or meeting key",
+    });
+    return;
+  }
+  if (parsed.subject_id !== record.subject_id) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["subject_id"],
+      message: "subject_id must be normalized to canonical entity key",
+    });
+  }
+}
+
+export const NoteRecordSchema = z.object({
+  id: NoteIdSchema,
+  owner_id: SupabaseUserIdSchema.transform((value) => value.toLowerCase()),
+  title: WorkbenchTitleSchema,
+  subject_type: NoteSubjectTypeSchema.nullable(),
+  subject_id: z.string().trim().min(1).max(200).nullable(),
+  body: NoteBodySchema,
+  created_at: z.string().datetime({ offset: true }),
+  updated_at: z.string().datetime({ offset: true }),
+}).strict().superRefine(refineWorkbenchRecordSubject);
+
+export const BoardRecordSchema = z.object({
+  id: BoardIdSchema,
+  owner_id: SupabaseUserIdSchema.transform((value) => value.toLowerCase()),
+  title: WorkbenchTitleSchema,
+  subject_type: BoardSubjectTypeSchema.nullable(),
+  subject_id: z.string().trim().min(1).max(200).nullable(),
+  scene: BoardSceneSchema,
+  created_at: z.string().datetime({ offset: true }),
+  updated_at: z.string().datetime({ offset: true }),
+}).strict().superRefine(refineWorkbenchRecordSubject);
+
+export const NoteCreateRequestSchema = z.object({
+  title: WorkbenchTitleSchema.optional().default(""),
+  subject_type: NoteSubjectTypeSchema.nullable().optional().default(null),
+  subject_id: z.string().trim().min(1).max(200).nullable().optional().default(null),
+  body: NoteBodySchema.optional().default({}),
+}).strict().superRefine((value, ctx) => {
+  const parsedLink = parseWorkbenchSubjectLink({
+    subject_type: value.subject_type,
+    subject_id: value.subject_id,
+  });
+  if (!parsedLink) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: value.subject_type == null ? ["subject_type"] : ["subject_id"],
+      message: "subject_type and subject_id must both be null or a valid candidate, job, or meeting reference",
+    });
+  }
+}).transform((value) => {
+  const parsedLink = parseWorkbenchSubjectLink({
+    subject_type: value.subject_type,
+    subject_id: value.subject_id,
+  });
+  return {
+    title: value.title,
+    subject_type: parsedLink.subject_type,
+    subject_id: parsedLink.subject_id,
+    body: value.body,
+  };
+});
+
+export const BoardCreateRequestSchema = z.object({
+  title: WorkbenchTitleSchema.optional().default(""),
+  subject_type: BoardSubjectTypeSchema.nullable().optional().default(null),
+  subject_id: z.string().trim().min(1).max(200).nullable().optional().default(null),
+  scene: BoardSceneSchema.optional().default({}),
+}).strict().superRefine((value, ctx) => {
+  const parsedLink = parseWorkbenchSubjectLink({
+    subject_type: value.subject_type,
+    subject_id: value.subject_id,
+  });
+  if (!parsedLink) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: value.subject_type == null ? ["subject_type"] : ["subject_id"],
+      message: "subject_type and subject_id must both be null or a valid candidate, job, or meeting reference",
+    });
+  }
+}).transform((value) => {
+  const parsedLink = parseWorkbenchSubjectLink({
+    subject_type: value.subject_type,
+    subject_id: value.subject_id,
+  });
+  return {
+    title: value.title,
+    subject_type: parsedLink.subject_type,
+    subject_id: parsedLink.subject_id,
+    scene: value.scene,
+  };
+});
+
+function validateWorkbenchUpdateSubject(value, ctx, contentKey) {
+  const hasSubjectType = value.subject_type !== undefined;
+  const hasSubjectId = value.subject_id !== undefined;
+  const hasTitle = value.title !== undefined;
+  const hasContent = value[contentKey] !== undefined;
+
+  if (!hasTitle && !hasContent && !hasSubjectType && !hasSubjectId) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: `At least one field (title, ${contentKey}, or subject link) must be provided`,
+    });
+    return;
+  }
+
+  if (hasSubjectType !== hasSubjectId) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: hasSubjectType ? ["subject_id"] : ["subject_type"],
+      message: "subject_type and subject_id must be provided together when updating subject link",
+    });
+    return;
+  }
+
+  if (hasSubjectType && hasSubjectId) {
+    const parsedLink = parseWorkbenchSubjectLink({
+      subject_type: value.subject_type,
+      subject_id: value.subject_id,
+    });
+    if (!parsedLink) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: value.subject_type == null ? ["subject_type"] : ["subject_id"],
+        message: "subject_type and subject_id must both be null or a valid candidate, job, or meeting reference",
+      });
+    }
+  }
+}
+
+export const NoteUpdateRequestSchema = z.object({
+  title: WorkbenchTitleSchema.optional(),
+  subject_type: NoteSubjectTypeSchema.nullable().optional(),
+  subject_id: z.string().trim().min(1).max(200).nullable().optional(),
+  body: NoteBodySchema.optional(),
+  expected_updated_at: z.string().datetime({ offset: true }).optional(),
+}).strict().superRefine((value, ctx) => validateWorkbenchUpdateSubject(value, ctx, "body")).transform((value) => {
+  const out = {};
+  if (value.title !== undefined) out.title = value.title;
+  if (value.body !== undefined) out.body = value.body;
+  if (value.expected_updated_at !== undefined) out.expected_updated_at = value.expected_updated_at;
+  if (value.subject_type !== undefined && value.subject_id !== undefined) {
+    const parsedLink = parseWorkbenchSubjectLink({
+      subject_type: value.subject_type,
+      subject_id: value.subject_id,
+    });
+    out.subject_type = parsedLink.subject_type;
+    out.subject_id = parsedLink.subject_id;
+  }
+  return out;
+});
+
+export const NoteAutosaveRequestSchema = NoteUpdateRequestSchema;
+export const NoteSaveRequestSchema = NoteUpdateRequestSchema;
+
+export const BoardUpdateRequestSchema = z.object({
+  title: WorkbenchTitleSchema.optional(),
+  subject_type: BoardSubjectTypeSchema.nullable().optional(),
+  subject_id: z.string().trim().min(1).max(200).nullable().optional(),
+  scene: BoardSceneSchema.optional(),
+  expected_updated_at: z.string().datetime({ offset: true }).optional(),
+}).strict().superRefine((value, ctx) => validateWorkbenchUpdateSubject(value, ctx, "scene")).transform((value) => {
+  const out = {};
+  if (value.title !== undefined) out.title = value.title;
+  if (value.scene !== undefined) out.scene = value.scene;
+  if (value.expected_updated_at !== undefined) out.expected_updated_at = value.expected_updated_at;
+  if (value.subject_type !== undefined && value.subject_id !== undefined) {
+    const parsedLink = parseWorkbenchSubjectLink({
+      subject_type: value.subject_type,
+      subject_id: value.subject_id,
+    });
+    out.subject_type = parsedLink.subject_type;
+    out.subject_id = parsedLink.subject_id;
+  }
+  return out;
+});
+
+export const BoardAutosaveRequestSchema = BoardUpdateRequestSchema;
+export const BoardSaveRequestSchema = BoardUpdateRequestSchema;
+
+const BooleanQueryParamSchema = z.preprocess((value) => {
+  if (value === undefined) return undefined;
+  if (typeof value === "boolean") return value;
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === "true" || normalized === "1") return true;
+    if (normalized === "false" || normalized === "0") return false;
+  }
+  return value;
+}, z.boolean());
+
+function createWorkbenchListQuerySchema() {
+  return z.object({
+    subject_type: WorkbenchSubjectTypeSchema.optional(),
+    subject_id: z.string().trim().min(1).max(200).optional(),
+    unlinked: BooleanQueryParamSchema.optional(),
+    q: z.string().trim().max(200).optional(),
+    limit: z.coerce.number().int().min(1).max(200).default(50),
+    offset: z.coerce.number().int().min(0).max(10_000).default(0),
+  }).strict().superRefine((value, ctx) => {
+    if (value.unlinked === true && (value.subject_type !== undefined || value.subject_id !== undefined)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["unlinked"],
+        message: "unlinked filter cannot be combined with subject_type or subject_id",
+      });
+      return;
+    }
+    if (value.subject_id !== undefined && value.subject_type === undefined) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["subject_type"],
+        message: "subject_type is required when filtering by subject_id",
+      });
+      return;
+    }
+    if (value.subject_type !== undefined && value.subject_id !== undefined) {
+      const parsedLink = parseWorkbenchSubjectLink({
+        subject_type: value.subject_type,
+        subject_id: value.subject_id,
+      });
+      if (!parsedLink) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["subject_id"],
+          message: `Invalid subject_id for subject_type ${value.subject_type}`,
+        });
+      }
+    }
+  }).transform((value) => {
+    const out = {
+      limit: value.limit,
+      offset: value.offset,
+    };
+    if (value.unlinked !== undefined) out.unlinked = value.unlinked;
+    if (value.q !== undefined && value.q.length > 0) out.q = value.q;
+    if (value.subject_type !== undefined && value.subject_id !== undefined) {
+      const parsedLink = parseWorkbenchSubjectLink({
+        subject_type: value.subject_type,
+        subject_id: value.subject_id,
+      });
+      out.subject_type = parsedLink.subject_type;
+      out.subject_id = parsedLink.subject_id;
+    } else if (value.subject_type !== undefined) {
+      out.subject_type = value.subject_type;
+    }
+    return out;
+  });
+}
+
+export const NoteListQuerySchema = createWorkbenchListQuerySchema();
+export const BoardListQuerySchema = createWorkbenchListQuerySchema();
+
+export const NoteResponseSchema = z.object({
+  note: NoteRecordSchema,
+}).strict();
+
+export const NoteListResponseSchema = z.object({
+  notes: z.array(NoteRecordSchema).max(200),
+}).strict();
+
+export const NoteDeleteResponseSchema = z.object({
+  deleted: z.literal(true),
+  id: NoteIdSchema,
+}).strict();
+
+export const BoardResponseSchema = z.object({
+  board: BoardRecordSchema,
+}).strict();
+
+export const BoardListResponseSchema = z.object({
+  boards: z.array(BoardRecordSchema).max(200),
+}).strict();
+
+export const BoardDeleteResponseSchema = z.object({
+  deleted: z.literal(true),
+  id: BoardIdSchema,
+}).strict();
