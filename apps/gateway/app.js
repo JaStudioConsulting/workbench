@@ -79,7 +79,9 @@ export async function createApp({
     // Keep public health and safety routes available while every recruiter route fails closed.
   }
   app.use(createCorsGuard(env));
-  await captureManager.initialize?.().catch(() => {});
+  await captureManager.initialize?.().catch((error) => {
+    console.error("Native capture initialization failed.", { error });
+  });
 
   // Better Auth must receive raw requests. JSON parsing is intentionally mounted after it.
   if (configuredAuth.enabled) app.all("/api/auth/*", configuredAuth.handler);
