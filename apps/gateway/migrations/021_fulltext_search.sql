@@ -507,11 +507,11 @@ COMMENT ON FUNCTION public.search_workbench(text, integer) IS
 REVOKE ALL ON TABLE public.client_companies, public.search_documents FROM anon;
 GRANT SELECT ON TABLE public.client_companies, public.search_documents TO authenticated;
 
-REVOKE ALL ON FUNCTION public.note_body_plain_text(jsonb) FROM anon;
+REVOKE ALL ON FUNCTION public.note_body_plain_text(jsonb) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.note_body_plain_text(jsonb) TO authenticated;
 
-REVOKE ALL ON FUNCTION public.workbench_search_tsquery(text) FROM anon;
+REVOKE ALL ON FUNCTION public.workbench_search_tsquery(text) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.workbench_search_tsquery(text) TO authenticated;
 
-REVOKE ALL ON FUNCTION public.search_workbench(text, integer) FROM anon;
+REVOKE ALL ON FUNCTION public.search_workbench(text, integer) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.search_workbench(text, integer) TO authenticated;
