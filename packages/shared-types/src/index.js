@@ -965,6 +965,14 @@ function refineWorkbenchRecordSubject(record, ctx) {
   }
 }
 
+export const NOTE_ORIGIN_KEY_MAX_LENGTH = 200;
+
+export const NoteOriginKeySchema = z.string()
+  .trim()
+  .min(1)
+  .max(NOTE_ORIGIN_KEY_MAX_LENGTH)
+  .refine((value) => !/[\u0000-\u001f\u007f]/.test(value), "origin_key cannot contain control characters");
+
 export const NoteRecordSchema = z.object({
   id: NoteIdSchema,
   owner_id: SupabaseUserIdSchema.transform((value) => value.toLowerCase()),
@@ -972,6 +980,7 @@ export const NoteRecordSchema = z.object({
   subject_type: NoteSubjectTypeSchema.nullable(),
   subject_id: z.string().trim().min(1).max(200).nullable(),
   body: NoteBodySchema,
+  origin_key: NoteOriginKeySchema.nullable().optional(),
   created_at: z.string().datetime({ offset: true }),
   updated_at: z.string().datetime({ offset: true }),
 }).strict().superRefine(refineWorkbenchRecordSubject);
@@ -992,6 +1001,7 @@ export const NoteCreateRequestSchema = z.object({
   subject_type: NoteSubjectTypeSchema.nullable().optional().default(null),
   subject_id: z.string().trim().min(1).max(200).nullable().optional().default(null),
   body: NoteBodySchema.optional().default({}),
+  origin_key: NoteOriginKeySchema.nullable().optional().default(null),
 }).strict().superRefine((value, ctx) => {
   const parsedLink = parseWorkbenchSubjectLink({
     subject_type: value.subject_type,
@@ -1014,6 +1024,7 @@ export const NoteCreateRequestSchema = z.object({
     subject_type: parsedLink.subject_type,
     subject_id: parsedLink.subject_id,
     body: value.body,
+    origin_key: value.origin_key,
   };
 });
 

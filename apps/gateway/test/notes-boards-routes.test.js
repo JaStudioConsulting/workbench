@@ -271,6 +271,8 @@ async function createPgliteNotesBoardsHarness() {
   const migration010 = await readFile(new URL("../migrations/010_candidates_all.sql", import.meta.url), "utf8");
   await db.exec(migration010);
   await db.exec(MIGRATION_020_SQL);
+  const migration022 = await readFile(new URL("../migrations/022_notes_origin_key.sql", import.meta.url), "utf8");
+  await db.exec(migration022);
 
   await db.query("INSERT INTO auth.users (id, email) VALUES ($1, $2), ($3, $4), ($5, $6)", [
     FIRST_OWNER,
@@ -361,6 +363,11 @@ async function createPgliteNotesBoardsHarness() {
       values.push(`%${titleParam.slice(7, -1)}%`);
       conditions.push(`title ILIKE $${values.length}`);
     }
+    const originKeyParam = url.searchParams.get("origin_key");
+    if (originKeyParam?.startsWith("eq.")) {
+      values.push(originKeyParam.slice(3));
+      conditions.push(`origin_key = $${values.length}`);
+    }
     const limit = Number(url.searchParams.get("limit") || 50);
     const offset = Number(url.searchParams.get("offset") || 0);
     const whereSql = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
@@ -428,7 +435,7 @@ async function createPgliteNotesBoardsHarness() {
           const idEq = url.searchParams.get("id")?.slice(3);
           const ownerEq = url.searchParams.get("owner_id")?.slice(3);
           const result = await db.query(
-            "SELECT id, owner_id FROM public.meeting_drafts WHERE id = $1::uuid AND owner_id = $2::uuid LIMIT 1",
+            "SELECT id, owner_id, candidate_source, candidate_source_id FROM public.meeting_drafts WHERE id = $1::uuid AND owner_id = $2::uuid LIMIT 1",
             [idEq, ownerEq],
           );
           return jsonResponse(200, result.rows);
@@ -447,9 +454,10 @@ async function createPgliteNotesBoardsHarness() {
 
             if (method === "POST") {
               const payload = JSON.parse(options.body);
+              const withOriginKey = table === "notes" && Boolean(payload.origin_key);
               const result = await db.query(
-                `INSERT INTO public.${table} (owner_id, title, subject_type, subject_id, ${jsonCol})
-                 VALUES ($1::uuid, $2, $3, $4, $5::jsonb)
+                `INSERT INTO public.${table} (owner_id, title, subject_type, subject_id, ${jsonCol}${withOriginKey ? ", origin_key" : ""})
+                 VALUES ($1::uuid, $2, $3, $4, $5::jsonb${withOriginKey ? ", $6" : ""})
                  RETURNING *`,
                 [
                   payload.owner_id,
@@ -457,6 +465,7 @@ async function createPgliteNotesBoardsHarness() {
                   payload.subject_type,
                   payload.subject_id,
                   JSON.stringify(payload[jsonCol]),
+                  ...(withOriginKey ? [payload.origin_key] : []),
                 ],
               );
               return jsonResponse(201, result.rows);
@@ -509,6 +518,9 @@ async function createPgliteNotesBoardsHarness() {
       const message = error instanceof Error ? error.message : "Database error";
       if (/row-level security/i.test(message)) {
         return jsonResponse(403, { code: "42501", message });
+      }
+      if (/duplicate key value violates unique constraint/i.test(message)) {
+        return jsonResponse(409, { code: "23505", message });
       }
       return jsonResponse(400, { code: "23514", message });
     }
@@ -1014,6 +1026,51 @@ test("notes and boards routes enforce auth boundaries, subject existence and own
     const misconfiguredBoardsRes = await request(misconfiguredApp, "GET", "/api/boards", { headers: validHeaders });
     assert.equal(misconfiguredBoardsRes.status, 503);
     assert.equal(misconfiguredBoardsRes.body.error.code, "SUPABASE_UNAVAILABLE");
+  } finally {
+    await harness.db.close();
+  }
+});
+
+test("meeting origin keys are idempotent and bound to the owner and exact candidate", async () => {
+  const harness = await createPgliteNotesBoardsHarness();
+  try {
+    const app = await createApp({
+      env: { APP_TRUSTED_ORIGINS: "https://console.test", AUTH_ALLOWED_GOOGLE_EMAILS: "review@example.invalid,peer@example.invalid" },
+      recruitmentContextLoader: testRecruitmentContext,
+      notesBoardsFetch: harness.fetchImpl,
+    });
+    const headers = { authorization: "Bearer supabase-token-owner-1" };
+    const body = {
+      title: "After call",
+      subject_type: "candidate",
+      subject_id: "sourcing:2",
+      origin_key: `meeting_draft:${FIRST_MEETING_ID}`,
+      body: { type: "doc", content: [{ type: "paragraph", content: [{ type: "text", text: "Verbatim call notes" }] }] },
+    };
+    const first = await request(app, "POST", "/api/notes", { headers, body });
+    assert.equal(first.status, 201);
+    assert.equal(first.body.note.origin_key, body.origin_key);
+    const repeated = await request(app, "POST", "/api/notes", { headers, body: { ...body, title: "Changed title" } });
+    assert.equal(repeated.status, 200);
+    assert.equal(repeated.body.note.id, first.body.note.id);
+    assert.equal(repeated.body.note.title, "After call");
+
+    const wrongCandidate = await request(app, "POST", "/api/notes", {
+      headers, body: { ...body, subject_id: `manual:${FIRST_MANUAL_CANDIDATE_ID}` },
+    });
+    assert.equal(wrongCandidate.status, 409);
+    assert.equal(wrongCandidate.body.error.code, "NOTE_ORIGIN_CONFLICT");
+
+    const otherOwnersMeeting = await request(app, "POST", "/api/notes", {
+      headers, body: { ...body, origin_key: `meeting_draft:${SECOND_MEETING_ID}` },
+    });
+    assert.equal(otherOwnersMeeting.status, 409);
+    assert.equal(otherOwnersMeeting.body.error.code, "NOTE_ORIGIN_CONFLICT");
+
+    const malformed = await request(app, "POST", "/api/notes", {
+      headers, body: { ...body, origin_key: "meeting_draft:not-a-uuid" },
+    });
+    assert.equal(malformed.status, 400);
   } finally {
     await harness.db.close();
   }

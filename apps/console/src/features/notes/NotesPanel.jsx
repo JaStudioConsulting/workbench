@@ -8,6 +8,7 @@ import {
   saveSubjectNote,
 } from "./notesClient.js";
 import { createNoteSaveQueue, createNoteSession, hasUnsavedChanges } from "./noteSaveQueue.js";
+import MeetingTranscriptPreview from "./MeetingTranscriptPreview.jsx";
 
 const EMPTY_DOCUMENT = { type: "doc", content: [{ type: "paragraph" }] };
 const AUTOSAVE_DELAY_MS = 700;
@@ -178,6 +179,8 @@ export default function NotesPanel({ subjectType, subjectId, defaultTitle = "" }
     return <p className="text-sm text-muted-foreground">Notes need a verified candidate, job, or saved meeting ID.</p>;
   }
 
+  const activeOriginKey = notes.find((note) => note.id === view?.id)?.origin_key;
+
   const statusText = {
     saving: "Saving…",
     saved: "Saved",
@@ -223,6 +226,9 @@ export default function NotesPanel({ subjectType, subjectId, defaultTitle = "" }
               onBlur={() => { void flush(); }}
             />
           </EditorRoot>
+          {subject.subject_type === "candidate" && activeOriginKey?.startsWith("meeting_draft:") ? (
+            <MeetingTranscriptPreview key={view.id} originKey={activeOriginKey} candidateId={subject.subject_id} />
+          ) : null}
           <p aria-live="polite" className="text-xs text-muted-foreground">{statusText}</p>
         </div>
       ) : phase !== "loading" ? <p className="text-sm text-muted-foreground">No notes yet. Add one to start.</p> : null}

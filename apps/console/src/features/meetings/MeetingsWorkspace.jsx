@@ -21,6 +21,7 @@ import {
 import { createMeetingAdapter } from "./meetingAdapter.js";
 import { downloadMeetingMarkdown, printMeetingPdf } from "./meetingExport.js";
 import { createMeetingDraft, formatSpeakerTranscript, groupCalendarEvents, safeJoinUrl } from "./meetingModel.js";
+import { syncMeetingDraftNotes } from "./meetingNotesSync.js";
 import { saveMeetingAndReleaseArchive } from "./meetingRetention.js";
 import { MEETING_TEMPLATES, renderMeetingTemplate } from "./meetingTemplates.js";
 import MeetingCaptureVariants from "./MeetingCaptureVariants.jsx";
@@ -96,6 +97,7 @@ export default function MeetingsWorkspace({ adapter = defaultAdapter, launchCont
   const [notes, setNotes] = useState("");
   const [error, setError] = useState("");
   const [status, setStatus] = useState("");
+  const [notesWarning, setNotesWarning] = useState("");
   const [makingNotes, setMakingNotes] = useState(false);
 
   const loadCalendar = useCallback(() => {
@@ -291,7 +293,7 @@ export default function MeetingsWorkspace({ adapter = defaultAdapter, launchCont
   };
 
   const saveDraft = async () => {
-    setError(""); setStatus("");
+    setError(""); setStatus(""); setNotesWarning("");
     const jobForDraft = selectedJob || launchContext?.job || (recordingMetadata?.jobId ? { id: recordingMetadata.jobId, title: recordingMetadata.jobTitle } : null);
     const candidateForDraft = selectedCandidate || launchContext?.candidate || (recordingMetadata?.candidateId ? { id: recordingMetadata.candidateId, name: recordingMetadata.candidateName } : null);
     if (!jobForDraft || !candidateForDraft) { setError("Choose a real candidate and job before saving."); return; }
@@ -318,6 +320,17 @@ export default function MeetingsWorkspace({ adapter = defaultAdapter, launchCont
         recordingId: recordingMetadata?.id,
       });
       if (result?.persistence === "durable" && result?.draft?.id) setLoadedMeetingId(result.draft.id);
+      if (result?.persistence === "durable" && result?.draft?.id) {
+        const notesSync = await syncMeetingDraftNotes({
+          persistence: result.persistence,
+          draftId: result.draft.id,
+          candidateId: candidateForDraft.id,
+          label: draft.event?.title || candidateForDraft.name,
+          transcript,
+          notes,
+        });
+        setNotesWarning(notesSync.warning);
+      }
       if (result?.persistence === "durable" && result?.draft?.id && !result.archiveRetained) setRecoveries((current) => current.filter((item) => item.id !== recordingMetadata?.id));
       setStatus(result.warning || (result.persistence === "durable" ? "Meeting draft saved." : "Meeting draft saved for this session."));
     } catch (saveError) { setError(saveError.message || "Meeting draft could not be saved."); }
@@ -349,6 +362,7 @@ export default function MeetingsWorkspace({ adapter = defaultAdapter, launchCont
   return <div className="flex flex-col gap-4" data-testid="meetings-workspace">
     <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-lg font-semibold">Meetings</h2><p className="text-sm text-muted-foreground">Calendar, recording, transcript, and recruiting context in one place.</p></div><Badge variant="outline">Google Calendar read-only</Badge></div>
     {error ? <div role="alert" className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">{error}</div> : null}
+    {notesWarning ? <div role="alert" className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">{notesWarning}</div> : null}
     <div role="status" aria-atomic="true" className={status ? "rounded-md border border-emerald-700/30 bg-emerald-50 p-3 text-sm text-emerald-950" : "sr-only"}>{status}</div>
 
     {recoveries.length ? <Card><CardHeader><CardTitle>Recovered audio on this device</CardTitle><CardDescription>These recordings were kept on this device after the recorder stopped or the tab closed. Send one to the M1 to recover its transcript.</CardDescription></CardHeader><CardContent className="grid gap-3">{recoveries.map((item) => <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border p-3" key={item.id}><div className="min-w-0"><p className="break-words text-sm font-semibold">{item.candidateName || "Candidate"}{item.jobTitle ? ` · ${item.jobTitle}` : ""}</p><p className="text-xs text-muted-foreground">{item.startedAt ? new Date(item.startedAt).toLocaleString() : "Saved recording"} · Microphone only</p></div><Button className="h-auto min-h-9 whitespace-normal text-center" variant="outline" onClick={() => recoverSavedRecording(item.id)} disabled={Boolean(recoveringId) || Boolean(recording)}>{recoveringId === item.id ? "Recovering..." : "Recover recording"}</Button></div>)}</CardContent></Card> : null}

@@ -156,6 +156,7 @@ export function normalizeNoteRow(row) {
     subject_type: parsedLink ? parsedLink.subject_type : (row.subject_type ?? null),
     subject_id: parsedLink ? parsedLink.subject_id : (row.subject_id ?? null),
     body: row.body,
+    origin_key: row.origin_key ?? null,
     created_at: normalizeTimestamp(row.created_at),
     updated_at: normalizeTimestamp(row.updated_at),
   };
@@ -388,6 +389,39 @@ export function createSupabaseNotesBoardsStore({
     return normalizeRow(row);
   }
 
+  async function findNoteByOriginKey({ accessToken, ownerId, originKey }) {
+    const params = new URLSearchParams({
+      select: "*",
+      owner_id: `eq.${ownerId}`,
+      origin_key: `eq.${originKey}`,
+      limit: "1",
+    });
+    const response = await fetchImpl(`${supabaseUrl}/rest/v1/notes?${params.toString()}`, {
+      method: "GET",
+      headers: rlsHeaders(accessToken),
+    });
+    const payload = await parseJsonSafe(response);
+    if (!response.ok) {
+      throw mapPostgrestError(response, payload, "Note could not be loaded", "NOTE_STORAGE_FAILED");
+    }
+    const row = Array.isArray(payload) ? payload[0] : null;
+    if (!row) return null;
+    if (row.owner_id && String(row.owner_id).toLowerCase() !== ownerId) {
+      throw Object.assign(new Error("Record owner mismatch"), { status: 403, code: "FORBIDDEN" });
+    }
+    return normalizeNoteRow(row);
+  }
+
+  function existingOriginNote(note, verifiedSubject) {
+    if (note.subject_type !== verifiedSubject.subject_type || note.subject_id !== verifiedSubject.subject_id) {
+      throw Object.assign(new Error("This origin key is already linked to a different record"), {
+        status: 409,
+        code: "NOTE_ORIGIN_CONFLICT",
+      });
+    }
+    return { note, created: false };
+  }
+
   function buildListParams(checkedOwnerId, query) {
     const params = new URLSearchParams({
       select: "*",
@@ -509,12 +543,54 @@ export function createSupabaseNotesBoardsStore({
         subject_id: parsedInput.subject_id,
       });
 
+      // A meeting origin must resolve under this owner and point to the exact
+      // candidate source key. The key alone is never proof of a relationship.
+      if (parsedInput.origin_key?.startsWith("meeting_draft:")) {
+        const rawMeetingId = parsedInput.origin_key.slice("meeting_draft:".length);
+        const parsedMeetingId = SupabaseUserIdSchema.safeParse(rawMeetingId);
+        if (!parsedMeetingId.success || verifiedSubject.subject_type !== "candidate") {
+          throw Object.assign(new Error("Meeting origin requires a candidate and valid meeting ID"), {
+            status: 400,
+            code: "INVALID_INPUT",
+          });
+        }
+        const meeting = await selectSingleRowById({
+          accessToken,
+          ownerId: checkedOwnerId,
+          table: "meeting_drafts",
+          id: parsedMeetingId.data.toLowerCase(),
+          normalizeRow: (row) => row,
+          storageCode: "NOTE_STORAGE_FAILED",
+        });
+        const meetingCandidateId = meeting
+          ? `${meeting.candidate_source}:${meeting.candidate_source_id}`
+          : null;
+        if (!meeting || meetingCandidateId !== verifiedSubject.subject_id) {
+          throw Object.assign(new Error("Meeting origin does not match this candidate"), {
+            status: 409,
+            code: "NOTE_ORIGIN_CONFLICT",
+          });
+        }
+      }
+
+      // An origin key makes creation idempotent: a repeat returns the note that
+      // already exists for that key and never inserts a duplicate or replaces text.
+      if (parsedInput.origin_key) {
+        const existing = await findNoteByOriginKey({
+          accessToken,
+          ownerId: checkedOwnerId,
+          originKey: parsedInput.origin_key,
+        });
+        if (existing) return existingOriginNote(existing, verifiedSubject);
+      }
+
       const rowToInsert = {
         owner_id: checkedOwnerId,
         title: parsedInput.title,
         subject_type: verifiedSubject.subject_type,
         subject_id: verifiedSubject.subject_id,
         body: parsedInput.body,
+        ...(parsedInput.origin_key ? { origin_key: parsedInput.origin_key } : {}),
       };
 
       const response = await fetchImpl(`${supabaseUrl}/rest/v1/notes?select=*`, {
@@ -527,6 +603,16 @@ export function createSupabaseNotesBoardsStore({
       });
       const payload = await parseJsonSafe(response);
       if (!response.ok) {
+        // Two concurrent creates with one origin key: the unique index rejects the
+        // second insert, so return the row the first one wrote.
+        if (parsedInput.origin_key && payload?.code === "23505") {
+          const raced = await findNoteByOriginKey({
+            accessToken,
+            ownerId: checkedOwnerId,
+            originKey: parsedInput.origin_key,
+          });
+          if (raced) return existingOriginNote(raced, verifiedSubject);
+        }
         throw mapPostgrestError(response, payload, "Note could not be created", "NOTE_STORAGE_FAILED");
       }
       const inserted = Array.isArray(payload) ? payload[0] : payload;
@@ -542,7 +628,7 @@ export function createSupabaseNotesBoardsStore({
           code: "FORBIDDEN",
         });
       }
-      return NoteResponseSchema.parse({ note: normalizeNoteRow(inserted) });
+      return { note: NoteResponseSchema.parse({ note: normalizeNoteRow(inserted) }).note, created: true };
     },
 
     async updateNote({ accessToken, ownerId, id, input }) {
@@ -1020,7 +1106,8 @@ export function registerNotesBoardsRoutes(app, {
         ownerId: req.supabaseWorkbenchAuth.ownerId,
         input: parsedBody.data,
       });
-      return noStore(res).status(201).json(NoteResponseSchema.parse(result));
+      // 201 for a new note; 200 when an origin_key replays an existing note.
+      return noStore(res).status(result.created ? 201 : 200).json(NoteResponseSchema.parse({ note: result.note }));
     } catch (error) {
       return handleRouteError(res, error, "Note could not be created", "SUBJECT_NOT_FOUND", "NOTE_STORAGE_FAILED");
     }
