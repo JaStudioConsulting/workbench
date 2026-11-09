@@ -109,7 +109,7 @@ function normalizeTimestamp(value) {
     const trimmed = value.trim();
     if (!trimmed) return null;
     const parsed = new Date(trimmed);
-    if (!Number.isNaN(parsed.getTime())) return parsed.toISOString();
+    if (!Number.isNaN(parsed.getTime())) return trimmed;
     return trimmed;
   }
   return null;
@@ -597,6 +597,7 @@ export function createSupabaseNotesBoardsStore({
       const params = new URLSearchParams({
         id: `eq.${checkedId}`,
         owner_id: `eq.${checkedOwnerId}`,
+        updated_at: `eq.${existing.updated_at}`,
         select: "*",
       });
       const response = await fetchImpl(`${supabaseUrl}/rest/v1/notes?${params.toString()}`, {
@@ -613,9 +614,9 @@ export function createSupabaseNotesBoardsStore({
       }
       const updated = Array.isArray(payload) ? payload[0] : payload;
       if (!updated?.id) {
-        throw Object.assign(new Error("Note was not found"), {
-          status: 404,
-          code: "NOTE_NOT_FOUND",
+        throw Object.assign(new Error("Note changed during autosave"), {
+          status: 409,
+          code: "AUTOSAVE_CONFLICT",
         });
       }
       if (updated.owner_id && String(updated.owner_id).toLowerCase() !== checkedOwnerId) {
@@ -804,6 +805,7 @@ export function createSupabaseNotesBoardsStore({
       const params = new URLSearchParams({
         id: `eq.${checkedId}`,
         owner_id: `eq.${checkedOwnerId}`,
+        updated_at: `eq.${existing.updated_at}`,
         select: "*",
       });
       const response = await fetchImpl(`${supabaseUrl}/rest/v1/boards?${params.toString()}`, {
@@ -820,9 +822,9 @@ export function createSupabaseNotesBoardsStore({
       }
       const updated = Array.isArray(payload) ? payload[0] : payload;
       if (!updated?.id) {
-        throw Object.assign(new Error("Board was not found"), {
-          status: 404,
-          code: "BOARD_NOT_FOUND",
+        throw Object.assign(new Error("Board changed during autosave"), {
+          status: 409,
+          code: "AUTOSAVE_CONFLICT",
         });
       }
       if (updated.owner_id && String(updated.owner_id).toLowerCase() !== checkedOwnerId) {
