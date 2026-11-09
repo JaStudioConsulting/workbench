@@ -22,5 +22,8 @@
     "googleapis": "^176.0.0",
     "pg": "^8.16.2",
     "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "0.5.15"
   }
 }
