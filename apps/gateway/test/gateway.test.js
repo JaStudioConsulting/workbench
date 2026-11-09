@@ -5,7 +5,6 @@ import { createApp } from "../app.js";
 import { createConfiguredAuth, parseAllowedGoogleEmails, parseExactHttpsOrigins } from "../src/auth.js";
 import { prepareAfterCallWorkflow } from "../src/after-call.js";
 import { createDraftOnlyMailService } from "../src/gmail.js";
-import { assertReadOnlyCypher, createReadOnlyNeo4jAdapter, stripCypherLiteralsAndComments } from "../src/neo4j.js";
 import { discoverMcp, loadRecruitmentAuthority, validatePublishedRecruitmentAssets, validateRecruitmentManifest } from "../src/recruitment-package.js";
 import { createMemoryTestStorage, requireDurableStorage } from "../src/storage.js";
 
@@ -218,6 +217,12 @@ test("MCP initializes and lists only recruiter plus read-only status", async () 
   const listed = await request(app, "POST", "/mcp", { headers, body: { jsonrpc: "2.0", id: 2, method: "tools/list", params: {} } });
   assert.equal(listed.status, 200);
   assert.deepEqual(listed.body.result.tools.map((tool) => tool.name).sort(), ["recruiter", "workspace_status"]);
+  const status = await request(app, "POST", "/mcp", { headers, body: { jsonrpc: "2.0", id: 5, method: "tools/call", params: { name: "workspace_status", arguments: {} } } });
+  assert.equal(status.status, 200);
+  assert.match(status.body.result.content[0].text, /Supabase-backed candidate review/);
+  assert.match(status.body.result.content[0].text, /does not check current connectivity/);
+  assert.match(status.body.result.content[0].text, /Loxo changes queue for review/);
+  assert.doesNotMatch(status.body.result.content[0].text, /review-only|Durable storage is unavailable/);
   const router = await request(app, "POST", "/mcp", { headers, body: { jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "recruiter", arguments: {} } } });
   assert.equal(router.status, 200);
   assert.match(router.body.result.content[0].text, /recruiter/i);
@@ -314,15 +319,12 @@ test("draft-only mail and test-only storage do not expose external write methods
   assert.throws(() => requireDurableStorage(storage), { code: "STORAGE_UNAVAILABLE" });
 });
 
-test("Neo4j stays disabled without a driver and blocks bypass attempts", async () => {
-  const graph = createReadOnlyNeo4jAdapter();
-  assert.deepEqual(await graph.read("MATCH (n) RETURN n"), { available: false, records: [] });
-  for (const query of ["MATCH (n) SET n.x = 1 RETURN n", "WITH 1 AS n CREATE (x) RETURN x", "MATCH (n) RETURN n; MATCH (m) RETURN m", "CALL db.labels()", "MATCH (n) // SET n.x = 1\n RETURN n"]) {
-    if (query.includes("//")) assert.doesNotThrow(() => assertReadOnlyCypher(query));
-    else assert.throws(() => assertReadOnlyCypher(query), { code: "NEO4J_WRITE_REJECTED" });
-  }
-  assert.equal(stripCypherLiteralsAndComments("MATCH (n {note: 'CREATE'}) RETURN n").includes("CREATE"), false);
-  await assert.rejects(() => graph.write("anything"), { code: "NEO4J_WRITE_REJECTED" });
+test("public safety status contains only supported fields", async () => {
+  const app = await createApp({ env: testEnv, recruitmentContextLoader: testRecruitmentContext });
+  const response = await request(app, "GET", "/api/safety");
+  assert.equal(response.status, 200);
+  assert.deepEqual(Object.keys(response.body).sort(), ["auth", "externalWrites", "gmail", "storage"]);
+  assert.equal(response.body.externalWrites, false);
 });
 
 test("full synthetic after-call output is recruiter-authorized, draft-only, and source-backed", () => {

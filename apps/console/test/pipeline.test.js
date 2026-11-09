@@ -101,6 +101,16 @@ test("Pipeline page loads live data, queues exact stage notes, and compiles", as
   assert.match(source, /DragDropProvider/);
   assert.match(source, /onOpenCandidate\?\.\(job\.id, candidate\.id\)/);
   assert.match(source, /Move \$\{candidate\.name\} to stage/);
+  assert.match(source, /<CandidatePresentationBadges/);
+  assert.match(source, /<CandidatePresentationSummary/);
+  assert.match(source, /prefix="pipeline"/);
+  assert.doesNotMatch(source, /purple|violet|indigo|fuchsia|#6b4ea8/i);
   const result = await transformWithEsbuild(source, "PipelinePage.jsx", { loader: "jsx", jsx: "automatic" });
   assert.match(result.code, /function PipelinePage/);
+});
+
+test("Pipeline uses the saved Settings Canada preference, with Canada on by default", async () => {
+  const source = await readFile(new URL("../src/features/pipeline/PipelinePage.jsx", import.meta.url), "utf8");
+  assert.match(source, /useState\(\(\) => readCanadaFilter\(\)\)/);
+  assert.match(source, /onCheckedChange=\{\(value\) => setCanadaOnly\(saveCanadaFilter\(Boolean\(value\)\)\)\}/);
 });

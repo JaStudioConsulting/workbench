@@ -1,6 +1,6 @@
 import { execFile, spawn } from "node:child_process";
 import { createReadStream } from "node:fs";
-import { mkdir, readFile, readdir, rename, stat, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
 import { randomBytes, randomUUID } from "node:crypto";
 import { dirname, join, resolve } from "node:path";
 import { promisify } from "node:util";
@@ -9,6 +9,8 @@ const execFileAsync = promisify(execFile);
 const DEFAULT_CLI = resolve(process.cwd(), "../../native/bin/workbench-transcribe");
 const DEFAULT_CAPTURE_ROOT = resolve(process.cwd(), "../../native/recordings");
 const CAPTURE_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const CAPTURE_RETENTION_MS = 7 * 24 * 60 * 60 * 1_000;
+const RETENTION_CHECK_INTERVAL_MS = 24 * 60 * 60 * 1_000;
 
 function safeText(value, label) {
   const text = String(value || "").trim();
@@ -38,6 +40,37 @@ async function processIdentity(pid) {
     const value = stdout.trim();
     return value || null;
   } catch { return null; }
+}
+
+export async function pruneExpiredNativeCaptures({
+  captureRoot = process.env.WORKBENCH_CAPTURE_ROOT || DEFAULT_CAPTURE_ROOT,
+  activeIds = new Set(),
+  now = Date.now(),
+  logger = console,
+} = {}) {
+  const root = resolve(captureRoot);
+  const entries = await readdir(root, { withFileTypes: true }).catch((error) => {
+    if (error?.code === "ENOENT") return [];
+    throw error;
+  });
+  let removed = 0;
+  let failed = 0;
+  for (const entry of entries) {
+    if (!entry.isDirectory() || !CAPTURE_ID.test(entry.name) || activeIds.has(entry.name)) continue;
+    const directory = join(root, entry.name);
+    const ledger = await readJson(join(directory, "gateway-session.json")).catch(() => null);
+    const createdAt = Date.parse(ledger?.createdAt || "");
+    if (!Number.isFinite(createdAt) || now - createdAt < CAPTURE_RETENTION_MS) continue;
+    if (ledger.processIdentity && await processIdentity(ledger.helperPID) === ledger.processIdentity) continue;
+    try {
+      await rm(directory, { recursive: true, force: true });
+      removed += 1;
+    } catch (error) {
+      failed += 1;
+      logger.error("Native capture retention cleanup failed.", { captureId: entry.name, error });
+    }
+  }
+  return { removed, failed };
 }
 
 function sessionEvents(child) {
@@ -94,11 +127,22 @@ export function createNativeCaptureManager({
   captureRoot = process.env.WORKBENCH_CAPTURE_ROOT || DEFAULT_CAPTURE_ROOT,
   spawnImpl = spawn,
   leaseSeconds = 8,
+  logger = console,
 } = {}) {
   const root = resolve(captureRoot);
   const active = new Map();
   const stopping = new Map();
   const completedStops = new Map();
+  let retentionTimer = null;
+
+  async function cleanupExpired() {
+    try {
+      return await pruneExpiredNativeCaptures({ captureRoot: root, activeIds: new Set(active.keys()), logger });
+    } catch (error) {
+      logger.error("Native capture retention scan failed.", { error });
+      return { removed: 0, failed: 1 };
+    }
+  }
 
   function directoryFor(id) {
     if (!CAPTURE_ID.test(id)) throw new Error("Capture ID is invalid");
@@ -152,6 +196,11 @@ export function createNativeCaptureManager({
         await recoverRecord(record).catch(async (error) => updateLedger(record, { state: "recoverable", warning: error.message }));
         active.delete(entry.name);
       }
+    }
+    await cleanupExpired();
+    if (!retentionTimer) {
+      retentionTimer = setInterval(cleanupExpired, RETENTION_CHECK_INTERVAL_MS);
+      retentionTimer.unref?.();
     }
   }
 
@@ -298,6 +347,7 @@ export function createNativeCaptureManager({
     audioInfo,
     loadFinalizedResponse,
     saveFinalizedResponse,
+    cleanupExpired,
     async available() { try { return (await stat(cliPath)).isFile(); } catch { return false; } },
     async status(id, ownerId) {
       const directory = directoryFor(id);

@@ -713,3 +713,37 @@ h1 {
     transition: none;
   }
 }
+
+/* Novel notes stay within the Workbench palette and preserve text selection. */
+.workbench-notes-panel .workbench-note-editor,
+.workbench-notes-panel .workbench-note-editor .tiptap {
+  user-select: text;
+  -webkit-user-select: text;
+}
+.workbench-notes-panel .workbench-note-editor .tiptap {
+  min-height: 8rem;
+  outline: none;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.workbench-notes-panel .workbench-note-editor:focus-within {
+  outline: 2px solid #3b5646;
+  outline-offset: 2px;
+}
+.workbench-notes-panel .workbench-note-editor a {
+  color: #273c30;
+  text-decoration: underline;
+}
+
+/* Keep Excalidraw controls in the Workbench forest and sage palette. */
+.workbench-board-panel .excalidraw.theme--light {
+  --color-primary: var(--forest);
+  --color-primary-darker: #213328;
+  --color-primary-darkest: #17271d;
+  --color-primary-hover: #3b5646;
+  --color-primary-light: var(--forest-soft);
+  --color-brand-active: #213328;
+  --color-brand-hover: #3b5646;
+  --color-surface-primary-container: var(--forest-soft);
+  --color-on-primary-container: #213328;
+}

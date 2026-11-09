@@ -280,18 +280,14 @@ export async function recoverBrowserRecording(recordingId, { indexedDBImpl = glo
 
 export async function discardRecordingArchive(recordingId, { indexedDBImpl = globalThis.indexedDB } = {}) {
   if (!recordingId || !indexedDBImpl?.open) return;
-  try {
-    await withRecordingDb(indexedDBImpl, async (db) => {
-      const transaction = db.transaction([RECORDING_META_STORE, RECORDING_CHUNK_STORE], "readwrite");
-      transaction.objectStore(RECORDING_META_STORE).delete(recordingId);
-      const chunkStore = transaction.objectStore(RECORDING_CHUNK_STORE);
-      const request = chunkStore.index("recordingId").getAllKeys(recordingId);
-      request.onsuccess = () => request.result.forEach((key) => chunkStore.delete(key));
-      await transactionDone(transaction);
-    });
-  } catch {
-    /* Recovery cleanup is optional. */
-  }
+  await withRecordingDb(indexedDBImpl, async (db) => {
+    const transaction = db.transaction([RECORDING_META_STORE, RECORDING_CHUNK_STORE], "readwrite");
+    transaction.objectStore(RECORDING_META_STORE).delete(recordingId);
+    const chunkStore = transaction.objectStore(RECORDING_CHUNK_STORE);
+    const request = chunkStore.index("recordingId").getAllKeys(recordingId);
+    request.onsuccess = () => request.result.forEach((key) => chunkStore.delete(key));
+    await transactionDone(transaction);
+  });
 }
 
 function createAudioContext(AudioContextImpl, sampleRate) {

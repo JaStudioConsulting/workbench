@@ -33,7 +33,7 @@ writes.
 
 `@jastudioconsulting/recruitment-skills` is an external dependency pinned to an immutable Git commit. The gateway loads its exported authority API; it never reaches into `node_modules`, a relative skills directory, or a copied skill tree.
 
-The MCP discovery surface is deliberately small: `$recruiter` is the only authority/tool that routes recruiting capabilities. `workspace_status` is read-only. The stateless Streamable HTTP endpoint creates a fresh server and transport per request. Send, submit, Loxo write, approvals, deletes, Neo4j writes, and standalone internal capabilities are absent.
+The MCP discovery surface is deliberately small: `$recruiter` is the only authority/tool that routes recruiting capabilities. `workspace_status` is read-only. The stateless Streamable HTTP endpoint creates a fresh server and transport per request. Send, submit, Loxo write, approvals, deletes, and standalone internal capabilities are absent.
 
 Synthetic fixtures remain test-only. The production console does not replace a
 failed live query with fixture records.

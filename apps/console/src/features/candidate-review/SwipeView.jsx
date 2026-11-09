@@ -1,6 +1,7 @@
 import { ChevronLeft, ChevronRight, Users } from "lucide-react";
 import { Button } from "../../components/ui/button.tsx";
 import CandidateCard from "./CandidateCard.jsx";
+import { CandidatePresentationBadges } from "./CandidatePresentationSummary.jsx";
 import { getWindowedIndices, MAX_VISIBLE_DOTS } from "./figureUtils.js";
 
 export default function SwipeView({
@@ -50,6 +51,11 @@ export default function SwipeView({
               {currentCandidate.decision === "want" ? "Marked Want" : "Marked Pass"}
             </span>
           )}
+          <CandidatePresentationBadges
+            candidate={currentCandidate}
+            jobId={currentJob?.id}
+            prefix="swipe"
+          />
         </div>
 
         <div className="flex items-center gap-1.5">

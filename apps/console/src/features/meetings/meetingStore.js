@@ -16,6 +16,7 @@ function displayMeeting(row) {
     candidateId: `${row.candidate_source}:${row.candidate_source_id}`,
     templateId: row.template_id || null,
     transcript: row.transcript,
+    transcriptExpiredAt: row.transcript_expired_at || null,
     notes: row.notes || "",
     recordingId: row.recording_id || null,
     captureStatus: row.capture_status || "transcribed",

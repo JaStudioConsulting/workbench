@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="JA Workbench">
+  <rect width="512" height="512" fill="#213328" />
+  <rect x="72" y="72" width="368" height="368" rx="76" fill="#273c30" stroke="#3b5646" stroke-width="8" />
+  <g fill="none" stroke="#d9c38d" stroke-width="38" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M154 166 H220 V292 A42 42 0 0 1 145.65 318.88" />
+    <path d="M286 334 L336 166 L386 334" />
+    <path d="M302 282 H370" stroke-width="32" />
+  </g>
+</svg>
