@@ -15,7 +15,7 @@ import {
   matchCandidateToOpenJobs,
   province,
   scoreFit,
-} from "../src/features/search/index.js";
+} from "../src/features/search/jobMatcher.js";
 
 const SYNTHETIC_OPEN_JOBS = Object.freeze([
   Object.freeze({
