@@ -112,7 +112,7 @@ export default function PeopleView({ candidates, currentJob, jobs, submissionHis
         <div className="flex flex-wrap items-center gap-2">
           <div className="relative min-w-[220px] flex-1">
             <Search size={14} className="absolute left-2.5 top-2.5 text-muted-foreground" />
-            <input value={searchTerm} onChange={(event) => setSearchTerm(event.target.value)} placeholder="Search name, title, company, location" className="h-9 w-full rounded-md border bg-background pl-8 pr-3 text-xs outline-none focus:ring-2 focus:ring-ring" data-testid="people-search" />
+            <input value={searchTerm} onChange={(event) => setSearchTerm(event.target.value)} placeholder="Search name, title, company, location" className="h-9 w-full rounded-md border bg-background pl-8 pr-3 text-xs outline-none focus:ring-2 focus:ring-ring" aria-label="Search candidates" data-testid="people-search" />
           </div>
           <div className="w-44">
             <Select value={stageFilter} onValueChange={setStageFilter}>
@@ -137,8 +137,8 @@ export default function PeopleView({ candidates, currentJob, jobs, submissionHis
                 {jobs.map((job) => <SelectItem key={job.id} value={String(job.id)} className="text-xs">{job.title}</SelectItem>)}
               </SelectGroup></SelectContent>
             </Select>
-            <input value={submissionLocation} onChange={(event) => setSubmissionLocation(event.target.value)} placeholder="Location" className="h-8 rounded-md border bg-background px-2 text-xs" />
-            <input value={submissionClient} onChange={(event) => setSubmissionClient(event.target.value)} placeholder="Client" className="h-8 rounded-md border bg-background px-2 text-xs" />
+            <input value={submissionLocation} onChange={(event) => setSubmissionLocation(event.target.value)} placeholder="Location" aria-label="Filter submissions by location" className="h-8 rounded-md border bg-background px-2 text-xs" />
+            <input value={submissionClient} onChange={(event) => setSubmissionClient(event.target.value)} placeholder="Client" aria-label="Filter submissions by client" className="h-8 rounded-md border bg-background px-2 text-xs" />
             <input type="date" value={submissionFrom} onChange={(event) => setSubmissionFrom(event.target.value)} aria-label="Submitted from" className="h-8 rounded-md border bg-background px-2 text-xs" />
             <input type="date" value={submissionTo} onChange={(event) => setSubmissionTo(event.target.value)} aria-label="Submitted to" className="h-8 rounded-md border bg-background px-2 text-xs" />
           </div>
@@ -163,13 +163,20 @@ export default function PeopleView({ candidates, currentJob, jobs, submissionHis
               const recordKey = `${candidate.reviewJobId || currentJob?.id || candidate.jobId}:${candidate.id}:${candidate.submission?.id || "candidate"}`;
 
               return (
-                <div key={recordKey} onClick={() => isUnreviewed && onSelectCandidateToSwipe(candidate.id)} className={`p-3.5 transition-colors ${isUnreviewed ? "cursor-pointer hover:bg-muted/30" : ""}`}>
+                <div key={recordKey} className="p-3.5">
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div className="flex min-w-0 flex-1 items-center gap-3">
                       <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-foreground text-background text-sm font-bold">{candidate.initials}</div>
                       <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-2">
-                          {candidate.profileUrl || candidate.loxoPersonId ? <a href={candidate.profileUrl || `${LOXO_PEOPLE_BASE_URL}${candidate.loxoPersonId}`} target="_blank" rel="noopener noreferrer" onClick={(event) => event.stopPropagation()} className="flex items-center gap-1 text-sm font-bold hover:underline">{candidate.name}<ExternalLink size={12} className="text-muted-foreground" /></a> : <span className="text-sm font-bold">{candidate.name}</span>}
+                          {isUnreviewed ? (
+                            <button type="button" onClick={() => onSelectCandidateToSwipe(candidate.id)} className="min-h-10 rounded text-left text-sm font-bold hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" data-testid="people-candidate-open">{candidate.name}</button>
+                          ) : candidate.profileUrl || candidate.loxoPersonId ? (
+                            <a href={candidate.profileUrl || `${LOXO_PEOPLE_BASE_URL}${candidate.loxoPersonId}`} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-sm font-bold hover:underline">{candidate.name}<ExternalLink size={12} className="text-muted-foreground" /></a>
+                          ) : <span className="text-sm font-bold">{candidate.name}</span>}
+                          {isUnreviewed && (candidate.profileUrl || candidate.loxoPersonId) ? (
+                            <a href={candidate.profileUrl || `${LOXO_PEOPLE_BASE_URL}${candidate.loxoPersonId}`} target="_blank" rel="noopener noreferrer" aria-label={`Open ${candidate.name} profile`} className="inline-flex min-h-10 min-w-10 items-center justify-center rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"><ExternalLink size={12} className="text-muted-foreground" /></a>
+                          ) : null}
                           <Badge variant="outline" className="text-[11px] py-0">{candidate.stage}</Badge>
                           <span className="text-[10.5px] text-muted-foreground">{resumeInfo.symbol} {resumeInfo.label}</span>
                         </div>
