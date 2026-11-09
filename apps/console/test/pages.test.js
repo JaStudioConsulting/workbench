@@ -2,20 +2,17 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
-test("legacy page exports point to finished Workbench pages", async () => {
-  const [stubs, home, mail] = await Promise.all([
-    readFile(new URL("../src/components/PageStubs.jsx", import.meta.url), "utf8"),
-    readFile(new URL("../src/components/HomeWidgets.jsx", import.meta.url), "utf8"),
-    readFile(new URL("../src/components/MailInbox.jsx", import.meta.url), "utf8"),
+test("App routes to active Workbench pages", async () => {
+  const [app, home, mail] = await Promise.all([
+    readFile(new URL("../src/App.jsx", import.meta.url), "utf8"),
+    readFile(new URL("../src/features/home/HomePage.jsx", import.meta.url), "utf8"),
+    readFile(new URL("../src/features/mail/MailPage.jsx", import.meta.url), "utf8"),
   ]);
-  assert.match(stubs, /features\/home\/HomePage/);
-  assert.match(stubs, /features\/leads\/LeadsPage/);
-  assert.match(stubs, /features\/mail\/MailPage/);
-  assert.match(stubs, /features\/recruiting\/ProcessPage/);
-  assert.match(stubs, /features\/settings\/SettingsPage/);
-  assert.match(stubs, /features\/profile\/ProfilePage/);
-  assert.match(home, /<HomePage/);
-  assert.match(mail, /<MailPage/);
+  for (const route of ["home/HomePage", "leads/LeadsPage", "mail/MailPage", "settings/SettingsPage", "profile/ProfilePage"]) {
+    assert.match(app, new RegExp(route));
+  }
+  assert.match(home, /loadHomeData/);
+  assert.match(mail, /listOutreach/);
 });
 
 test("current empty-workspace wiring renders implemented Home and Leads pages", async () => {
