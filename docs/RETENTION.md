@@ -1,0 +1,9 @@
+# Meeting retention
+
+Ja approved these rules on 2026-11-08:
+
+- Browser recording audio stays recoverable until a nonempty transcript is durably saved to Supabase. After that save, Workbench removes its IndexedDB archive, pending audio blob and download URL. A failed cleanup leaves the audio available and shows a warning.
+- Native capture directories under `WORKBENCH_CAPTURE_ROOT` are checked at gateway startup and daily. A directory with a valid gateway ledger older than seven days is removed unless its capture is active or its recorded helper process is still running. Failures go to the gateway error log. Unknown directories and directories without a valid creation timestamp are left alone.
+- Migration `030_meeting_retention.sql` enables `pg_cron` and schedules a daily 03:17 database-time job. It clears `meeting_drafts.transcript` and `speaker_segments` one year after `created_at`, recording the removal time in `transcript_expired_at`. It preserves notes and meeting metadata. The cron job and its runs can be inspected in `cron.job` and `cron.job_run_details` after migration approval.
+
+The migration is a draft and has not been applied. Verify the cron job, its first run and the M1 file cleanup after the approved deployment. Do not delete existing native recordings or run the SQL ahead of the M6 gate.
