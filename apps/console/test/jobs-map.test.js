@@ -18,6 +18,19 @@ import { INITIAL_JOBS_DATA } from "../src/features/jobs-map/sample-jobs.js";
 const here = path.dirname(fileURLToPath(import.meta.url));
 const featureRoot = path.resolve(here, "../src/features/jobs-map");
 
+test("Jobs Map location and filter controls have keyboard access and accessible names", () => {
+  const source = fs.readFileSync(path.join(featureRoot, "JobsMapView.jsx"), "utf8");
+  assert.match(source, /aria-label="Candidate city or address"/);
+  assert.match(source, /aria-label="Clear candidate location"/);
+  assert.match(source, /<button[\s\S]*?onClick=\{\(\) => handleSelectSuggestion\(item\)\}/);
+  assert.match(source, /aria-label="Filter title or skill"/);
+  assert.match(source, /aria-label="Filter jobs by recruiter owner"/);
+  assert.match(source, /aria-label="Filter jobs by distance"/);
+  assert.match(source, /aria-label="Filter jobs by region"/);
+  assert.match(source, /aria-pressed=\{mobileTab === "list"\}/);
+  assert.match(source, /aria-pressed=\{unit === "km"\}/);
+});
+
 test("CITY_COORDINATES resolves Ontario hubs and North American metropolitan areas", () => {
   assert.ok(CITY_COORDINATES["toronto, on"]);
   assert.ok(CITY_COORDINATES["windsor, on"]);
