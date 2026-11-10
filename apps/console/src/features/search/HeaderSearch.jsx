@@ -48,6 +48,7 @@ const INITIAL_SEARCH_STATE = Object.freeze({
   totalCount: 0,
   error: null,
 });
+const INITIAL_SEARCH_EVIDENCE = Object.freeze({ phase: "idle", byId: Object.freeze({}) });
 
 export default function HeaderSearch({
   onSelectResult,
@@ -55,11 +56,15 @@ export default function HeaderSearch({
   searchRunner = runWorkbenchSearch,
   evidenceLoader = defaultEvidenceLoader,
   debounceMs = 160,
+  initialOpen = false,
+  initialQuery = "",
+  initialState = INITIAL_SEARCH_STATE,
+  initialEvidence = INITIAL_SEARCH_EVIDENCE,
 }) {
-  const [open, setOpen] = useState(false);
-  const [query, setQuery] = useState("");
-  const [state, setState] = useState(INITIAL_SEARCH_STATE);
-  const [evidence, setEvidence] = useState({ phase: "idle", byId: {} });
+  const [open, setOpen] = useState(initialOpen);
+  const [query, setQuery] = useState(initialQuery);
+  const [state, setState] = useState(initialState);
+  const [evidence, setEvidence] = useState(initialEvidence);
   const [retryCounter, setRetryCounter] = useState(0);
 
   const containerRef = useRef(null);
