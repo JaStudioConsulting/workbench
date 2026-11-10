@@ -565,6 +565,18 @@ h1 {
   .workbench-table { min-width: 0; overflow-x: auto; }
 }
 
+/* Keep common controls usable without a mouse on touch-first devices. */
+@media (pointer: coarse) {
+  button,
+  [role=button],
+  [role=tab],
+  input,
+  select {
+    min-width: 44px;
+    min-height: 44px;
+  }
+}
+
 @theme { --color-background: #faf7f2; --color-foreground: #1b1c1a; --color-border: #e4ddd2; --color-primary: #273c30; --color-primary-foreground: #ffffff; --color-muted: #f5f1ea; --color-muted-foreground: #77746d; --color-accent: #e9efeb; --color-accent-foreground: #273c30; --color-ring: #718276; }
 
 .meeting-variant-page {
