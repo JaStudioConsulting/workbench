@@ -11,6 +11,7 @@ import { Textarea } from "../../components/ui/textarea.tsx";
 import { deleteLead, loadClientCompanies, loadLeadsWithStatus, saveLead } from "./leadsService.js";
 
 const EMPTY_LEAD = Object.freeze({ company: "", contact: "", role: "", status: "", nextAction: "", nextDate: "", notes: "" });
+const INITIAL_LEADS_STATE = Object.freeze({ phase: "loading", companies: [], leads: [], leadsStorage: null, error: "" });
 
 function formatDate(value) {
   if (!value) return "Not on file";
@@ -35,8 +36,8 @@ function LeadForm({ value, onChange }) {
   );
 }
 
-export default function LeadsPage({ focusLeadId = "", focusClient = null } = {}) {
-  const [state, setState] = useState({ phase: "loading", companies: [], leads: [], leadsStorage: null, error: "" });
+export default function LeadsPage({ focusLeadId = "", focusClient = null, initialState = INITIAL_LEADS_STATE } = {}) {
+  const [state, setState] = useState(initialState);
   const [reloadKey, setReloadKey] = useState(0);
   const [editing, setEditing] = useState(null);
   const [saving, setSaving] = useState(false);

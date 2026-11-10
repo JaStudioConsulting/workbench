@@ -1,8 +1,11 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
+import React from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
+import { createServer } from "vite";
 
 import {
   buildDisplayGroups,
@@ -199,21 +202,93 @@ test("seeded search routes the person and company to their exact pages", () => {
   assert.equal(companyNav.client.clientContact, null);
 });
 
-test("seeded Leads page wires the focused company card and shows unknown fields as Not on file", () => {
-  // LeadsPage server-renders its loading state before data loads, so the focus card is verified in source.
-  const leadsSource = fs.readFileSync(
-    path.join(consoleRoot, "src/features/leads/LeadsPage.jsx"),
-    "utf8",
-  );
-  assert.match(leadsSource, /focusClient\?\.entityId && !state\.companies\.some/);
-  assert.match(leadsSource, /focusClient\.jobTitles \|\| "Not on file"/);
-  assert.match(leadsSource, /focusClient\.location \|\| "Not on file"/);
-  assert.match(leadsSource, /focusClient\.clientContact \|\| "Not on file"/);
+test("server-rendered seeded HeaderSearch and Leads focus preserve unknown client fields", async () => {
+  const vite = await createServer({
+    root: new URL("../", import.meta.url).pathname,
+    server: { middlewareMode: true, hmr: false },
+    appType: "custom",
+    optimizeDeps: { noDiscovery: true, include: [] },
+  });
+  try {
+    const [{ default: HeaderSearch }, { default: LeadsPage }] = await Promise.all([
+      vite.ssrLoadModule("/src/features/search/HeaderSearch.jsx"),
+      vite.ssrLoadModule("/src/features/leads/LeadsPage.jsx"),
+    ]);
+    const clientResult = rawResult("client", "Apex Tooling");
+    const searchState = {
+      phase: "ready",
+      query: "program manager",
+      data: SEEDED_SEARCH_RESPONSE,
+      groups: buildDisplayGroups(SEEDED_SEARCH_RESPONSE),
+      totalCount: SEEDED_SEARCH_RESPONSE.results.length,
+      error: null,
+    };
 
-  const companyNav = resolveSearchNavigation(rawResult("client", "Apex Tooling"));
-  assert.equal(companyNav.client.jobTitles, null);
-  assert.equal(companyNav.client.clientContact, null);
-  assert.doesNotMatch(JSON.stringify(companyNav), /Wrong Client|Synthetic Client A/);
+    const searchHtml = renderToStaticMarkup(React.createElement(HeaderSearch, {
+      initialOpen: true,
+      initialQuery: "program manager",
+      initialState: searchState,
+      initialEvidence: {
+        phase: "ready",
+        byId: {
+          "submission:30": {
+            presentationStatus: "presented",
+            presentationLabel: "Presented to: Synthetic Client A",
+            pendingLabel: null,
+            matchesStatus: "loaded",
+            matches: [{
+              jobId: "501",
+              jobTitle: "Senior Program Manager",
+              company: "Synthetic Client A",
+              level: "possible",
+              reasons: ["title match"],
+            }],
+          },
+          "sourcing:20": {
+            presentationStatus: "pending",
+            presentationLabel: "No confirmed presentation on record",
+            pendingLabel: "Pending confirmation",
+            matchesStatus: "loaded",
+            matches: [],
+          },
+        },
+      },
+    }));
+    assert.match(searchHtml, /data-testid="search-group-candidates"/);
+    assert.match(searchHtml, /data-testid="search-group-leads"/);
+    assert.match(searchHtml, /data-testid="search-group-jobs"/);
+    assert.match(searchHtml, /data-testid="search-group-clients"/);
+    assert.match(searchHtml, /data-testid="search-result-candidate"[^>]*data-entity-id="submission:30"/);
+    assert.match(searchHtml, /data-testid="search-result-candidate"[^>]*data-entity-id="sourcing:20"/);
+    assert.match(searchHtml, /data-testid="search-result-job"[^>]*data-entity-id="501"/);
+    assert.match(searchHtml, /data-testid="search-result-client"[^>]*data-entity-id="Apex Tooling"/);
+    assert.match(searchHtml, /Apex Tooling/);
+    assert.match(searchHtml, /Presented to: Synthetic Client A/);
+    assert.match(searchHtml, /Senior Program Manager<\/span> · Synthetic Client A · possible · title match/);
+    assert.match(searchHtml, /Pending confirmation/);
+    assert.match(searchHtml, /Roles unknown · Location unknown/);
+    assert.doesNotMatch(searchHtml, /Wrong Client/);
+
+    const companyNav = resolveSearchNavigation(clientResult);
+    assert.equal(companyNav.page, "Leads");
+    assert.equal(companyNav.focusClientId, "Apex Tooling");
+    assert.equal(companyNav.client.jobTitles, null);
+    assert.equal(companyNav.client.location, null);
+    assert.equal(companyNav.client.clientContact, null);
+
+    const leadsHtml = renderToStaticMarkup(React.createElement(LeadsPage, {
+      focusClient: companyNav.client,
+      initialState: { phase: "ready", companies: [], leads: [], leadsStorage: null, error: "" },
+    }));
+    assert.match(leadsHtml, /data-testid="focused-client-card"/);
+    assert.match(leadsHtml, /Apex Tooling/);
+    assert.match(leadsHtml, /Roles:<\/span> Not on file/);
+    assert.match(leadsHtml, /Location:<\/span> Not on file/);
+    assert.match(leadsHtml, /Client contact:<\/span> Not on file/);
+    assert.doesNotMatch(leadsHtml, /Wrong Client|Synthetic Client A/);
+  } finally {
+    await vite.close();
+  }
 });
 
 test("seeded evidence separates confirmed presentations from queued actions and keeps blanks unknown", async () => {
