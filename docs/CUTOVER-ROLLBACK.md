@@ -7,7 +7,7 @@ This runbook records the M1 cutover and the acceptance still open. It does not a
 - Deployed source: `main` at `f4f3349027ebe7b9d9e3a44b198825ae2a0a3e4c`.
 - M1 LaunchAgent serves `http://100.121.104.40:8092/`; `/healthz` returned OK. Served `index.html`, manifest and icon byte-match the build.
 - Supabase project `abnfffkmxqixrwzackjf` has migrations `008`–`011` and `020`–`022` applied and ledger-confirmed. Migration `030` is explicitly deferred and not applied. Database view counts were read successfully.
-- The prior runtime backup and isolated source/build restore were verified; a live rollback was not performed.
+- Prior M1 runtime backup artifacts and an isolated source/build restore were verified. No Supabase database backup or isolated database restore proof was obtained for this cutover; no live rollback was performed.
 - Authenticated save/reload, full page acceptance and physical iPad/Pencil behavior remain unverified. Health and asset identity do not establish workflow acceptance.
 
 ## Gate 0: authorize a future named release
@@ -19,7 +19,8 @@ Before touching production, record all of the following in the release ticket/bo
 | Deployed release SHA | `f4f3349027ebe7b9d9e3a44b198825ae2a0a3e4c` |
 | Applied migration set | 008–011 and 020–022, ledger-confirmed |
 | Migration 030 | Explicitly deferred; not applied |
-| Prior runtime backup and isolated source/build restore | Verified |
+| Prior M1 runtime backup artifacts and isolated source/build restore | Verified |
+| Supabase database backup and isolated database restore proof | Not obtained for this cutover |
 | Authenticated save/reload, full page, physical iPad/Pencil | Unverified |
 | Live rollback | Unverified |
 
@@ -137,7 +138,8 @@ Trigger rollback on failed health/auth, an unexpected asset hash, source identit
 | Migrations 008–011 and 020–022 | Applied and ledger-confirmed | Verified |
 | Database view counts | Read successfully | Verified |
 | Migration 030 | Separately authorized and accepted | Explicitly deferred; not applied |
-| Prior runtime backup and isolated source/build restore | Recovery evidence | Verified |
+| Prior M1 runtime backup artifacts and isolated source/build restore | Runtime/source recovery evidence only | Verified |
+| Supabase database backup and isolated database restore proof | Database recovery evidence | Not obtained for this cutover |
 | Authentication and save/reload | Approved Ja session persists after reload | Not verified |
 | Full page acceptance | Released pages pass expected-state walk | Not verified |
 | Physical iPad/Pencil | Deployed build works on target device/input | Not verified |
