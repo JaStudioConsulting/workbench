@@ -1,7 +1,6 @@
 # Architecture
 
-The Workbench is split so the browser console does not own privileged
-integration credentials.
+The Workbench is split so the browser console does not own privileged integration credentials. This document covers the merged source; the M1 checkout and live service on port `8092` remain on an older build. Source features described below are not a statement of live availability.
 
 ```text
 Browser
@@ -10,6 +9,10 @@ Browser
        ├─ Supabase read: Tracker jobs and candidates
        ├─ Supabase write: review actions, drafts, profile, outreach log,
        │    leads, meeting drafts (owner-only RLS)
+       ├─ Candidate edit overlays and presentations (migrations 008–011)
+       ├─ Full-text search (migrations 010, 021)
+       ├─ Notes and Boards (migrations 020, 022)
+       ├─ Meeting transcript retention (migration 030)
        ├─ Google Calendar: approved read-only connection
        ├─ Gmail: draft creation and reply detection only, when the
        │    existing connection already grants that scope
@@ -18,67 +21,30 @@ Browser
        └─ Resume/write-up: source-grounded drafts only
 ```
 
-The M1 launch agent serves the built console and same-origin gateway together.
-The Tailscale address is private network access, not a public deployment.
+The M1 launch agent serves the built console and same-origin gateway together. The Tailscale address is private network access, not a public deployment. The gateway invokes the Workbench-owned `native/bin/workbench-transcribe` helper; local model files live under `native/support`. The helper is built from `packages/workbench-transcription-native`; no separate transcription app or nested source repository is part of the runtime.
 
-The gateway invokes the Workbench-owned `native/bin/workbench-transcribe`
-helper. Its local model files live under `native/support`. The helper is built
-from `packages/workbench-transcription-native`; no separate transcription app
-or nested source repository is part of the runtime.
+Supabase project `abnfffkmxqixrwzackjf` is the approved project for this app. Browser code uses the publishable key; privileged keys are never committed. RLS keeps Tracker imports read-only while allowing approved review and draft writes.
 
-Supabase project `abnfffkmxqixrwzackjf` is the only approved project for this
-app. Browser code uses the publishable key; privileged keys are never committed.
-RLS keeps Tracker imports read-only while allowing approved review and draft
-writes.
+`@jastudioconsulting/recruitment-skills` is an external dependency pinned to an immutable Git commit. The gateway loads its exported authority API and does not reach into a relative skills directory or copied skill tree. MCP discovery exposes `$recruiter` as the only authority/tool that routes recruiting capabilities; `workspace_status` is read-only. The stateless Streamable HTTP endpoint creates a fresh server and transport per request. Send, submit, Loxo write, approvals, deletes and standalone internal capabilities are absent.
 
-`@jastudioconsulting/recruitment-skills` is an external dependency pinned to an immutable Git commit. The gateway loads its exported authority API; it never reaches into `node_modules`, a relative skills directory, or a copied skill tree.
+Synthetic fixtures remain test-only. The production console does not replace a failed live query with fixture records. Adzuna is a future manual connector, not a background data source; see [`ADZUNA-MARKET-CANDIDATE.md`](ADZUNA-MARKET-CANDIDATE.md).
 
-The MCP discovery surface is deliberately small: `$recruiter` is the only authority/tool that routes recruiting capabilities. `workspace_status` is read-only. The stateless Streamable HTTP endpoint creates a fresh server and transport per request. Send, submit, Loxo write, approvals, deletes, and standalone internal capabilities are absent.
+## Pages and source changes
 
-Synthetic fixtures remain test-only. The production console does not replace a
-failed live query with fixture records.
-
-Adzuna is a future manual connector, not a background data source. Its frozen
-workflow and activation gates are in
-[`ADZUNA-MARKET-CANDIDATE.md`](ADZUNA-MARKET-CANDIDATE.md).
-
-## Pages
-
-Home, Candidates, Candidate Review, Pipeline, Leads, Jobs, Meetings and Mail
-are the work areas. Process, Settings and Profile are supporting pages. Each
-page reads live Supabase or gateway data and shows honest loading, empty and
-error states.
+Home, Candidates, Candidate Review, Pipeline, Leads, Jobs, Meetings and Mail are work areas; Process, Settings and Profile are supporting pages. The merged source adds candidate-edit overlays, presentation tracking, global search, a Notes directory/editor, Boards, responsive/touch iPad support and meeting audio/transcript retention behavior. Their database-backed functions depend on migrations `008`–`011`, `020`–`022` and `030`, which are source files only and have not been applied. Do not treat the newer pages/routes as live or durably persisted until the schema, deployment and read-after-write behavior are verified.
 
 ## Queued Loxo changes
 
-The app never writes to Loxo. Rejections, pipeline stage moves and logged
-activity are queued in `candidate_review_actions` with status
-`waiting_for_loxo`, and the UI says "Waiting for Loxo".
+The app does not write directly to Loxo. Rejections, pipeline stage moves and logged activity are queued in `candidate_review_actions` with status `waiting_for_loxo`, and the UI says "Waiting for Loxo".
 
 ## AI in the gateway
 
-`apps/gateway/src/ai-routes.js` serves `/api/ai/status`, `/api/fit/evaluate`
-and `/api/outreach/personalize` with the official `@anthropic-ai/sdk`. The key
-is read from `ANTHROPIC_API_KEY` in the M1 runtime environment and the model
-from `ANTHROPIC_MODEL` (default `claude-sonnet-5-5`). Without a key the routes
-report "not set up" and the console keeps the rules-based fit level. AI output
-is levels with cited reasons, never numbers, and never sends anything.
+`apps/gateway/src/ai-routes.js` serves `/api/ai/status`, `/api/fit/evaluate` and `/api/outreach/personalize` with the official `@anthropic-ai/sdk`. The key is read from `ANTHROPIC_API_KEY` in the runtime environment and the model from `ANTHROPIC_MODEL` (default `claude-sonnet-5-5`). Without a key the routes report "not set up" and the console keeps rules-based fit levels. AI output uses levels with cited reasons, never numbers, and never sends anything.
 
 ## Resumes without a resume file
 
-`getResumeSource` builds a branded resume from the resume on file when there is
-one, otherwise from profile fields already in the record (title, work history,
-summary, skills, call notes, transcript). It invents nothing. With none of
-those, it says "Not enough data to build a resume". Profile-built resumes carry
-an internal-only badge that never appears in the PDF.
+`getResumeSource` uses the resume on file or existing profile fields (title, work history, summary, skills, call notes, transcript). It invents nothing. With none of those, it says "Not enough data to build a resume". Profile-built resumes carry an internal-only badge that never appears in the PDF.
 
-## Tables added in this release
+## Migrations and retention
 
-Additive migrations in `apps/gateway/migrations/`:
-
-- `003_workbench_profile_and_outreach_log.sql`: `workbench_profile`, `outreach_log`
-- `004_leads.sql`: `leads` (Ja's own business development list)
-- `005_meeting_drafts.sql`: `meeting_drafts`
-
-All use owner-only RLS for authenticated users. Third-party code and ideas
-are recorded in [`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md).
+Existing migrations `003`–`005` add profile/outreach, leads and meeting drafts. The newer migrations `008`–`011`, `020`–`022` and `030` remain unapplied. They cover candidate editing/manual/all-candidate records, presentations, Notes/Boards, full-text search and meeting retention. Their schema, RLS, search function and cron behavior have not been verified in the deployed project. [`RETENTION.md`](RETENTION.md) records intended behavior and verification gates. Third-party code and ideas are recorded in [`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md).
