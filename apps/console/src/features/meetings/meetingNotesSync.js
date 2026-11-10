@@ -36,7 +36,8 @@ function section(heading, value) {
   ];
 }
 
-// Only verbatim call notes are copied. The transcript remains in meeting_drafts and expires there.
+// Keep only recruiter-entered call notes in durable Notes. The transcript stays
+// canonical in meeting_drafts and is shown through the linked read-only preview.
 export function buildMeetingNoteDoc({ notes = "" } = {}) {
   const content = section("Call notes", notes);
   return { type: "doc", content: content.length ? content : [{ type: "paragraph" }] };
