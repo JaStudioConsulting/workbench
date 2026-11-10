@@ -436,6 +436,12 @@ export function createSupabaseNotesBoardsStore({
     } else if (query.unlinked === false) {
       params.set("subject_type", "not.is.null");
     }
+    if (query.after_updated_at) {
+      const updated = query.after_updated_at;
+      const created = query.after_created_at;
+      const id = query.after_id;
+      params.set("or", `(updated_at.lt.${updated},and(updated_at.eq.${updated},created_at.lt.${created}),and(updated_at.eq.${updated},created_at.eq.${created},id.gt.${id}))`);
+    }
     if (query.subject_type) {
       params.set("subject_type", `eq.${query.subject_type}`);
     }

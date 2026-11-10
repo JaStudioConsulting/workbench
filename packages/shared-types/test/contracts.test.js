@@ -464,6 +464,20 @@ test("notes and boards create, autosave update, list query, record, and delete c
     NoteListQuerySchema.parse({ subject_type: "candidate", subject_id: "sourcing:2", limit: "25" }),
     { subject_type: "candidate", subject_id: "sourcing:2", limit: 25, offset: 0 },
   );
+  const cursorQuery = NoteListQuerySchema.parse({
+    after_updated_at: "2026-11-09T01:00:00.000Z",
+    after_created_at: "2026-11-08T01:00:00.000Z",
+    after_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    limit: "100",
+  });
+  assert.equal(cursorQuery.after_id, "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa");
+  assert.throws(() => NoteListQuerySchema.parse({ after_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" }));
+  assert.throws(() => NoteListQuerySchema.parse({
+    after_updated_at: "2026-11-09T01:00:00.000Z",
+    after_created_at: "2026-11-08T01:00:00.000Z",
+    after_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    offset: "10",
+  }));
   assert.deepEqual(
     BoardListQuerySchema.parse({ unlinked: "true" }),
     { unlinked: true, limit: 50, offset: 0 },

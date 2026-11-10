@@ -368,6 +368,15 @@ async function createPgliteNotesBoardsHarness() {
       values.push(originKeyParam.slice(3));
       conditions.push(`origin_key = $${values.length}`);
     }
+    const cursorMatch = url.searchParams.get("or")?.match(/^\(updated_at\.lt\.([^,]+),and\(updated_at\.eq\.([^,]+),created_at\.lt\.([^)]*)\),and\(updated_at\.eq\.([^,]+),created_at\.eq\.([^,]+),id\.gt\.([^)]+)\)\)$/);
+    if (cursorMatch) {
+      const [, afterUpdated, , afterCreated, , , afterId] = cursorMatch;
+      values.push(afterUpdated, afterCreated, afterId);
+      const updated = values.length - 2;
+      const created = values.length - 1;
+      const id = values.length;
+      conditions.push(`(updated_at < $${updated}::timestamptz OR (updated_at = $${updated}::timestamptz AND created_at < $${created}::timestamptz) OR (updated_at = $${updated}::timestamptz AND created_at = $${created}::timestamptz AND id > $${id}::uuid))`);
+    }
     const limit = Number(url.searchParams.get("limit") || 50);
     const offset = Number(url.searchParams.get("offset") || 0);
     const whereSql = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
@@ -676,6 +685,19 @@ test("notes and boards routes support owner-scoped CRUD, autosave updates, and s
     const allOwner1Notes = await request(app, "GET", "/api/notes", { headers: owner1Headers });
     assert.equal(allOwner1Notes.status, 200);
     assert.equal(NoteListResponseSchema.parse(allOwner1Notes.body).notes.length, 5);
+
+    const firstPageNote = allOwner1Notes.body.notes[0];
+    const cursor = new URLSearchParams({
+      limit: "2",
+      after_updated_at: firstPageNote.updated_at,
+      after_created_at: firstPageNote.created_at,
+      after_id: firstPageNote.id,
+    });
+    const nextNotesPage = await request(app, "GET", `/api/notes?${cursor}`, { headers: owner1Headers });
+    assert.equal(nextNotesPage.status, 200);
+    assert.equal(nextNotesPage.body.notes.length, 2);
+    assert.ok(nextNotesPage.body.notes.every((note) => note.owner_id === FIRST_OWNER));
+    assert.ok(nextNotesPage.body.notes.every((note) => note.id !== firstPageNote.id));
 
     const candidateSubjectNotes = await request(
       app,
