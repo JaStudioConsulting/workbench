@@ -433,13 +433,17 @@ export default function JobsMapView({ onSelectJobForWorkflow, onOpenJobReview, f
           {/* Mobile View Toggles */}
           <div className="flex lg:hidden rounded-lg border bg-muted p-0.5 text-xs">
             <button
+              type="button"
               onClick={() => setMobileTab("list")}
+              aria-pressed={mobileTab === "list"}
               className={`min-h-11 min-w-11 px-2.5 py-1 rounded-md transition ${mobileTab === "list" ? "bg-background shadow font-semibold" : "text-muted-foreground"}`}
             >
               List
             </button>
             <button
+              type="button"
               onClick={() => setMobileTab("map")}
+              aria-pressed={mobileTab === "map"}
               className={`min-h-11 min-w-11 px-2.5 py-1 rounded-md transition ${mobileTab === "map" ? "bg-background shadow font-semibold" : "text-muted-foreground"}`}
             >
               Map
@@ -456,6 +460,7 @@ export default function JobsMapView({ onSelectJobForWorkflow, onOpenJobReview, f
             <MapPin size={15} className="absolute left-3 text-muted-foreground" />
             <Input
               value={searchQuery}
+              aria-label="Candidate city or address"
               onChange={(e) => {
                 setSearchQuery(e.target.value);
                 setShowSuggestions(true);
@@ -465,8 +470,8 @@ export default function JobsMapView({ onSelectJobForWorkflow, onOpenJobReview, f
               className="pl-9 pr-8 text-xs"
             />
             {searchQuery ? (
-              <button onClick={clearCandidateSearch} className="absolute right-2.5 text-muted-foreground hover:text-foreground">
-                <X size={14} />
+              <button type="button" onClick={clearCandidateSearch} aria-label="Clear candidate location" className="absolute right-2.5 text-muted-foreground hover:text-foreground">
+                <X size={14} aria-hidden="true" />
               </button>
             ) : null}
           </div>
@@ -475,17 +480,18 @@ export default function JobsMapView({ onSelectJobForWorkflow, onOpenJobReview, f
           {showSuggestions && suggestions.length > 0 && (
             <div className="absolute left-0 right-0 top-full z-50 mt-1 max-h-56 overflow-y-auto rounded-lg border bg-popover p-1 shadow-lg">
               {suggestions.map((item) => (
-                <div
+                <button
                   key={item.id}
+                  type="button"
                   onClick={() => handleSelectSuggestion(item)}
-                  className="flex cursor-pointer items-start gap-2 rounded-md p-2 text-xs hover:bg-accent"
+                  className="flex w-full items-start gap-2 rounded-md p-2 text-left text-xs hover:bg-accent focus-visible:outline-2 focus-visible:outline-ring"
                 >
                   <MapPin size={14} className="mt-0.5 text-muted-foreground" />
                   <div className="min-w-0 flex-1">
                     <p className="font-medium truncate">{item.mainText}</p>
                     {item.secondaryText && <p className="text-[11px] text-muted-foreground truncate">{item.secondaryText}</p>}
                   </div>
-                </div>
+                </button>
               ))}
             </div>
           )}
@@ -495,6 +501,7 @@ export default function JobsMapView({ onSelectJobForWorkflow, onOpenJobReview, f
         <div>
           <Input
             value={keywordFilter}
+            aria-label="Filter title or skill"
             onChange={(e) => setKeywordFilter(e.target.value)}
             placeholder="Filter title/skill..."
             className="text-xs"
@@ -504,7 +511,7 @@ export default function JobsMapView({ onSelectJobForWorkflow, onOpenJobReview, f
         {/* Recruiter Owner Filter */}
         <div>
           <Select value={selectedOwner} onValueChange={setSelectedOwner}>
-            <SelectTrigger className="w-full text-xs">
+            <SelectTrigger aria-label="Filter jobs by recruiter owner" className="w-full text-xs">
               <SelectValue placeholder="All Owners" />
             </SelectTrigger>
             <SelectContent>
@@ -523,7 +530,7 @@ export default function JobsMapView({ onSelectJobForWorkflow, onOpenJobReview, f
         {/* Radius Filter */}
         <div>
           <Select value={maxRadius} onValueChange={setMaxRadius} disabled={!searchCoords}>
-            <SelectTrigger className="w-full text-xs">
+            <SelectTrigger aria-label="Filter jobs by distance" className="w-full text-xs">
               <SelectValue placeholder="Any Radius" />
             </SelectTrigger>
             <SelectContent>
@@ -542,13 +549,17 @@ export default function JobsMapView({ onSelectJobForWorkflow, onOpenJobReview, f
         <div className="flex items-center gap-1.5">
           <div className="flex rounded-md border bg-muted p-0.5 text-xs">
             <button
+              type="button"
               onClick={() => setUnit("km")}
+              aria-pressed={unit === "km"}
               className={`min-h-11 min-w-11 px-2 py-0.5 rounded transition ${unit === "km" ? "bg-background shadow font-semibold" : "text-muted-foreground"}`}
             >
               km
             </button>
             <button
+              type="button"
               onClick={() => setUnit("mi")}
+              aria-pressed={unit === "mi"}
               className={`min-h-11 min-w-11 px-2 py-0.5 rounded transition ${unit === "mi" ? "bg-background shadow font-semibold" : "text-muted-foreground"}`}
             >
               mi
@@ -556,7 +567,7 @@ export default function JobsMapView({ onSelectJobForWorkflow, onOpenJobReview, f
           </div>
 
           <Select value={regionFilter} onValueChange={setRegionFilter}>
-            <SelectTrigger className="w-full text-xs">
+            <SelectTrigger aria-label="Filter jobs by region" className="w-full text-xs">
               <SelectValue placeholder="Region" />
             </SelectTrigger>
             <SelectContent>
