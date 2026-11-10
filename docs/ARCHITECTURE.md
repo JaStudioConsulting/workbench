@@ -1,6 +1,6 @@
 # Architecture
 
-The Workbench is split so the browser console does not own privileged integration credentials. This document covers the merged source; the M1 checkout and live service on port `8092` remain on an older build. Source features described below are not a statement of live availability.
+The Workbench is split so the browser console does not own privileged integration credentials. M1 serves `main` at `f4f3349027ebe7b9d9e3a44b198825ae2a0a3e4c` on `http://100.121.104.40:8092/`. `/healthz` and served asset identity were verified; authenticated save/reload, full page acceptance and physical iPad/Pencil behavior remain unverified.
 
 ```text
 Browser
@@ -31,7 +31,7 @@ Synthetic fixtures remain test-only. The production console does not replace a f
 
 ## Pages and source changes
 
-Home, Candidates, Candidate Review, Pipeline, Leads, Jobs, Meetings and Mail are work areas; Process, Settings and Profile are supporting pages. The merged source adds candidate-edit overlays, presentation tracking, global search, a Notes directory/editor, Boards, responsive/touch iPad support and meeting audio/transcript retention behavior. Their database-backed functions depend on migrations `008`–`011`, `020`–`022` and `030`, which are source files only and have not been applied. Do not treat the newer pages/routes as live or durably persisted until the schema, deployment and read-after-write behavior are verified.
+Home, Candidates, Candidate Review, Pipeline, Leads, Jobs, Meetings and Mail are work areas; Process, Settings and Profile are supporting pages. The deployed build includes candidate-edit overlays, presentation tracking, global search, a Notes directory/editor, Boards, responsive/touch iPad support and meeting audio/transcript retention behavior. Migrations `008`–`011` and `020`–`022` are applied and ledger-confirmed in the approved project; database view counts were read. Migration `030` is explicitly deferred and not applied. Authenticated save/reload, full page and physical iPad/Pencil acceptance remain unverified.
 
 ## Queued Loxo changes
 
@@ -47,4 +47,4 @@ The app does not write directly to Loxo. Rejections, pipeline stage moves and lo
 
 ## Migrations and retention
 
-Existing migrations `003`–`005` add profile/outreach, leads and meeting drafts. The newer migrations `008`–`011`, `020`–`022` and `030` remain unapplied. They cover candidate editing/manual/all-candidate records, presentations, Notes/Boards, full-text search and meeting retention. Their schema, RLS, search function and cron behavior have not been verified in the deployed project. [`RETENTION.md`](RETENTION.md) records intended behavior and verification gates. Third-party code and ideas are recorded in [`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md).
+Existing migrations `003`–`005` add profile/outreach, leads and meeting drafts. Migrations `008`–`011` and `020`–`022` are applied and ledger-confirmed in project `abnfffkmxqixrwzackjf`; database view counts were read. Migration `030` (transcript expiry and scheduled cleanup) is explicitly deferred and not applied. These checks do not verify authenticated writes or retention behavior. [`RETENTION.md`](RETENTION.md) records intended behavior and verification gates. Third-party code and ideas are recorded in [`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md).

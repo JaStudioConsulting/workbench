@@ -1,29 +1,27 @@
 # Cutover and rollback runbook
 
-This is a preparation and execution record for a future M1 release. Reading it, building an isolated release candidate, and running `pnpm check` do not authorize a database migration, service restart, deployment, or live-data test. Execute the cutover only after Ja gives an explicit GO for the named source SHA, migration set, and release window. Migration `030` requires its own separate GO.
+This runbook records the M1 cutover and the acceptance still open. It does not authorize any further migration, service restart, deployment, or live-data write. Migration `030` was explicitly deferred and is not applied; it requires separate authorization.
 
 ## Current verified state (2026-11-10)
 
-- Source reviewed: `main` at `94ac14705e3e1fc286947d4649c8dac9eef86b68`.
-- M1 checkout: `~/Projects/RecruitingApp/workbench`, `1eb209975f9291afb7a1e4590aeebe64affdd5f2`, clean `main`, 146 commits behind `origin/main` at the time checked.
-- LaunchAgent `com.jastudioconsulting.recruiting-workbench` is loaded. `GET http://127.0.0.1:8092/healthz` returned `{"ok":true,"service":"recruiting-workbench-gateway"}`.
-- Supabase project `abnfffkmxqixrwzackjf` reported `ACTIVE_HEALTHY`. Its migration ledger contains the existing migrations through `20261107104806` (`meeting_transcription_metadata`); none of release migrations 008–011, 020–022, or 030 were listed.
-- This preparation PR's isolated M1 worktree installed the frozen lockfile from the offline cache and `pnpm check` passed (exit 0). Repeat the check at the exact reviewed release SHA after merge; this result does not establish live acceptance.
-- These are status checks only. No login, candidate/job read, migration, write, restart, or deployed asset comparison was performed. `/healthz` proves process health only.
+- Deployed source: `main` at `f4f3349027ebe7b9d9e3a44b198825ae2a0a3e4c`.
+- M1 LaunchAgent serves `http://100.121.104.40:8092/`; `/healthz` returned OK. Served `index.html`, manifest and icon byte-match the build.
+- Supabase project `abnfffkmxqixrwzackjf` has migrations `008`–`011` and `020`–`022` applied and ledger-confirmed. Migration `030` is explicitly deferred and not applied. Database view counts were read successfully.
+- The prior runtime backup and isolated source/build restore were verified; a live rollback was not performed.
+- Authenticated save/reload, full page acceptance and physical iPad/Pencil behavior remain unverified. Health and asset identity do not establish workflow acceptance.
 
-## Gate 0: authorize a named release
+## Gate 0: authorize a future named release
 
 Before touching production, record all of the following in the release ticket/board and get Ja's explicit GO:
 
 | Required decision/evidence | Record |
 |---|---|
-| Reviewed PR merged to `main`; exact full Git SHA | Pending |
-| `pnpm check` result on M1 at that SHA, with command output and exit code | Pending |
-| Release operator, date/time window, and Ja's GO reference | Pending |
-| Confirmed backup destination, retention, encryption, and restore operator | Pending |
-| Approved migration set: 008–011 and 020–022 only, or explicit deferral | Pending |
-| Separate decision for 030 retention migration | **Not authorized** |
-| Expected app behavior if a database migration fails partway | Pending |
+| Deployed release SHA | `f4f3349027ebe7b9d9e3a44b198825ae2a0a3e4c` |
+| Applied migration set | 008–011 and 020–022, ledger-confirmed |
+| Migration 030 | Explicitly deferred; not applied |
+| Prior runtime backup and isolated source/build restore | Verified |
+| Authenticated save/reload, full page, physical iPad/Pencil | Unverified |
+| Live rollback | Unverified |
 
 Abort if the release SHA differs from the approved SHA, the checkout is dirty, the M1 service state has changed unexpectedly, the backup cannot be verified, the migration plan contains an unapproved version, or the M1 auth/health baseline is not understood. Do not use `supabase db push` for this release: it applies every pending local migration and can include 030.
 
@@ -78,28 +76,28 @@ Encrypt and checksum the copied bundle before it leaves the M1. The example only
 
 If the backup destination, encryption method, or isolated restore target is not already approved and usable, stop here. Do not invent credentials or print connection strings. A service restart cannot roll back database DDL.
 
-## Gate 2: migration review and ordering
+## Migration record and ordering
 
 The release migration set is intentionally split:
 
-| Order | File | Scope | Gate |
+| Order | File | Scope | Status |
 |---:|---|---|---|
-| 1 | `008_candidate_edits.sql` | Candidate edit overlay | Ja GO for release migration set |
-| 2 | `009_candidates_manual.sql` | Manual candidates | Ja GO for release migration set |
-| 3 | `010_candidates_all.sql` | Combined candidate view | Ja GO for release migration set |
-| 4 | `011_presentations.sql` | Presentation history | Ja GO for release migration set |
-| 5 | `020_notes_boards.sql` | Notes and boards | Ja GO for release migration set |
-| 6 | `021_fulltext_search.sql` | Search documents/function | Ja GO for release migration set |
-| 7 | `022_notes_origin_key.sql` | Notes origin key | Ja GO for release migration set |
-| separate | `030_meeting_retention.sql` | Transcript expiry trigger and scheduled cleanup | **Separate Ja GO required; exclude from this cutover** |
+| 1 | `008_candidate_edits.sql` | Candidate edit overlay | Applied; ledger-confirmed |
+| 2 | `009_candidates_manual.sql` | Manual candidates | Applied; ledger-confirmed |
+| 3 | `010_candidates_all.sql` | Combined candidate view | Applied; ledger-confirmed |
+| 4 | `011_presentations.sql` | Presentation history | Applied; ledger-confirmed |
+| 5 | `020_notes_boards.sql` | Notes and boards | Applied; ledger-confirmed |
+| 6 | `021_fulltext_search.sql` | Search documents/function | Applied; ledger-confirmed |
+| 7 | `022_notes_origin_key.sql` | Notes origin key | Applied; ledger-confirmed |
+| separate | `030_meeting_retention.sql` | Transcript expiry trigger and scheduled cleanup | Explicitly deferred; not applied |
 
 Before any apply action, review the exact SQL and dependencies, compare live schema/RLS to the approved reference, and capture a read-only migration-list snapshot. The expected release list is exactly the seven files above; if 030 appears, stop. If any other migration appears, stop and reconcile. This repository stores migrations under `apps/gateway/migrations/` with numeric prefixes, while the live ledger uses timestamp versions. Therefore do not assume a default `supabase db push` or `supabase migration list` in this checkout represents these files: confirm and document the release's migration runner and its exact version mapping first. Do not run a broad push; apply only individually reviewed migration contents in numeric order through the approved runner, capture its full output, verify remote schema/history after each migration, and stop on the first error. Never repair migration history to make a cutover appear successful.
 
 After migrations 008–011 and 020–022 are approved and applied, verify schema objects, owner-only RLS and unchanged read-only Tracker permissions using read-only queries and an authenticated Ja session. Verify `search_workbench` behavior against a synthetic fixture only in an isolated environment. Do not create or modify live candidate, job, client, note, board, presentation, or transcript records as a smoke test. The retention schedule, trigger, first run, and file cleanup are not accepted by migrations 008–022; they remain unverified until the distinct 030 gate and M6 retention acceptance.
 
-## Gate 3: cutover (future; requires Ja GO)
+## Acceptance after cutover
 
-Do not run these steps until Gates 0–2 are complete and Ja has approved the precise source SHA and migration set. Keep the former deployment available for immediate restore. The release must use the same gateway port `8092`, same approved project, and current private-network exposure. Do not change the launch-agent identity, secrets, OAuth origins, Google linkage, or Tracker permissions as part of this release.
+The cutover and asset identity are verified. Complete authenticated save/reload and the full page walk; verify physical iPad/Pencil behavior on the deployed build. Keep migration `030` deferred unless separately authorized. The prior runtime backup and isolated restore do not constitute a live rollback test.
 
 Before stopping the service, capture:
 
@@ -133,15 +131,16 @@ Trigger rollback on failed health/auth, an unexpected asset hash, source identit
 
 | Evidence | Required result | Status at preparation |
 |---|---|---|
-| Exact reviewed source SHA | Matches Ja-approved full SHA | Source reviewed at `94ac14705e3e1fc286947d4649c8dac9eef86b68`; no release GO |
-| M1 `pnpm check` | Pass on isolated M1 worktree at the exact reviewed release SHA | Prep PR worktree: pass, exit 0; release SHA: pending |
-| Source/build/asset manifests | Checksummed and archived; matches runtime after release | Pending |
-| Previous bundle + database backup | Encrypted, checksummed; isolated restore proven | Pending |
-| 008–011 and 020–022 migration preview | Exactly these seven, in order | Not run against live project; not authorized |
-| 030 retention preview and apply | Separate Ja GO; schedule/trigger/first run verified | Not authorized; not accepted |
-| `/healthz` | Expected service response after restart | Baseline read-only response OK; post-cutover not run |
-| Authentication and session reload | Approved Ja account works; session persists | Not tested |
-| Live page/read-after-write acceptance | Read-only page walk; no synthetic live writes | Not tested |
-| Rollback | Previous release restored and checks pass | Not tested |
+| Exact deployed source SHA | Full SHA matches served deployment | `f4f3349027ebe7b9d9e3a44b198825ae2a0a3e4c` |
+| `/healthz` | Healthy service response | Verified OK |
+| Build assets | Served index, manifest and icon match build | Byte-match verified |
+| Migrations 008–011 and 020–022 | Applied and ledger-confirmed | Verified |
+| Database view counts | Read successfully | Verified |
+| Migration 030 | Separately authorized and accepted | Explicitly deferred; not applied |
+| Prior runtime backup and isolated source/build restore | Recovery evidence | Verified |
+| Authentication and save/reload | Approved Ja session persists after reload | Not verified |
+| Full page acceptance | Released pages pass expected-state walk | Not verified |
+| Physical iPad/Pencil | Deployed build works on target device/input | Not verified |
+| Live rollback | Prior release restored and checks pass on M1 | Not verified |
 
-**Current decision: no cutover and no rollback acceptance.** Ja's release GO, M1 offline check at the eventual approved release SHA, artifact/restore evidence, post-deploy health/auth/page checks, and rollback proof remain outstanding. This preparation does not complete M6-05 and must not be marked done.
+**Current state: cutover and migration ledger are verified; acceptance remains incomplete.** Authenticated save/reload, full page acceptance, physical iPad/Pencil behavior and live rollback remain open. Migration `030` is deferred. M6-05 is not complete and must not be marked done.

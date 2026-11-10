@@ -1,12 +1,12 @@
 # Recruiting Workbench
 
-Private recruiting console and one-port gateway for Ja Studio Consulting. The source now includes the merged M2–M6 candidate workflow, search, Notes/Boards, iPad support and meeting-retention changes. The live M1 service remains on an older build; source presence does not establish live availability or persistence.
+Private recruiting console and one-port gateway for Ja Studio Consulting. The M1 LaunchAgent serves `main` at `f4f3349027ebe7b9d9e3a44b198825ae2a0a3e4c` on `http://100.121.104.40:8092/`. Health and asset identity were verified; authenticated save/reload and full device acceptance remain open.
 
 ## Current release state
 
-- The M1 checkout and service on port `8092` remain at older revision `1eb2099`. Changes merged after that build are not confirmed live.
-- Migrations `008`–`011`, `020`–`022` and `030` are present in source and unapplied. Candidate edits and presentations, full-text search, Notes/Boards persistence and database transcript retention require their separate migration and deployment gates.
-- The older M1 release was previously verified for its deployed workflows, including Tracker-backed reads, review actions and drafts. This documentation update does not revalidate those workflows.
+- `/healthz` returned OK; served `index.html`, manifest and icon byte-match the build.
+- Supabase project `abnfffkmxqixrwzackjf` has migrations `008`–`011` and `020`–`022` applied and ledger-confirmed. Migration `030` is explicitly deferred and not applied.
+- Database view counts were read successfully. Authenticated save/reload, full page acceptance, physical iPad/Pencil behavior and live rollback remain unverified. Prior runtime backup and isolated source/build restore were verified; no live rollback was performed.
 - Candidate facts must come from source records. Missing resume, transcript or notes stay explicit and are never invented.
 - Loxo changes are queued as "Waiting for Loxo". Email actions are draft-only.
 - AI runs only in the gateway and requires `ANTHROPIC_API_KEY`; without it, rules-based fit levels remain available.
