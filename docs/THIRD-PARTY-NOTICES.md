@@ -59,24 +59,26 @@ part of the application and are not stored in this repository.
 Pins for the jakubkrehel skills are the first 16 characters of the content
 hash recorded in the local skills lock file.
 
-## Proposed Notes and Board components (license audit only)
+## Editor and Board package notices (M4 compatibility fixture)
 
-The source snapshots below were checked on 2026-11-09. They are evaluation
-pins for M4-02, not dependencies or code already copied into Workbench. Each
-listed package is JavaScript/TypeScript and has a license allowed by the build
-plan. Keep the exact license and attribution with any code later copied.
+The versions listed below are declared dependencies in
+`apps/console/package.json`. The M4 compatibility checks summarized here were
+run in an isolated fixture; they establish compatibility for that fixture,
+not full Workbench behavior or the state of a live deployment. The installed
+`@tiptap/core` package manifest identifies version 2.27.3, declares MIT, and
+names `https://github.com/ueberdosis/tiptap` as its repository. Its installed
+source tree was inspected. No upstream source commit is claimed for this npm
+package version.
 
-| Component | Repository and audited commit | Package at that commit | License evidence |
-|---|---|---|---|
-| Novel headless editor | [steven-tey/novel](https://github.com/steven-tey/novel/tree/fa95098e66476c466faebb8211baa5869c101a9c), `fa95098e66476c466faebb8211baa5869c101a9c` | [`novel` 1.0.0](https://github.com/steven-tey/novel/blob/fa95098e66476c466faebb8211baa5869c101a9c/packages/headless/package.json) | [Apache-2.0](https://github.com/steven-tey/novel/blob/fa95098e66476c466faebb8211baa5869c101a9c/LICENSE) |
-| Tiptap core | [ueberdosis/tiptap](https://github.com/ueberdosis/tiptap/tree/5fd5d2f5df1a18f31c800a6b2faf1ece952ee0e5), `5fd5d2f5df1a18f31c800a6b2faf1ece952ee0e5` | [`@tiptap/core` 3.30.3](https://github.com/ueberdosis/tiptap/blob/5fd5d2f5df1a18f31c800a6b2faf1ece952ee0e5/packages/core/package.json) | [MIT](https://github.com/ueberdosis/tiptap/blob/5fd5d2f5df1a18f31c800a6b2faf1ece952ee0e5/LICENSE.md) |
-| Excalidraw editor | [excalidraw/excalidraw](https://github.com/excalidraw/excalidraw/tree/701b901a0f1ba3d0b390d9cdf63d112e25abac4b), `701b901a0f1ba3d0b390d9cdf63d112e25abac4b` | [`@excalidraw/excalidraw` 0.18.0](https://github.com/excalidraw/excalidraw/blob/701b901a0f1ba3d0b390d9cdf63d112e25abac4b/packages/excalidraw/package.json) | [MIT](https://github.com/excalidraw/excalidraw/blob/701b901a0f1ba3d0b390d9cdf63d112e25abac4b/LICENSE) |
+| Component | Installed package | Source and license evidence |
+|---|---|---|
+| Novel headless editor | `novel` 1.0.0 | [Repository snapshot](https://github.com/steven-tey/novel/tree/fa95098e66476c466faebb8211baa5869c101a9c); [package manifest](https://github.com/steven-tey/novel/blob/fa95098e66476c466faebb8211baa5869c101a9c/packages/headless/package.json) declares Apache-2.0; [license](https://github.com/steven-tey/novel/blob/fa95098e66476c466faebb8211baa5869c101a9c/LICENSE) |
+| Tiptap core | [`@tiptap/core` 2.27.3](https://www.npmjs.com/package/@tiptap/core/v/2.27.3) | [Upstream repository](https://github.com/ueberdosis/tiptap); the installed package manifest declares MIT. No source commit pin is asserted. |
+| Excalidraw editor | `@excalidraw/excalidraw` 0.18.0 | [Repository snapshot](https://github.com/excalidraw/excalidraw/tree/701b901a0f1ba3d0b390d9cdf63d112e25abac4b); [package manifest](https://github.com/excalidraw/excalidraw/blob/701b901a0f1ba3d0b390d9cdf63d112e25abac4b/packages/excalidraw/package.json) and [license](https://github.com/excalidraw/excalidraw/blob/701b901a0f1ba3d0b390d9cdf63d112e25abac4b/LICENSE) declare MIT. |
 
-Scope is the open-source editor packages only. Novel AI features, Tiptap Pro
-extensions and Cloud, and Excalidraw+ are outside this audit and stay off.
-Novel 1.0.0 declares Tiptap 2.11.x dependencies, while the separately audited
-Tiptap core snapshot is 3.30.3. This version gap is a test target, not a
-proven blocker. M4-02 must choose a compatible set and verify it with React 19,
-Vite 6 and Tailwind 4 before any integration. Excalidraw's
-audited package manifest declares React 19 peer support; rendering remains
-unverified until M4-02.
+The compatibility fixture built successfully with Tiptap core 2.27.3 aligned
+with Novel's resolved extensions. Browser checks confirmed Novel mounted and
+accepted an edit, and Excalidraw mounted and registered a drawn rectangle.
+This verifies the isolated fixture only; autosave, persistence, iPad input, and
+final Workbench styling were outside the experiment. Novel AI features,
+Tiptap Pro extensions and Cloud, and Excalidraw+ were not included.
