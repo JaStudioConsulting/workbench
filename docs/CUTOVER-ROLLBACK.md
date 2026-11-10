@@ -8,6 +8,7 @@ This is a preparation and execution record for a future M1 release. Reading it, 
 - M1 checkout: `~/Projects/RecruitingApp/workbench`, `1eb209975f9291afb7a1e4590aeebe64affdd5f2`, clean `main`, 146 commits behind `origin/main` at the time checked.
 - LaunchAgent `com.jastudioconsulting.recruiting-workbench` is loaded. `GET http://127.0.0.1:8092/healthz` returned `{"ok":true,"service":"recruiting-workbench-gateway"}`.
 - Supabase project `abnfffkmxqixrwzackjf` reported `ACTIVE_HEALTHY`. Its migration ledger contains the existing migrations through `20261107104806` (`meeting_transcription_metadata`); none of release migrations 008–011, 020–022, or 030 were listed.
+- This preparation PR's isolated M1 worktree installed the frozen lockfile from the offline cache and `pnpm check` passed (exit 0). Repeat the check at the exact reviewed release SHA after merge; this result does not establish live acceptance.
 - These are status checks only. No login, candidate/job read, migration, write, restart, or deployed asset comparison was performed. `/healthz` proves process health only.
 
 ## Gate 0: authorize a named release
@@ -133,7 +134,7 @@ Trigger rollback on failed health/auth, an unexpected asset hash, source identit
 | Evidence | Required result | Status at preparation |
 |---|---|---|
 | Exact reviewed source SHA | Matches Ja-approved full SHA | Source reviewed at `94ac14705e3e1fc286947d4649c8dac9eef86b68`; no release GO |
-| M1 `pnpm check` | Pass on isolated M1 worktree, offline install | Pending |
+| M1 `pnpm check` | Pass on isolated M1 worktree at the exact reviewed release SHA | Prep PR worktree: pass, exit 0; release SHA: pending |
 | Source/build/asset manifests | Checksummed and archived; matches runtime after release | Pending |
 | Previous bundle + database backup | Encrypted, checksummed; isolated restore proven | Pending |
 | 008–011 and 020–022 migration preview | Exactly these seven, in order | Not run against live project; not authorized |
@@ -143,4 +144,4 @@ Trigger rollback on failed health/auth, an unexpected asset hash, source identit
 | Live page/read-after-write acceptance | Read-only page walk; no synthetic live writes | Not tested |
 | Rollback | Previous release restored and checks pass | Not tested |
 
-**Current decision: no cutover and no rollback acceptance.** Ja's release GO, successful M1 offline check, artifact/restore evidence, post-deploy health/auth/page checks, and rollback proof remain outstanding. This preparation does not complete M6-05 and must not be marked done.
+**Current decision: no cutover and no rollback acceptance.** Ja's release GO, M1 offline check at the eventual approved release SHA, artifact/restore evidence, post-deploy health/auth/page checks, and rollback proof remain outstanding. This preparation does not complete M6-05 and must not be marked done.
