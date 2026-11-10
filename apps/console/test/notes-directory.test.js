@@ -211,6 +211,20 @@ test("listAllOwnerNotes de-duplicates notes that shift across page boundaries wh
   assert.equal(new Set(result.notes.map((note) => note.id)).size, 150);
 });
 
+test("listAllOwnerNotes fails visibly when a full cursor page repeats without advancing", async () => {
+  const notes = Array.from({ length: NOTE_DIRECTORY_PAGE_SIZE }, (_, index) => syntheticNote(index));
+  let requests = 0;
+  const result = listAllOwnerNotes({
+    client: syntheticSession(),
+    fetchImpl: async () => {
+      requests += 1;
+      return Response.json({ notes });
+    },
+  });
+  await assert.rejects(result, (error) => error.code === "PAGINATION_STALLED" && /fully loaded/.test(error.message));
+  assert.equal(requests, 2, "fail immediately when the first cursor page repeats");
+});
+
 test("listAllOwnerNotes keyset pagination reaches and searches notes beyond the former 10,100-note ceiling", async () => {
   const notes = Array.from({ length: 10_350 }, (_, index) => syntheticNote(index));
   notes[10_299] = syntheticNote(10_299, { title: "Older unique search phrase" });

@@ -92,7 +92,11 @@ export async function listAllOwnerNotes(options = {}) {
     }
     if (payload.notes.length < pageSize) break;
     const last = payload.notes[payload.notes.length - 1];
-    cursor = { updated_at: last.updated_at, created_at: last.created_at, id: last.id };
+    const nextCursor = { updated_at: last.updated_at, created_at: last.created_at, id: last.id };
+    if (cursor && nextCursor.updated_at === cursor.updated_at && nextCursor.created_at === cursor.created_at && nextCursor.id === cursor.id) {
+      throw new NotesClientError("Notes could not be fully loaded because pagination did not advance.", 502, "PAGINATION_STALLED");
+    }
+    cursor = nextCursor;
   }
   return { notes: [...byId.values()], truncated: false };
 }
