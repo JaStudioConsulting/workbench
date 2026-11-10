@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createSubjectNote } from "../src/features/notes/notesClient.js";
+import { loadMeetingTranscriptPreview } from "../src/features/notes/meetingTranscriptPreview.js";
 import {
   buildMeetingNoteDoc,
   MEETING_NOTES_FAILED_WARNING,
@@ -33,6 +34,7 @@ function fakeNotesGateway() {
       title: body.title,
       subject_type: body.subject_type,
       subject_id: body.subject_id,
+      origin_key: body.origin_key,
       body: body.body,
       created_at: "2026-11-09T00:00:00.000Z",
       updated_at: "2026-11-09T00:00:00.000Z",
@@ -79,10 +81,12 @@ test("exact candidate: the note links to the candidate source key unchanged and 
   assert.equal(gateway.posts[0].origin_key, `meeting_draft:${DRAFT_ID}`);
   assert.equal(meetingDraftOriginKey(DRAFT_ID), `meeting_draft:${DRAFT_ID}`);
   assert.equal(gateway.posts[0].title, "Call notes - Screen call");
-  assert.equal(JSON.stringify(gateway.posts[0].body).includes("Recruiter: Tell me"), false);
+  assert.equal(JSON.stringify(gateway.posts[0].body).includes("Recruiter: Tell me about the press line."), false);
+  assert.equal(JSON.stringify(gateway.posts[0].body).includes("Strong on changeovers."), true);
+  assert.equal(gateway.posts[0].origin_key, `meeting_draft:${DRAFT_ID}`);
 });
 
-test("retention: only verbatim call notes enter the Tiptap body", async () => {
+test("retention-safe linkage: only verbatim call notes enter durable Note; transcript remains linked by meeting origin", async () => {
   const transcript = "Private transcript that must expire";
   const notes = "  Recruiter note with spaces  \n\tSecond note";
   const doc = buildMeetingNoteDoc({ transcript, notes });
@@ -93,6 +97,44 @@ test("retention: only verbatim call notes enter the Tiptap body", async () => {
 
   const transcriptOnly = buildMeetingNoteDoc({ transcript });
   assert.deepEqual(transcriptOnly, { type: "doc", content: [{ type: "paragraph" }] });
+
+  const notesOnly = buildMeetingNoteDoc({ notes });
+  assert.deepEqual(paragraphTexts(notesOnly), ["Call notes", "  Recruiter note with spaces  ", "\tSecond note"]);
+});
+
+test("after-call Notes view links call notes to a live transcript preview without copying transcript into durable Note", async () => {
+  const gateway = fakeNotesGateway();
+  const transcript = "Candidate described the press line handoff.";
+  const callNotes = "Follow up on shift preference.";
+  const saved = await syncMeetingDraftNotes({
+    persistence: "durable", draftId: DRAFT_ID, candidateId: CANDIDATE_ID,
+    transcript, notes: callNotes, createNote: createNoteWith(gateway.fetchImpl),
+  });
+  assert.equal(saved.status, "synced");
+  assert.equal(saved.note.origin_key, `meeting_draft:${DRAFT_ID}`);
+  assert.equal(JSON.stringify(saved.note.body).includes(transcript), false);
+  assert.equal(JSON.stringify(saved.note.body).includes(callNotes), true);
+
+  const meetingClient = {
+    auth: { getSession: async () => ({ data: { session: { user: { id: OWNER } } }, error: null }) },
+    from(table) {
+      assert.equal(table, "meeting_drafts");
+      return {
+        select(columns) {
+          assert.equal(columns, "id,owner_id,candidate_source,candidate_source_id,transcript");
+          return this;
+        },
+        eq(column, value) { assert.equal(column, "id"); assert.equal(value, DRAFT_ID); return this; },
+        maybeSingle: async () => ({ data: {
+          id: DRAFT_ID, owner_id: OWNER, candidate_source: "sourcing", candidate_source_id: 12, transcript,
+        }, error: null }),
+      };
+    },
+  };
+  const preview = await loadMeetingTranscriptPreview({
+    originKey: saved.note.origin_key, candidateId: CANDIDATE_ID, client: meetingClient,
+  });
+  assert.deepEqual(preview, { status: "available", transcript });
 });
 
 test("blank input: whitespace-only transcript and notes send no note; notes-only sends only the notes section", async () => {
@@ -105,6 +147,7 @@ test("blank input: whitespace-only transcript and notes send no note; notes-only
   const notesOnly = await syncMeetingDraftNotes({ persistence: "durable", draftId: DRAFT_ID, candidateId: CANDIDATE_ID, transcript: "   ", notes: "Call went well", createNote });
   assert.equal(notesOnly.status, "synced");
   assert.deepEqual(gateway.posts[0].body.content.map((node) => node.type), ["heading", "paragraph"]);
+  assert.equal(gateway.posts[0].body.content[0].content[0].text, "Call notes");
   assert.equal(gateway.posts[0].body.content[1].content[0].text, "Call went well");
 });
 
@@ -119,6 +162,7 @@ test("idempotent retry: a repeat save returns the existing note and never duplic
   assert.equal(second.note.id, first.note.id);
   assert.equal(gateway.posts.length, 2);
   assert.equal(gateway.byOriginKey.size, 1);
+  assert.equal(JSON.stringify(second.note.body).includes("Original transcript"), false);
   assert.equal(second.note.body.content[1].content[0].text, "Original");
 });
 
