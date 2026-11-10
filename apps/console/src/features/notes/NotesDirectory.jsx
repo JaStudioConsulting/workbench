@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useReducer, useState } from "react";
 import { Loader2, RefreshCw, Search } from "lucide-react";
 import { Button } from "../../components/ui/button.tsx";
-import { listAllOwnerNotes, NOTE_DIRECTORY_MAX_OFFSET, NOTE_DIRECTORY_PAGE_SIZE } from "./notesClient.js";
+import { listAllOwnerNotes } from "./notesClient.js";
 import {
   buildNoteDirectoryEntries,
   directoryReducer,
@@ -9,8 +9,6 @@ import {
   INITIAL_DIRECTORY_STATE,
   resolveDirectoryView,
 } from "./notesDirectory.js";
-
-const LOADED_NOTE_CEILING = NOTE_DIRECTORY_MAX_OFFSET + NOTE_DIRECTORY_PAGE_SIZE;
 
 function countLabel(count) {
   return count === 1 ? "1 note" : `${count} notes`;
@@ -85,12 +83,6 @@ export default function NotesDirectory({ focusRequest = null, onOpenSubject, loa
           {trimmedQuery ? `${visible.length} of ${countLabel(view.entries.length)}` : countLabel(view.entries.length)}
         </p>
       </div>
-
-      {state.truncated ? (
-        <p className="rounded-lg border p-3 text-sm" role="status">
-          Only the first {LOADED_NOTE_CEILING.toLocaleString("en-CA")} notes could be loaded, so search may not reach older notes.
-        </p>
-      ) : null}
 
       {focusMissing ? (
         <p className="rounded-lg border p-3 text-sm" role="alert">That note is no longer in your notes.</p>

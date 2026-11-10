@@ -71,29 +71,34 @@ export async function listSubjectNotes(subjectType, subjectId, options = {}) {
   }
 }
 
-// Gateway list limits: `limit` 1..200 and `offset` 0..10000 (see NoteListQuerySchema).
+// Pages use a stable keyset after the first bounded request, so owners with more than
+// PostgREST's practical offset range can still reach and search older notes.
 export const NOTE_DIRECTORY_PAGE_SIZE = 100;
-export const NOTE_DIRECTORY_MAX_OFFSET = 10_000;
 
-// Loads every note the signed-in owner can see through GET /api/notes pages.
-// Returns truncated: true when the offset ceiling is reached before a short page.
 export async function listAllOwnerNotes(options = {}) {
   const pageSize = options.pageSize ?? NOTE_DIRECTORY_PAGE_SIZE;
   const byId = new Map();
-  let truncated = false;
-  for (let offset = 0; ; offset += pageSize) {
-    if (offset > NOTE_DIRECTORY_MAX_OFFSET) {
-      truncated = true;
-      break;
+  let cursor = null;
+  for (;;) {
+    const query = new URLSearchParams({ limit: String(pageSize), offset: "0" });
+    if (cursor) {
+      query.set("after_updated_at", cursor.updated_at);
+      query.set("after_created_at", cursor.created_at);
+      query.set("after_id", cursor.id);
     }
-    const query = new URLSearchParams({ limit: String(pageSize), offset: String(offset) });
     const payload = NoteListResponseSchema.parse(await request(`/api/notes?${query}`, options));
     for (const note of payload.notes) {
       if (!byId.has(note.id)) byId.set(note.id, note);
     }
     if (payload.notes.length < pageSize) break;
+    const last = payload.notes[payload.notes.length - 1];
+    const nextCursor = { updated_at: last.updated_at, created_at: last.created_at, id: last.id };
+    if (cursor && nextCursor.updated_at === cursor.updated_at && nextCursor.created_at === cursor.created_at && nextCursor.id === cursor.id) {
+      throw new NotesClientError("Notes could not be fully loaded because pagination did not advance.", 502, "PAGINATION_STALLED");
+    }
+    cursor = nextCursor;
   }
-  return { notes: [...byId.values()], truncated };
+  return { notes: [...byId.values()], truncated: false };
 }
 
 export async function createSubjectNote(subjectType, subjectId, title = "", options = {}) {

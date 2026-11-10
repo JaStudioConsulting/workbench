@@ -1166,6 +1166,9 @@ function createWorkbenchListQuerySchema() {
     q: z.string().trim().max(200).optional(),
     limit: z.coerce.number().int().min(1).max(200).default(50),
     offset: z.coerce.number().int().min(0).max(10_000).default(0),
+    after_updated_at: z.string().datetime({ offset: true }).optional(),
+    after_created_at: z.string().datetime({ offset: true }).optional(),
+    after_id: z.string().uuid().optional(),
   }).strict().superRefine((value, ctx) => {
     if (value.unlinked === true && (value.subject_type !== undefined || value.subject_id !== undefined)) {
       ctx.addIssue({
@@ -1173,6 +1176,15 @@ function createWorkbenchListQuerySchema() {
         path: ["unlinked"],
         message: "unlinked filter cannot be combined with subject_type or subject_id",
       });
+      return;
+    }
+    const cursorFields = [value.after_updated_at, value.after_created_at, value.after_id];
+    if (cursorFields.some((field) => field !== undefined) && cursorFields.some((field) => field === undefined)) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["after_id"], message: "A complete note cursor is required" });
+      return;
+    }
+    if (cursorFields.some((field) => field !== undefined) && value.offset !== 0) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["offset"], message: "Cursor pagination cannot be combined with offset" });
       return;
     }
     if (value.subject_id !== undefined && value.subject_type === undefined) {
@@ -1202,6 +1214,11 @@ function createWorkbenchListQuerySchema() {
       offset: value.offset,
     };
     if (value.unlinked !== undefined) out.unlinked = value.unlinked;
+    if (value.after_updated_at !== undefined) {
+      out.after_updated_at = value.after_updated_at;
+      out.after_created_at = value.after_created_at;
+      out.after_id = value.after_id;
+    }
     if (value.q !== undefined && value.q.length > 0) out.q = value.q;
     if (value.subject_type !== undefined && value.subject_id !== undefined) {
       const parsedLink = parseWorkbenchSubjectLink({

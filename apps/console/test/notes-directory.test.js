@@ -9,7 +9,6 @@ import { createServer } from "vite";
 import { parseWorkbenchSubjectLink } from "@ja/shared-types";
 import {
   listAllOwnerNotes,
-  NOTE_DIRECTORY_MAX_OFFSET,
   NOTE_DIRECTORY_PAGE_SIZE,
 } from "../src/features/notes/notesClient.js";
 import {
@@ -59,18 +58,28 @@ function syntheticSession(token = TOKEN) {
   return { auth: { getSession: async () => ({ data: { session: { access_token: token } }, error: null }) } };
 }
 
-// Fake GET /api/notes. Validates limit/offset like the gateway (1..200, 0..10000) and records every request.
+// Fake GET /api/notes. Validates bounded page sizes and exercises stable keyset cursors.
 function pagedFetch(notes, { requests = [], shift = 0 } = {}) {
   return async (requestPath, options) => {
     requests.push({ path: requestPath, options });
     const url = new URL(requestPath, "https://workbench.example.invalid");
     const limit = Number(url.searchParams.get("limit"));
     const offset = Number(url.searchParams.get("offset"));
-    if (!(limit >= 1 && limit <= 200) || !(offset >= 0 && offset <= NOTE_DIRECTORY_MAX_OFFSET)) {
+    const afterUpdated = url.searchParams.get("after_updated_at");
+    const afterCreated = url.searchParams.get("after_created_at");
+    const afterId = url.searchParams.get("after_id");
+    if (!(limit >= 1 && limit <= 200) || !(offset >= 0 && offset <= 10_000) || Boolean(afterUpdated) !== Boolean(afterCreated) || Boolean(afterUpdated) !== Boolean(afterId)) {
       return Response.json({ error: { code: "INVALID_INPUT", message: "Invalid notes query" } }, { status: 400 });
     }
-    const start = offset === 0 ? 0 : Math.max(0, offset - shift);
-    return Response.json({ notes: notes.slice(start, start + limit) });
+    let remaining = notes;
+    if (afterId) {
+      const cursorIndex = notes.findIndex((note) => note.id === afterId);
+      remaining = cursorIndex < 0 ? [] : notes.slice(cursorIndex + 1);
+    } else if (offset > 0) {
+      remaining = notes.slice(offset);
+    }
+    if (shift && afterId && remaining.length) remaining = [notes[notes.findIndex((note) => note.id === afterId)], ...remaining];
+    return Response.json({ notes: remaining.slice(0, limit) });
   };
 }
 
@@ -165,17 +174,16 @@ test("notes order newest first with stable tie-breaks, unreadable timestamps las
   assert.ok(compareNotesNewestFirst(notes[2], notes[0]) < 0, "equal updated_at falls back to created_at, newer first");
 });
 
-test("listAllOwnerNotes walks GET /api/notes pages with limit and offset, stopping at the first short page", async () => {
+test("listAllOwnerNotes walks bounded keyset pages, stopping at the first short page", async () => {
   const notes = Array.from({ length: 250 }, (_, index) => syntheticNote(index));
   const requests = [];
   const result = await listAllOwnerNotes({ client: syntheticSession(), fetchImpl: pagedFetch(notes, { requests }) });
 
   assert.equal(result.truncated, false);
   assert.deepEqual(result.notes.map((note) => note.id), notes.map((note) => note.id));
-  assert.deepEqual(
-    requests.map((request) => new URL(request.path, "https://workbench.example.invalid").searchParams.get("offset")),
-    ["0", "100", "200"],
-  );
+  assert.deepEqual(requests.map((request) => new URL(request.path, "https://workbench.example.invalid").searchParams.get("offset")), ["0", "0", "0"]);
+  assert.equal(new URL(requests[1].path, "https://workbench.example.invalid").searchParams.get("after_id"), notes[99].id);
+  assert.equal(new URL(requests[2].path, "https://workbench.example.invalid").searchParams.get("after_id"), notes[199].id);
   for (const request of requests) {
     const url = new URL(request.path, "https://workbench.example.invalid");
     assert.equal(url.pathname, "/api/notes");
@@ -192,24 +200,43 @@ test("listAllOwnerNotes requests one more empty page when the total is an exact 
   const requests = [];
   const result = await listAllOwnerNotes({ client: syntheticSession(), fetchImpl: pagedFetch(notes, { requests }) });
   assert.equal(result.notes.length, 200);
-  assert.equal(requests.length, 3, "offset 0, 100, then an empty page at 200");
+  assert.equal(requests.length, 3, "two full cursor pages, then an empty cursor page");
 });
 
 test("listAllOwnerNotes de-duplicates notes that shift across page boundaries while the owner edits", async () => {
   const notes = Array.from({ length: 150 }, (_, index) => syntheticNote(index));
-  // shift=1 makes each page after the first repeat the last note of the previous page.
+  // Repeated boundary rows are safely deduplicated during cursor paging.
   const result = await listAllOwnerNotes({ client: syntheticSession(), fetchImpl: pagedFetch(notes, { shift: 1 }) });
   assert.equal(result.notes.length, 150);
   assert.equal(new Set(result.notes.map((note) => note.id)).size, 150);
 });
 
-test("listAllOwnerNotes stops at the gateway offset ceiling and reports truncation instead of looping", async () => {
-  const notes = Array.from({ length: 20_000 }, (_, index) => syntheticNote(index));
+test("listAllOwnerNotes fails visibly when a full cursor page repeats without advancing", async () => {
+  const notes = Array.from({ length: NOTE_DIRECTORY_PAGE_SIZE }, (_, index) => syntheticNote(index));
+  let requests = 0;
+  const result = listAllOwnerNotes({
+    client: syntheticSession(),
+    fetchImpl: async () => {
+      requests += 1;
+      return Response.json({ notes });
+    },
+  });
+  await assert.rejects(result, (error) => error.code === "PAGINATION_STALLED" && /fully loaded/.test(error.message));
+  assert.equal(requests, 2, "fail immediately when the first cursor page repeats");
+});
+
+test("listAllOwnerNotes keyset pagination reaches and searches notes beyond the former 10,100-note ceiling", async () => {
+  const notes = Array.from({ length: 10_350 }, (_, index) => syntheticNote(index));
+  notes[10_299] = syntheticNote(10_299, { title: "Older unique search phrase" });
   const requests = [];
   const result = await listAllOwnerNotes({ client: syntheticSession(), fetchImpl: pagedFetch(notes, { requests }) });
-  assert.equal(result.truncated, true);
-  assert.equal(requests.length, NOTE_DIRECTORY_MAX_OFFSET / NOTE_DIRECTORY_PAGE_SIZE + 1);
-  assert.equal(result.notes.length, NOTE_DIRECTORY_MAX_OFFSET + NOTE_DIRECTORY_PAGE_SIZE);
+  assert.equal(result.truncated, false);
+  assert.equal(result.notes.length, notes.length);
+  assert.equal(result.notes.at(-1).id, notes.at(-1).id);
+  const olderMatch = filterNoteEntries(buildNoteDirectoryEntries(result.notes), "older unique search phrase");
+  assert.equal(olderMatch.length, 1);
+  assert.equal(requests.length, Math.ceil(notes.length / NOTE_DIRECTORY_PAGE_SIZE));
+  assert.ok(requests.slice(1).every((request) => new URL(request.path, "https://workbench.example.invalid").searchParams.has("after_id")));
 });
 
 test("listAllOwnerNotes needs a Supabase session and surfaces gateway auth failures without fetching", async () => {
