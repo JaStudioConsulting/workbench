@@ -90,7 +90,6 @@ async function callJson(client, { model, system, prompt, schema, maxTokens = 120
   const message = await client.messages.create({
     model,
     max_tokens: maxTokens,
-    temperature: 0,
     system,
     messages: [{ role: "user", content: prompt }],
   }, { timeout: 60_000 });

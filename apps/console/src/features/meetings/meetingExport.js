@@ -3,6 +3,31 @@ function safeFilename(value) {
   return slug || "meeting-notes";
 }
 
+export const MAX_WORKFLOW_RESUME_PDF_BYTES = 8 * 1024 * 1024;
+
+export function downloadWorkflowResumePdf(pdf, {
+  documentRef = globalThis.document,
+  URLImpl = globalThis.URL,
+} = {}) {
+  if (!pdf || pdf.mimeType !== "application/pdf" || typeof pdf.base64 !== "string" || !/^[A-Za-z0-9+/]*={0,2}$/.test(pdf.base64) || pdf.base64.length % 4 !== 0) {
+    throw new Error("The resume PDF is not available to download.");
+  }
+  const binary = atob(pdf.base64);
+  if (!binary.startsWith("%PDF-") || binary.length > MAX_WORKFLOW_RESUME_PDF_BYTES || Number(pdf.sizeBytes) !== binary.length) {
+    throw new Error("The resume PDF could not be verified for download.");
+  }
+  const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
+  const blob = new Blob([bytes], { type: "application/pdf" });
+  const url = URLImpl.createObjectURL(blob);
+  const link = documentRef.createElement("a");
+  const filename = safeFilename(String(pdf.fileName || "candidate-resume").replace(/\.pdf$/i, ""));
+  link.href = url;
+  link.download = `${filename}.pdf`;
+  link.click();
+  URLImpl.revokeObjectURL(url);
+  return { sizeBytes: binary.length, fileName: link.download };
+}
+
 export function downloadMeetingMarkdown({ title, markdown }, {
   documentRef = globalThis.document,
   URLImpl = globalThis.URL,

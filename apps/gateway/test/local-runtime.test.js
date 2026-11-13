@@ -61,7 +61,9 @@ test("local runtime serves built assets and uses index only for SPA routes", asy
     assert.match(spa.body, /Workbench shell/);
     const api = await request(app, "/api/unknown", { accept: "text/html" });
     assert.equal(api.status, 404);
+    assert.match(api.contentType, /application\/json/);
     assert.doesNotMatch(api.body, /Workbench shell/);
+    assert.match(api.body, /API route not found/);
     const health = await request(app, "/healthz");
     assert.equal(health.status, 200);
     assert.match(health.body, /recruiting-workbench-gateway/);

@@ -42,6 +42,10 @@ import {
 
 test("shared contracts reject unsupported workflow input and standalone skills", () => {
   assert.throws(() => CandidateInputSchema.parse({ name: "A", title: "B", resumeText: "", jobDescription: "C" }));
+  assert.equal(CandidateInputSchema.safeParse({ candidateId: "sourcing:1", name: "A", resumeText: "r".repeat(500_000), jobDescription: "J".repeat(500_000), transcriptText: "t".repeat(500_000), callNotes: "n".repeat(300_000) }).success, true);
+  const overLimit = CandidateInputSchema.safeParse({ candidateId: "sourcing:1", name: "A", resumeText: "r".repeat(1_100_000), jobDescription: "J".repeat(1_100_000) });
+  assert.equal(overLimit.success, false);
+  assert.match(overLimit.error.issues[0].message, /shorten the resume, transcript/i);
   assert.throws(() => McpDiscoverySchema.parse({ frontDoor: "resume", tools: [] }));
   assert.deepEqual(ErrorEnvelopeSchema.parse({ error: { code: "UNAVAILABLE", message: "Not configured" } }).error.code, "UNAVAILABLE");
 });

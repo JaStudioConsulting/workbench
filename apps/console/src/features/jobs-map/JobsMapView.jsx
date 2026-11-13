@@ -20,7 +20,7 @@ const BoardPanel = lazy(() => import("../board/BoardPanel.jsx"));
 export default function JobsMapView({ onSelectJobForWorkflow, onOpenJobReview, focusJobId = "" }) {
   const [jobs, setJobs] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [dataSource, setDataSource] = useState("loading"); // "live" | "unavailable"
+  const [dataSource, setDataSource] = useState("loading"); // "ready" | "empty" | "error"
   const [searchQuery, setSearchQuery] = useState("");
   const [searchCoords, setSearchCoords] = useState(null);
   const [searchAddressName, setSearchAddressName] = useState("");
@@ -43,50 +43,17 @@ export default function JobsMapView({ onSelectJobForWorkflow, onOpenJobReview, f
   const searchMarkerRef = useRef(null);
   const radiusCircleRef = useRef(null);
 
-  // 1. Initial Load of Jobs
+  // Load jobs already saved to Tracker. Google Sheets imports are started from Settings.
   const loadJobs = async () => {
     setLoading(true);
+    setDataSource("loading");
     try {
-      // Attempt authenticated gateway sync via Google Sheets API
-      const res = await fetch("/api/gws/sync", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          service: "sheets",
-          spreadsheetId: "1RexJFAEWRwNjzeGThutrA0zMObu2g4r3q0Vu0uiDbQs",
-          range: "Jobs!A1:K100",
-        }),
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        if (Array.isArray(data.rows) && data.rows.length > 1) {
-          const headers = data.rows[0];
-          const rawObjects = data.rows.slice(1).map((row) => {
-            const obj = {};
-            headers.forEach((h, i) => {
-              obj[h] = row[i] || "";
-            });
-            return obj;
-          });
-          const active = rawObjects.filter((j) => (j["Status"] || j.status || "").toLowerCase() === "active");
-          setJobs(expandAndEnrichJobs(active));
-          setDataSource("live");
-          setLoading(false);
-          return;
-        }
-      }
-    } catch {
-      // Fall through to the authenticated Supabase snapshot.
-    }
-
-    const { data: trackerJobs, error: trackerError } = await supabase
-      .from("tracker_jobs")
-      .select("job_id,job_title,company,location,compensation,date_opened,owners,status,job_description,loxo_link")
-      .eq("status", "Active")
-      .order("date_opened", { ascending: false, nullsFirst: false });
-
-    if (!trackerError && trackerJobs?.length) {
+      const { data: trackerJobs, error: trackerError } = await supabase
+        .from("tracker_jobs")
+        .select("job_id,job_title,company,location,compensation,date_opened,owners,status,job_description,loxo_link")
+        .eq("status", "Active")
+        .order("date_opened", { ascending: false, nullsFirst: false });
+      if (trackerError) throw trackerError;
       const sourceRows = trackerJobs.map((job) => ({
         "Job ID": String(job.job_id),
         "Job Title": job.job_title,
@@ -100,15 +67,13 @@ export default function JobsMapView({ onSelectJobForWorkflow, onOpenJobReview, f
         "Loxo Link": job.loxo_link || "",
       }));
       setJobs(expandAndEnrichJobs(sourceRows));
-      setDataSource("live");
+      setDataSource(sourceRows.length ? "ready" : "empty");
+    } catch {
+      setJobs([]);
+      setDataSource("error");
+    } finally {
       setLoading(false);
-      return;
     }
-
-    // Honest empty state. Never replace unavailable live data with fixtures.
-    setJobs([]);
-    setDataSource("unavailable");
-    setLoading(false);
   };
 
   useEffect(() => {
@@ -420,14 +385,14 @@ export default function JobsMapView({ onSelectJobForWorkflow, onOpenJobReview, f
         </div>
 
         <div className="flex min-w-0 flex-wrap items-center gap-2">
-          <Badge variant={dataSource === "live" ? "secondary" : "outline"} className="flex items-center gap-1.5 text-xs">
-            <span className={`h-2 w-2 rounded-full ${dataSource === "live" ? "bg-emerald-500" : dataSource === "loading" ? "bg-amber-500" : "bg-rose-500"}`} />
-            {dataSource === "live" ? "Tracker via Supabase" : dataSource === "loading" ? "Loading Tracker" : "Tracker unavailable"}
+          <Badge variant={dataSource === "ready" ? "secondary" : "outline"} className="flex items-center gap-1.5 text-xs">
+            <span aria-hidden="true" className={`h-2 w-2 rounded-full ${dataSource === "ready" ? "bg-emerald-600" : dataSource === "loading" ? "bg-amber-600" : dataSource === "error" ? "bg-rose-600" : "bg-muted-foreground"}`} />
+            {dataSource === "ready" ? "Saved Tracker jobs" : dataSource === "empty" ? "No saved jobs" : dataSource === "loading" ? "Loading saved jobs…" : "Couldn't load saved jobs"}
           </Badge>
 
-          <Button size="sm" variant="outline" className="min-h-11 min-w-11" onClick={loadJobs} disabled={loading} title="Refresh jobs data">
+          <Button size="sm" variant="outline" className="min-h-11 min-w-11" onClick={loadJobs} disabled={loading} title="Refresh saved Tracker jobs" aria-label="Refresh saved Tracker jobs">
             <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
-            <span className="hidden sm:inline">Sync</span>
+            <span className="hidden sm:inline">Refresh</span>
           </Button>
 
           {/* Mobile View Toggles */}
@@ -451,6 +416,8 @@ export default function JobsMapView({ onSelectJobForWorkflow, onOpenJobReview, f
           </div>
         </div>
       </div>
+
+      {dataSource === "error" && !loading ? <p role="alert" className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm">Saved jobs couldn&apos;t load. Check your connection and try again.</p> : null}
 
       {/* 2. Filter & Candidate Search Bar */}
       <div className="grid gap-2 rounded-lg border bg-muted/20 p-3 sm:grid-cols-2 lg:grid-cols-6">
@@ -601,7 +568,7 @@ export default function JobsMapView({ onSelectJobForWorkflow, onOpenJobReview, f
             <div className="flex flex-col gap-2">
               {filteredJobs.length === 0 ? (
                 <div className="p-8 text-center text-sm text-muted-foreground">
-                  No roles match current search and radius criteria.
+                  {dataSource === "empty" ? "No saved jobs yet. Import jobs in Settings, then refresh this page." : dataSource === "error" ? "Saved jobs couldn’t load. Try Refresh." : "No roles match current search and radius criteria."}
                 </div>
               ) : (
                 filteredJobs.map((job) => {

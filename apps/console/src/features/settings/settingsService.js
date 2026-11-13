@@ -25,11 +25,11 @@ export function saveCanadaFilter(enabled, storage = globalThis.localStorage) {
 async function readAiStatus(request) {
   try {
     const response = await request(new URL("/api/ai/status", gatewayBaseURL), { credentials: "include", headers: { accept: "application/json" } });
-    if (!response.ok) return { available: false, label: "AI check not set up" };
+    if (!response.ok) return { available: null, label: "AI check not set up" };
     const payload = await response.json();
-    return { available: Boolean(payload.available || payload.configured), label: payload.available || payload.configured ? "AI check available" : "AI check not set up" };
+    return { available: Boolean(payload.available || payload.configured), label: payload.available || payload.configured ? "Fit check ready" : "Fit check not set up" };
   } catch {
-    return { available: false, label: "AI check not set up" };
+    return { available: null, label: "AI check not set up" };
   }
 }
 
@@ -39,7 +39,7 @@ export async function loadSettingsStatus({ client = supabase, request = globalTh
     getMailStatus({ request }),
     readAiStatus(request),
     typeof meetingsStatusLoader === "function"
-      ? meetingsStatusLoader().catch(() => ({ available: false }))
+      ? meetingsStatusLoader().catch(() => ({ available: null }))
       : Promise.resolve({ available: false }),
   ]);
   return {
@@ -48,7 +48,7 @@ export async function loadSettingsStatus({ client = supabase, request = globalTh
     ai,
     loxo: { queued: true, label: "Queued mode: changes wait for you or $recruiter" },
     meetings: {
-      available: Boolean(meetings?.available),
+      available: meetings?.available == null ? null : Boolean(meetings.available),
       label: meetings?.available
         ? "M1 transcription available; recording uses this device's microphone"
         : "Meetings transcription helper unavailable",

@@ -7,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { Textarea } from "../../components/ui/textarea.tsx";
 import { isSecureRecordingContext, meetingCaptureState } from "./browserRecorder.js";
 import { isMeetingContextLocked } from "./meetingModel.js";
+import { operatorCasesEnabled } from "../operator-cases/operatorCaseService.js";
 
 const VARIANTS = [
   { id: "guided", label: "Guided", rightWhen: "The workflow is occasional and sequence matters", cost: "More vertical travel" },
@@ -154,12 +155,12 @@ function NotesEditor({ transcript, setTranscript, notes, setNotes, transcribing,
       {visibleSegments.length ? visibleSegments.map((segment, index) => <p className="break-words text-sm" key={`${segment.start || 0}-${index}`}><span className="font-semibold">{speakerLabels[segment.speaker] || segment.speaker || "Speaker"}:</span> {segment.text}</p>) : <p className="text-sm text-muted-foreground">No speaker lines match this search.</p>}
     </div> : null}
     <label className="text-sm font-medium">Meeting notes<Textarea className="mt-1" rows={notesRows} value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Decisions, follow-ups, and candidate facts." /></label>
-    <p className="text-xs text-muted-foreground">Add a transcript or notes to save a meeting draft. Candidate notes require a transcript.</p>
+    <p className="text-xs text-muted-foreground">{operatorCasesEnabled ? "Add a transcript or notes to save a meeting draft. Without a transcript, the after-call review is saved as blocked." : "Add a transcript or notes to save a meeting draft. Save the transcript before preparing after-call notes."}</p>
   </div>;
 }
 
 function CaptureActions({ transcribing, makingNotes, saveDraft, createNotes }) {
-  return <div className="flex flex-wrap gap-2"><Button className="h-auto min-h-9 max-w-full whitespace-normal text-center" onClick={saveDraft} disabled={transcribing}>{transcribing ? "Transcribing..." : "Save meeting draft"}</Button><Button className="h-auto min-h-9 max-w-full whitespace-normal text-center" variant="outline" onClick={createNotes} disabled={makingNotes || transcribing}><ClipboardList size={14} />{makingNotes ? "Preparing..." : "Make candidate notes"}</Button></div>;
+  return <div className="flex flex-wrap gap-2"><Button className="h-auto min-h-9 max-w-full whitespace-normal text-center" onClick={saveDraft} disabled={transcribing}>{transcribing ? "Transcribing..." : "Save meeting draft"}</Button><Button className="h-auto min-h-9 max-w-full whitespace-normal text-center" variant="outline" onClick={createNotes} disabled={makingNotes || transcribing}><ClipboardList size={14} />{makingNotes ? "Preparing..." : "Prepare after-call review"}</Button></div>;
 }
 
 function CaptureHeader({ description }) {

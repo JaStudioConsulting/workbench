@@ -1,5 +1,6 @@
 import { supabase } from "../../supabase-client.js";
 import { listMailReplies, listOutreach } from "../mail/mailClient.js";
+import { listOperatorCases } from "../operator-cases/operatorCaseService.js";
 
 function candidateKey(value = {}) {
   return `${value.candidate_source || value.candidateSource || ""}:${value.candidate_source_id || value.candidateSourceId || ""}`;
@@ -46,12 +47,23 @@ export function groupWaitingActions(actions, candidates = []) {
       candidateName: names.get(candidateKey(action)) || "Candidate name not on file",
       count: 0,
       oldestAt: action.created_at || null,
+      actions: [],
     };
     current.count += 1;
+    current.actions.push(action);
     if (action.created_at && (!current.oldestAt || action.created_at < current.oldestAt)) current.oldestAt = action.created_at;
     groups.set(key, current);
   }
   return [...groups.values()];
+}
+
+export function waitingAgeLabel(value, now = new Date()) {
+  const age = now.getTime() - Date.parse(value);
+  if (!Number.isFinite(age) || age < 0) return "Age unavailable";
+  const hours = Math.floor(age / 3_600_000);
+  if (hours < 24) return `${hours}h old`;
+  const days = Math.floor(hours / 24);
+  return `${days}d old`;
 }
 
 async function checked(query, message) {
@@ -60,10 +72,10 @@ async function checked(query, message) {
   return data || [];
 }
 
-export async function loadHomeData({ client = supabase, now = new Date() } = {}) {
-  const [actions, drafts, candidates, outreach] = await Promise.all([
+export async function loadHomeData({ client = supabase, now = new Date(), includeCases = false } = {}) {
+  const [actions, drafts, candidates, outreach, cases] = await Promise.all([
     checked(
-      client.from("candidate_review_actions").select("job_id,candidate_source,candidate_source_id,created_at,status").eq("status", "waiting_for_loxo").order("created_at", { ascending: true }),
+      client.from("candidate_review_actions").select("id,job_id,candidate_source,candidate_source_id,action_type,activity_type,note,created_at,status").eq("status", "waiting_for_loxo").order("created_at", { ascending: true }),
       "Waiting actions could not be loaded",
     ),
     checked(
@@ -75,6 +87,7 @@ export async function loadHomeData({ client = supabase, now = new Date() } = {})
       "Candidate names could not be loaded",
     ),
     listOutreach({ client }),
+    includeCases ? listOperatorCases({ client }) : Promise.resolve([]),
   ]);
   const emails = [...new Set(outreach.map((entry) => entry.candidateEmail).filter(Boolean))];
   const replies = await listMailReplies(emails);
@@ -84,5 +97,23 @@ export async function loadHomeData({ client = supabase, now = new Date() } = {})
     outreach,
     replies,
     followUps: followUpsDue(outreach, replies, now),
+    cases,
   };
+}
+
+export async function listMpcCandidates({ client = supabase } = {}) {
+  const rows = await checked(
+    client.from("candidate_review_feed")
+      .select("candidate_source,candidate_source_id,candidate_name,current_title,current_company")
+      .limit(5000),
+    "Candidates could not be loaded. Retry, or check that live Tracker data is available.",
+  );
+  const unique = new Map();
+  for (const row of rows) {
+    const candidateId = Number(row.candidate_source_id);
+    if (!["sourcing", "submission"].includes(row.candidate_source) || !/^[1-9]\d*$/.test(String(row.candidate_source_id || "")) || !Number.isSafeInteger(candidateId)) continue;
+    const id = `${row.candidate_source}:${candidateId}`;
+    if (!unique.has(id)) unique.set(id, { ...row, id });
+  }
+  return [...unique.values()].sort((a, b) => String(a.candidate_name || "").localeCompare(String(b.candidate_name || "")));
 }

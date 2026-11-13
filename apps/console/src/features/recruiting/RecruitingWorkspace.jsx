@@ -1,90 +1,32 @@
-import { lazy, Suspense, useMemo, useState } from "react";
-import { DragDropProvider, useDraggable, useDroppable } from "@dnd-kit/react";
-import { ArrowRight, Check, GripVertical, ShieldCheck, MapPin } from "lucide-react";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "../../components/ui/alert-dialog.tsx";
-import { Badge } from "../../components/ui/badge.tsx";
-import { Button } from "../../components/ui/button.tsx";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../components/ui/card.tsx";
-import { Checkbox } from "../../components/ui/checkbox.tsx";
-import { Field, FieldContent, FieldDescription, FieldGroup, FieldLabel } from "../../components/ui/field.tsx";
-import { Input } from "../../components/ui/input.tsx";
-import { Progress } from "../../components/ui/progress.tsx";
-import { ScrollArea } from "../../components/ui/scroll-area.tsx";
-import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "../../components/ui/select.tsx";
-import { Separator } from "../../components/ui/separator.tsx";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../components/ui/tabs.tsx";
-import { Textarea } from "../../components/ui/textarea.tsx";
-import { DEMO_SF_JOBS_HIERARCHY, INITIAL_RECRUITING_STATE, advanceRecruitingStage, approveAction, createBlankCandidateIntake, generateJobSpecificMessages, generateRecruitingDrafts, requestApproval } from "./domain.js";
+import { lazy, Suspense } from "react";
 import ProcessPage from "./ProcessPage.jsx";
 
 const JobsMapView = lazy(() => import("../jobs-map/JobsMapView.jsx"));
 
-// Source authority: shadcn/ui registry primitives and official dnd-kit React adapter.
-// Draft workflow state remains local. The Process tab reads live records through ProcessPage.
-
-const stageLabels = { intake: "Intake", source_review: "Source review", drafting: "Drafting", draft_ready: "Draft ready", verified: "Verified", blocked_authorization: "Approval gate" };
-const stageOrder = Object.keys(stageLabels);
-const checklistItems = ["I reviewed source coverage and NEEDS VERIFICATION markers.", "I reviewed all six draft views for factual accuracy.", "I confirm external actions require separate approval below."];
-
-function selectedJobValue(job) { return job ? job.loxoJobId : ""; }
-
-function JobSelector({ job, onChange }) {
-  const parent = DEMO_SF_JOBS_HIERARCHY[0];
-  return <Card data-testid="job-selector-card"><CardHeader><div className="flex items-center justify-between gap-3"><div><CardTitle>1. Select a job</CardTitle><CardDescription>Company → child SF Job. Demo-only read surface.</CardDescription></div><Badge variant="outline">DEMO ONLY</Badge></div></CardHeader><CardContent className="flex min-w-0 flex-col gap-4"><FieldGroup><Field><FieldLabel>Company</FieldLabel><Select value={parent.company} onValueChange={() => {}}><SelectTrigger className="w-full min-w-0"><SelectValue /></SelectTrigger><SelectContent><SelectGroup><SelectLabel>Companies</SelectLabel><SelectItem value={parent.company}>{parent.company}</SelectItem></SelectGroup></SelectContent></Select><FieldDescription>Parent relation: SF company</FieldDescription></Field><Field><FieldLabel>Child SF Job</FieldLabel><Select value={selectedJobValue(job)} onValueChange={(value) => onChange(parent.jobs.find((item) => item.loxoJobId === value))}><SelectTrigger className="w-full min-w-0"><SelectValue placeholder="Choose a child job" /></SelectTrigger><SelectContent><SelectGroup><SelectLabel>{parent.company}</SelectLabel>{parent.jobs.map((item) => <SelectItem key={item.loxoJobId} value={item.loxoJobId}>{item.title}</SelectItem>)}</SelectGroup></SelectContent></Select>{job ? <FieldDescription>Parent: {job.company} · Loxo Job ID: {job.loxoJobId} · Demo only</FieldDescription> : <FieldDescription>Select a child job before drafting.</FieldDescription>}</Field></FieldGroup></CardContent></Card>;
-}
-
-function IntakeForm({ input, onChange, disabled }) {
-  const update = (key) => (event) => onChange({ ...input, [key]: event.target.value });
-  return <Card data-testid="candidate-intake-card"><CardHeader><CardTitle>2. Candidate intake</CardTitle><CardDescription>Blank by default. Enter only facts from the supplied sources.</CardDescription></CardHeader><CardContent><FieldGroup><Field><FieldLabel htmlFor="candidate-name">Candidate name</FieldLabel><Input id="candidate-name" value={input.name} onChange={update("name")} disabled={disabled} /></Field><Field><FieldLabel htmlFor="candidate-title">Current title</FieldLabel><Input id="candidate-title" value={input.title} onChange={update("title")} disabled={disabled} /></Field><Field><FieldLabel htmlFor="resume-text">Resume</FieldLabel><Textarea id="resume-text" rows={4} value={input.resumeText} onChange={update("resumeText")} disabled={disabled} placeholder="Paste resume text" /></Field><Field><FieldLabel htmlFor="transcript-text">Transcript</FieldLabel><Textarea id="transcript-text" rows={3} value={input.transcriptText} onChange={update("transcriptText")} disabled={disabled} placeholder="Paste transcript text, if available" /></Field><Field><FieldLabel htmlFor="job-description">Job description</FieldLabel><Textarea id="job-description" rows={3} value={input.jobDescription} onChange={update("jobDescription")} disabled={disabled} placeholder="Paste the job description" /></Field><Field><FieldLabel htmlFor="call-notes">Call notes</FieldLabel><Textarea id="call-notes" rows={3} value={input.callNotes} onChange={update("callNotes")} disabled={disabled} placeholder="Paste call notes, if available" /></Field></FieldGroup></CardContent></Card>;
-}
-
-function DraftViews({ drafts, messages }) {
-  const views = drafts ? { resume: drafts.brandedResume.content, submission: JSON.stringify(drafts.submission.fields, null, 2), email: `${drafts.presentationEmail.subject}\n\n${drafts.presentationEmail.body}`, rejection: messages.rejection, campaign: messages.campaignStep, loxo: drafts.loxoDraft.bullets.join("\n") } : null;
-  return <Card data-testid="draft-views-card"><CardHeader><CardTitle>3. Draft views</CardTitle><CardDescription>Six draft-only outputs generated by the recruiting domain module.</CardDescription></CardHeader><CardContent>{views ? <Tabs defaultValue="resume"><TabsList className="flex max-w-full flex-wrap"><TabsTrigger value="resume">Resume</TabsTrigger><TabsTrigger value="submission">Submission</TabsTrigger><TabsTrigger value="email">Presentation email</TabsTrigger><TabsTrigger value="rejection">Rejection</TabsTrigger><TabsTrigger value="campaign">Campaign</TabsTrigger><TabsTrigger value="loxo">Loxo notes</TabsTrigger></TabsList>{Object.entries(views).map(([key, value]) => <TabsContent key={key} value={key}><ScrollArea className="h-56 rounded-md border bg-muted/20 p-3"><pre className="whitespace-pre-wrap text-xs leading-relaxed">{value}</pre></ScrollArea></TabsContent>)}</Tabs> : <div className="rounded-md border border-dashed p-6 text-sm text-muted-foreground">Select a demo job and complete the required intake fields to generate drafts.</div>}</CardContent></Card>;
-}
-
-function ReviewGate({ checked, onChange, canReview, onReview }) {
-  return <Card data-testid="review-gate-card"><CardHeader><CardTitle>4. Human review gate</CardTitle><CardDescription>All three checks are required before approval cards unlock.</CardDescription></CardHeader><CardContent className="flex flex-col gap-4"><FieldGroup>{checklistItems.map((item, index) => <Field key={item} orientation="horizontal"><Checkbox id={`review-check-${index}`} checked={checked[index]} onCheckedChange={(value) => { const next = [...checked]; next[index] = Boolean(value); onChange(next); }} /><FieldContent><FieldLabel htmlFor={`review-check-${index}`}>{item}</FieldLabel></FieldContent></Field>)}</FieldGroup><Progress value={checked.filter(Boolean).length / checklistItems.length * 100} aria-label="Review checklist progress" /><Button data-testid="mark-verified" onClick={onReview} disabled={!canReview}>Mark draft verified <Check data-icon="inline-end" /></Button></CardContent></Card>;
-}
-
-function ApprovalCard({ action, label, state, onRequest, onApprove }) {
-  const pending = state === "pending";
-  const approved = state === "approved";
-  return <Card data-testid={`approval-${action}`}><CardHeader><div className="flex items-center justify-between gap-2"><CardTitle>{label}</CardTitle><Badge variant={approved ? "secondary" : "outline"}>{approved ? "Approved: not executed, sent or written" : pending ? "Pending review" : "Not requested"}</Badge></div><CardDescription>Separate human approval. No external side effect in this prototype.</CardDescription></CardHeader><CardContent className="flex gap-2">{!pending && !approved ? <Button variant="outline" onClick={onRequest} disabled={state === "locked"}>Request approval</Button> : null}{pending ? <AlertDialog><AlertDialogTrigger render={<Button>Approve {label}</Button>} /><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Approve {label}?</AlertDialogTitle><AlertDialogDescription>This records local demo approval only. It will not execute, send, or write anything.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction onClick={onApprove}>Approve locally</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog> : null}{approved ? <span className="flex items-center gap-2 text-sm text-muted-foreground"><ShieldCheck size={16} /> No action executed</span> : null}</CardContent></Card>;
-}
-
-function StageColumn({ stage, candidates, onKeyboardMove }) {
-  const { ref, isDropTarget } = useDroppable({ id: stage });
-  return <div ref={ref} data-testid={`stage-${stage}`} className={`flex min-h-40 flex-col gap-3 rounded-lg border p-3 ${isDropTarget ? "border-primary bg-primary/5" : "bg-muted/20"}`}><div className="flex items-center justify-between"><h3 className="text-sm font-semibold">{stageLabels[stage]}</h3><Badge variant="outline">{candidates.length}</Badge></div>{candidates.map((candidate) => <CandidateCard key={candidate.id} candidate={candidate} onKeyboardMove={onKeyboardMove} />)}</div>;
-}
-
-function CandidateCard({ candidate, onKeyboardMove }) {
-  const { ref, handleRef, isDragging } = useDraggable({ id: candidate.id, data: { stage: candidate.stage } });
-  const index = stageOrder.indexOf(candidate.stage);
-  const moveBy = (delta) => { const next = stageOrder[index + delta]; if (next) onKeyboardMove(candidate.id, next); };
-  return <div ref={ref} className={`rounded-md border bg-background p-3 shadow-sm ${isDragging ? "opacity-50" : ""}`}><div className="flex items-start gap-2"><button ref={handleRef} type="button" aria-label={`Drag ${candidate.name}`} className="mt-0.5 cursor-grab text-muted-foreground" onKeyDown={(event) => { if (event.key === "ArrowRight" || event.key === "ArrowDown") { event.preventDefault(); moveBy(1); } if (event.key === "ArrowLeft" || event.key === "ArrowUp") { event.preventDefault(); moveBy(-1); } }}><GripVertical size={16} /></button><div className="min-w-0 flex-1"><p className="truncate text-sm font-medium">{candidate.name}</p><p className="text-xs text-muted-foreground">{candidate.title}</p></div></div><div className="mt-3 flex gap-1"><Button size="sm" variant="ghost" onClick={() => moveBy(-1)} disabled={index === 0} aria-label={`Move ${candidate.name} backward`}>←</Button><Button size="sm" variant="ghost" onClick={() => moveBy(1)} disabled={index === stageOrder.length - 1} aria-label={`Move ${candidate.name} forward`}>→</Button></div></div>;
-}
-
-function StageBoard({ stage, onStage, candidate }) {
-  const [announcement, setAnnouncement] = useState("");
-  const draftCandidate = candidate?.name ? { ...candidate, id: "draft-candidate", stage } : null;
-  const moveCandidate = (id, nextStage) => { if (!draftCandidate || id !== draftCandidate.id) return; const currentIndex = stageOrder.indexOf(stage); const nextIndex = stageOrder.indexOf(nextStage); if (nextIndex !== currentIndex + 1 && nextIndex !== currentIndex - 1) { setAnnouncement("Stages must move one step at a time."); return; } onStage(nextStage); setAnnouncement(`Candidate moved to ${stageLabels[nextStage]}.`); };
-  return <Card data-testid="stage-board"><CardHeader><CardTitle>Process board</CardTitle><CardDescription>Sequential guardrails apply. Drag with pointer or use arrow keys/buttons.</CardDescription></CardHeader><CardContent>{draftCandidate ? <DragDropProvider onDragEnd={(event) => { if (event.canceled) return; const target = event.operation.target?.id; if (target) moveCandidate(draftCandidate.id, target); }}><div className="grid gap-3 md:grid-cols-3">{stageOrder.map((item) => <StageColumn key={item} stage={item} candidates={item === stage ? [draftCandidate] : []} onKeyboardMove={moveCandidate} />)}</div></DragDropProvider> : <p className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">No draft candidate selected.</p>}<p className="sr-only" aria-live="polite">{announcement}</p></CardContent></Card>;
-}
-
 export default function RecruitingWorkspace({ page, value, onChange, onOpenJobReview }) {
-  const [jobsView, setJobsView] = useState("map");
-  const state = value ?? { ...INITIAL_RECRUITING_STATE, intake: createBlankCandidateIntake(), job: null, drafts: null, messages: null, checks: [false, false, false] };
-  const input = state.intake;
-  const job = state.job;
-  const canGenerate = Boolean(job && input.name.trim() && input.title.trim() && input.resumeText.trim() && input.jobDescription.trim());
-  const messages = state.messages;
-  const approvals = state.approvals;
-  const update = (patch) => onChange({ ...state, ...patch });
-  const generate = () => { try { const drafts = generateRecruitingDrafts(input, job); const nextMessages = generateJobSpecificMessages(input, job); update({ drafts, messages: nextMessages, stage: "draft_ready" }); } catch { update({ error: "Complete the required source fields before generating drafts." }); } };
-  const review = () => { if (state.checks.every(Boolean) && state.drafts) update({ stage: "verified" }); };
-  const request = (action) => { try { update(requestApproval(state, action)); } catch { update({ error: "Verify the draft before requesting external approval." }); } };
-  const approve = (action) => { try { update(approveAction(state, action)); } catch { update({ error: "Request approval before approving." }); } };
-  const stageContent = useMemo(() => page === "Process" ? <StageBoard stage={state.stage} candidate={input.name.trim() ? { name: input.name.trim(), title: input.title.trim() || "Title not on file" } : null} onStage={(nextStage) => { try { update({ stage: advanceRecruitingStage(state, nextStage).stage }); } catch { update({ error: "Stages must move one step at a time." }); } }} /> : null, [page, state]);
-  return <div className="flex flex-col gap-4" data-testid="recruiting-workspace"><div className="flex items-center justify-between gap-3"><div><span className="eyebrow">{page === "Jobs" ? "TRACKER WORKSPACE" : page === "Process" ? "LIVE PROCESS" : "DRAFT WORKFLOW"}</span><h2 className="text-lg font-semibold">{page} recruiting workspace</h2></div><Badge variant="outline">{page === "Jobs" ? "Live jobs" : page === "Process" ? "Live data" : "Draft only"}</Badge></div>{state.error ? <div role="alert" className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm">{state.error}</div> : null}{page === "Jobs" ? <div className="flex flex-col gap-4"><div className="flex items-center gap-2"><Button size="sm" variant="default" className="min-h-11" onClick={() => setJobsView("map")} data-testid="toggle-jobs-map"><MapPin size={14} className="mr-1.5" />Jobs Map & Radar</Button></div>{jobsView === "map" ? <Suspense fallback={<div className="min-h-[400px] flex items-center justify-center text-sm text-muted-foreground">Loading Jobs Map...</div>}><JobsMapView focusJobId={job?.loxoJobId || job?.id || ""} onSelectJobForWorkflow={(selected) => { update({ job: { company: selected.company, title: selected.title, loxoJobId: selected.originalJobId || selected.id, loxoJobStatus: selected.status || "Active", location: selected.displayLocation || selected.rawLocation, demoOnly: false }, error: "" }); }} onOpenJobReview={(selected) => onOpenJobReview?.({ id: selected.originalJobId || selected.id, title: selected.title, company: selected.company, location: selected.displayLocation || selected.rawLocation })} /></Suspense> : <div className="grid gap-4 xl:grid-cols-2"><JobSelector job={job} onChange={(nextJob) => update({ job: nextJob, error: "" })} /><Card><CardHeader><CardTitle>Workflow status</CardTitle><CardDescription>State retained while moving between Jobs, Candidates, and Process.</CardDescription></CardHeader><CardContent className="flex flex-col gap-3"><p className="text-sm">Current stage: <strong>{stageLabels[state.stage]}</strong></p><Separator /><Button onClick={generate} disabled={!canGenerate} data-testid="generate-drafts">Generate six drafts <ArrowRight data-icon="inline-end" /></Button></CardContent></Card></div>}</div> : null}{page === "Candidates" ? <div className="grid gap-4 xl:grid-cols-2"><IntakeForm input={input} disabled={Boolean(state.drafts)} onChange={(next) => update({ intake: next, error: "" })} /><DraftViews drafts={state.drafts} messages={messages} /></div> : null}{page === "Process" ? <Tabs defaultValue="process"><TabsList><TabsTrigger value="process">Process</TabsTrigger><TabsTrigger value="draft-workflow">Draft workflow</TabsTrigger></TabsList><TabsContent value="process"><ProcessPage /></TabsContent><TabsContent value="draft-workflow">{stageContent}</TabsContent></Tabs> : null}{state.drafts ? <><ReviewGate checked={state.checks} onChange={(checks) => update({ checks })} canReview={state.checks.every(Boolean)} onReview={review} /><div className="grid gap-4 xl:grid-cols-3"><ApprovalCard action="tracker" label="Tracker" state={approvals.tracker} onRequest={() => request("tracker")} onApprove={() => approve("tracker")} /><ApprovalCard action="gmail" label="Gmail" state={approvals.gmail} onRequest={() => request("gmail")} onApprove={() => approve("gmail")} /><ApprovalCard action="loxo" label="Loxo" state={approvals.loxo} onRequest={() => request("loxo")} onApprove={() => approve("loxo")} /></div></> : null}</div>;
+  if (page === "Process") return <ProcessPage />;
+
+  const job = value?.job || null;
+  return <div className="flex min-w-0 flex-col gap-4" data-testid="jobs-workspace">
+    <div><span className="eyebrow">TRACKER WORKSPACE</span><h2 className="text-lg font-semibold">Jobs</h2></div>
+    <Suspense fallback={<div className="min-h-[400px] flex items-center justify-center text-sm text-muted-foreground" role="status">Loading Jobs Map…</div>}>
+      <JobsMapView
+        focusJobId={job?.loxoJobId || job?.id || ""}
+        onSelectJobForWorkflow={(selected) => onChange?.({ ...(value || {}), job: {
+          company: selected.company,
+          title: selected.title,
+          loxoJobId: selected.originalJobId || selected.id,
+          loxoJobStatus: selected.status || "Active",
+          location: selected.displayLocation || selected.rawLocation,
+          demoOnly: false,
+        } })}
+        onOpenJobReview={(selected) => onOpenJobReview?.({
+          id: selected.originalJobId || selected.id,
+          title: selected.title,
+          company: selected.company,
+          location: selected.displayLocation || selected.rawLocation,
+        })}
+      />
+    </Suspense>
+  </div>;
 }

@@ -155,7 +155,7 @@ export default function CandidateReview({ selectedJob, onSelectJob, onNavigateJo
   const supabaseStatus = dataLoading
     ? "Loading live data"
     : dataError
-      ? "Supabase unavailable"
+      ? "Live data unavailable"
       : jobs.length === 0
         ? "No live review jobs available"
         : "Connected to Supabase";
@@ -375,7 +375,7 @@ export default function CandidateReview({ selectedJob, onSelectJob, onNavigateJo
           </h3>
           <p className="text-xs text-muted-foreground mt-1 max-w-sm">
             {!dataLoading && !dataError && jobs.length === 0
-              ? "No active Tracker jobs are visible to this session. Check sign-in and the Tracker import."
+              ? "No active Tracker jobs are available to this session. Check the Tracker import and data access."
               : activeJobId
                 ? `The selected job ID "${activeJobId}" does not match any active review pipeline.`
                 : "Choose an active job from the dropdown above to review candidates."}

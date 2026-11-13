@@ -72,6 +72,7 @@ test("getProfile maps the owner row to the public profile contract", async () =>
     phone: "555-0100",
     signature: "Regards,\nJa",
     defaultProvince: "Ontario",
+    persistence: "account",
   });
 });
 
@@ -84,6 +85,7 @@ test("saveProfile falls back to localStorage only when the table is absent", asy
 
   assert.equal(saved.name, "Ja");
   assert.equal(saved.defaultProvince, "Ontario");
+  assert.equal(saved.persistence, "device");
   assert.equal(JSON.parse(storage.getItem(PROFILE_STORAGE_KEY)).name, "Ja");
 });
 

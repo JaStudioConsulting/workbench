@@ -66,14 +66,16 @@ test("profile evidence prevents a false missing-source block", () => {
   assert.equal(hasCandidateProfileData({}), false);
 });
 
-test("Process defaults to live data and keeps draft workflow reachable", () => {
+test("Process shows live records and keeps case history behind its existing flag", () => {
   const source = fs.readFileSync(path.join(root, "src/features/recruiting/RecruitingWorkspace.jsx"), "utf8");
   const page = fs.readFileSync(path.join(root, "src/features/recruiting/ProcessPage.jsx"), "utf8");
 
-  assert.match(source, /<Tabs defaultValue="process">/);
-  assert.match(source, /<TabsTrigger value="draft-workflow">Draft workflow<\/TabsTrigger>/);
-  assert.match(source, /<TabsContent value="draft-workflow">\{stageContent\}<\/TabsContent>/);
+  assert.match(source, /if \(page === "Process"\) return <ProcessPage \/>/);
+  assert.doesNotMatch(source, /generateRecruitingDrafts|DEMO_SF_JOBS_HIERARCHY|ApprovalCard|DraftViews/);
+  assert.match(source, /JobsMapView/);
   assert.match(page, /Loading live process data/);
   assert.match(page, /No active Tracker jobs/);
   assert.match(page, /role="alert"/);
+  assert.match(page, /operatorCasesEnabled \? <Card data-testid="process-case-history">/);
+  assert.match(page, /listOperatorCases\(\)/);
 });

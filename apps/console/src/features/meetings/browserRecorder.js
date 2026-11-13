@@ -5,9 +5,10 @@ const WORKBENCH_MEDIA_FORMATS = [
 ];
 
 const RECORDING_DB_NAME = "workbench-meeting-recordings";
-const RECORDING_DB_VERSION = 1;
+const RECORDING_DB_VERSION = 2;
 const RECORDING_META_STORE = "recordings";
 const RECORDING_CHUNK_STORE = "chunks";
+const MEETING_DRAFT_STORE = "drafts";
 const WAV_SAMPLE_RATE = 16_000;
 const RECOVERABLE_STATUSES = new Set(["recording", "complete"]);
 
@@ -140,6 +141,7 @@ function openRecordingDb(indexedDBImpl) {
         const store = db.createObjectStore(RECORDING_CHUNK_STORE, { keyPath: ["recordingId", "sequence"] });
         store.createIndex("recordingId", "recordingId", { unique: false });
       }
+      if (!db.objectStoreNames.contains(MEETING_DRAFT_STORE)) db.createObjectStore(MEETING_DRAFT_STORE, { keyPath: "id" });
     };
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(request.error || new Error("Recording storage is unavailable."));
@@ -249,44 +251,99 @@ export async function openRecordingArchive({
   }
 }
 
-export async function listInterruptedRecordings({ indexedDBImpl = globalThis.indexedDB } = {}) {
-  if (!indexedDBImpl?.open) return [];
+export async function listInterruptedRecordings({ ownerId, indexedDBImpl = globalThis.indexedDB } = {}) {
+  if (!ownerId || !indexedDBImpl?.open) return [];
   try {
     const records = await withRecordingDb(indexedDBImpl, (db) => {
       const transaction = db.transaction(RECORDING_META_STORE, "readonly");
       return requestAsPromise(transaction.objectStore(RECORDING_META_STORE).getAll());
     });
     return records
-      .filter((record) => RECOVERABLE_STATUSES.has(record.status))
+      .filter((record) => record.ownerId === String(ownerId) && RECOVERABLE_STATUSES.has(record.status))
       .sort((left, right) => String(right.startedAt || "").localeCompare(String(left.startedAt || "")));
   } catch {
-    return [];
+    throw new Error("Recoverable recordings could not be checked. Try again.");
   }
 }
 
-export async function recoverBrowserRecording(recordingId, { indexedDBImpl = globalThis.indexedDB } = {}) {
-  if (!recordingId || !indexedDBImpl?.open) throw new Error("That recording is no longer available on this device.");
+function localMeetingDraftId(ownerId, jobId, candidateId) {
+  return `meeting-draft:${String(ownerId)}:${String(jobId)}:${String(candidateId)}`;
+}
+
+export async function saveLocalMeetingDraft(draft, { indexedDBImpl = globalThis.indexedDB } = {}) {
+  const ownerId = String(draft?.ownerId || "").trim();
+  const jobId = String(draft?.jobId || "").trim();
+  const candidateId = String(draft?.candidateId || "").trim();
+  if (!ownerId || !jobId || !candidateId) throw new Error("Sign in and choose a job and candidate to keep an unsaved draft on this device.");
+  if (!indexedDBImpl?.open) throw new Error("This browser cannot keep an unsaved meeting draft after you close the page.");
+  const saved = {
+    id: localMeetingDraftId(ownerId, jobId, candidateId),
+    ownerId,
+    jobId,
+    candidateId,
+    transcript: String(draft.transcript || ""),
+    notes: String(draft.notes || ""),
+    templateId: String(draft.templateId || ""),
+    eventTitle: String(draft.eventTitle || ""),
+    updatedAt: new Date().toISOString(),
+  };
+  await withRecordingDb(indexedDBImpl, async (db) => {
+    const transaction = db.transaction(MEETING_DRAFT_STORE, "readwrite");
+    transaction.objectStore(MEETING_DRAFT_STORE).put(saved);
+    await transactionDone(transaction);
+  });
+  return { ...saved, persistence: "device" };
+}
+
+export async function loadLocalMeetingDraft({ ownerId, jobId, candidateId }, { indexedDBImpl = globalThis.indexedDB } = {}) {
+  if (!ownerId || !jobId || !candidateId || !indexedDBImpl?.open) return null;
+  const draft = await withRecordingDb(indexedDBImpl, async (db) => {
+    const transaction = db.transaction(MEETING_DRAFT_STORE, "readonly");
+    return requestAsPromise(transaction.objectStore(MEETING_DRAFT_STORE).get(localMeetingDraftId(ownerId, jobId, candidateId)));
+  }).catch(() => { throw new Error("The unsaved meeting draft could not be checked on this device."); });
+  if (!draft || draft.ownerId !== String(ownerId) || draft.jobId !== String(jobId) || draft.candidateId !== String(candidateId)) return null;
+  return { ...draft, persistence: "device" };
+}
+
+export async function deleteLocalMeetingDraft({ ownerId, jobId, candidateId }, { indexedDBImpl = globalThis.indexedDB } = {}) {
+  if (!ownerId || !jobId || !candidateId || !indexedDBImpl?.open) return;
+  await withRecordingDb(indexedDBImpl, async (db) => {
+    const transaction = db.transaction(MEETING_DRAFT_STORE, "readwrite");
+    transaction.objectStore(MEETING_DRAFT_STORE).delete(localMeetingDraftId(ownerId, jobId, candidateId));
+    await transactionDone(transaction);
+  });
+}
+
+export async function recoverBrowserRecording(recordingId, { ownerId, indexedDBImpl = globalThis.indexedDB } = {}) {
+  if (!recordingId || !ownerId || !indexedDBImpl?.open) throw new Error("That recording is no longer available on this device.");
   const result = await withRecordingDb(indexedDBImpl, async (db) => {
     const transaction = db.transaction([RECORDING_META_STORE, RECORDING_CHUNK_STORE], "readonly");
     const meta = await requestAsPromise(transaction.objectStore(RECORDING_META_STORE).get(recordingId));
     const records = await requestAsPromise(transaction.objectStore(RECORDING_CHUNK_STORE).getAll());
     return { meta, records };
   });
-  if (!result.meta) throw new Error("That recording is no longer available on this device.");
+  if (!result.meta || result.meta.ownerId !== String(ownerId)) throw new Error("That recording is no longer available on this device.");
   const blob = assembleRecording(result.meta, orderedChunks(result.records, recordingId));
   if (!blob.size) throw new Error("That recording has no saved audio.");
   return { blob, meta: result.meta };
 }
 
-export async function discardRecordingArchive(recordingId, { indexedDBImpl = globalThis.indexedDB } = {}) {
-  if (!recordingId || !indexedDBImpl?.open) return;
+export async function discardRecordingArchive(recordingId, { ownerId, indexedDBImpl = globalThis.indexedDB } = {}) {
+  if (!recordingId || !ownerId || !indexedDBImpl?.open) return;
   await withRecordingDb(indexedDBImpl, async (db) => {
     const transaction = db.transaction([RECORDING_META_STORE, RECORDING_CHUNK_STORE], "readwrite");
-    transaction.objectStore(RECORDING_META_STORE).delete(recordingId);
+    const done = transactionDone(transaction);
+    const metaStore = transaction.objectStore(RECORDING_META_STORE);
+    const meta = await requestAsPromise(metaStore.get(recordingId));
+    if (meta?.ownerId !== String(ownerId)) {
+      await done;
+      return;
+    }
+    metaStore.delete(recordingId);
     const chunkStore = transaction.objectStore(RECORDING_CHUNK_STORE);
     const request = chunkStore.index("recordingId").getAllKeys(recordingId);
     request.onsuccess = () => request.result.forEach((key) => chunkStore.delete(key));
-    await transactionDone(transaction);
+    await done;
   });
 }
 
@@ -383,6 +440,7 @@ function startMediaRecorder({ microphone, shared, format, MediaRecorderImpl, Aud
 
 export async function startBrowserRecording({
   includeSharedAudio = false,
+  ownerId = "",
   jobId = "",
   candidateId = "",
   jobTitle = "",
@@ -402,6 +460,7 @@ export async function startBrowserRecording({
     error.code = "INSECURE_CONTEXT";
     throw error;
   }
+  if (!String(ownerId || "").trim()) throw new Error("Sign in before starting a recording that can be recovered on this device.");
   if (!mediaDevices?.getUserMedia) throw new Error("This browser cannot record meetings.");
   const format = selectWorkbenchRecordingFormat(MediaRecorderImpl);
   const canRecordWav = typeof AudioContextImpl === "function"
@@ -437,6 +496,7 @@ export async function startBrowserRecording({
 
   const meta = {
     id: sessionId,
+    ownerId: String(ownerId),
     status: "recording",
     format: null,
     mimeType: null,
@@ -500,6 +560,15 @@ export async function startBrowserRecording({
     meta.warning = warning;
     meta.twoSided = Boolean(shared);
     meta.captureMode = shared ? "microphone+shared" : "microphone";
+    await archive.finish({
+      status: "recording",
+      warning: meta.warning,
+      twoSided: meta.twoSided,
+      captureMode: meta.captureMode,
+      format: meta.format,
+      mimeType: meta.mimeType,
+      sampleRate: meta.sampleRate,
+    });
   } catch (error) {
     stopTracks(microphone);
     stopTracks(shared);
