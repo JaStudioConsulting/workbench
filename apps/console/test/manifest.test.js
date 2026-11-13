@@ -20,7 +20,7 @@ test("console HTML entry includes manifest, Apple touch icon, and iPad standalon
   const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
 
   assert.match(html, /<meta\s+name="viewport"\s+content="[^"]*viewport-fit=cover[^"]*"\s*\/>/);
-  assert.match(html, /<meta\s+name="theme-color"\s+content="#273c30"\s*\/>/);
+  assert.match(html, /<meta\s+name="theme-color"\s+content="#f5f8fc"\s*\/>/);
   assert.match(html, /<meta\s+name="mobile-web-app-capable"\s+content="yes"\s*\/>/);
   assert.match(html, /<meta\s+name="apple-mobile-web-app-capable"\s+content="yes"\s*\/>/);
   assert.match(html, /<meta\s+name="apple-mobile-web-app-status-bar-style"\s+content="default"\s*\/>/);
@@ -56,10 +56,10 @@ test("web app manifest defines standalone full-screen config matching Workbench 
   assert.equal(manifest.start_url, "/");
   assert.equal(manifest.scope, "/");
   assert.equal(manifest.display, "standalone");
-  assert.equal(manifest.background_color, "#faf7f2");
-  assert.equal(manifest.theme_color, "#273c30");
-  assert.match(stylesCss, /--bg:\s*#faf7f2/i);
-  assert.match(stylesCss, /--forest:\s*#273c30/i);
+  assert.equal(manifest.background_color, "#f5f8fc");
+  assert.equal(manifest.theme_color, "#f5f8fc");
+  assert.match(stylesCss, /--bg:\s*#f5f8fc/i);
+  assert.match(stylesCss, /--color-primary:\s*#2563eb/i);
 
   assert.ok(Array.isArray(manifest.icons) && manifest.icons.length >= 4);
 

@@ -36,8 +36,8 @@ export default function SwipeView({
   return (
     <div className="flex flex-1 min-h-0 flex-col gap-2.5 overflow-hidden" data-testid="swipe-view">
       {/* Position Navigation Bar */}
-      <div className="flex items-center justify-between gap-2 px-1 shrink-0">
-        <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-2 px-1 shrink-0">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
           <span className="text-xs font-semibold text-muted-foreground">
             Candidate {safeIndex + 1} of {candidates.length}
           </span>
@@ -58,16 +58,17 @@ export default function SwipeView({
           />
         </div>
 
-        <div className="flex items-center gap-1.5">
+        <div className="flex w-full min-w-0 items-center justify-between gap-1.5 sm:w-auto sm:justify-end">
           <Button
             size="sm"
             variant="outline"
             className="h-7 px-2 text-xs"
+            aria-label="Previous candidate"
             disabled={safeIndex === 0}
             onClick={() => onNavigateIndex(safeIndex - 1)}
             title="Previous candidate"
           >
-            <ChevronLeft size={14} className="mr-0.5" /> Previous
+            <ChevronLeft size={14} className="mr-0.5" /><span className="sm:hidden">Prev</span><span className="hidden sm:inline">Previous</span>
           </Button>
 
           {/* Windowed Dots Indicator */}
@@ -99,11 +100,12 @@ export default function SwipeView({
             size="sm"
             variant="outline"
             className="h-7 px-2 text-xs"
+            aria-label="Next candidate"
             disabled={safeIndex === candidates.length - 1}
             onClick={() => onNavigateIndex(safeIndex + 1)}
             title="Next candidate"
           >
-            Next <ChevronRight size={14} className="ml-0.5" />
+            <span className="sm:hidden">Next</span><span className="hidden sm:inline">Next</span><ChevronRight size={14} className="ml-0.5" />
           </Button>
         </div>
       </div>

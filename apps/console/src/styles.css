@@ -4,19 +4,24 @@
 :root {
   font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   font-synthesis: none;
-  color: #1b1c1a;
-  background: #faf7f2;
-  --bg: #faf7f2;
+  color: #0f172a;
+  background: #f5f8fc;
+  --bg: #f5f8fc;
   --surface: #ffffff;
-  --surface-muted: #f5f1ea;
-  --forest: #273c30;
-  --forest-soft: #e9efeb;
-  --sage: #718276;
-  --text: #1b1c1a;
-  --muted: #77746d;
-  --dim: #a39e95;
-  --border: #e4ddd2;
-  --border-strong: #cec5b8;
+  --surface-muted: #f1f5f9;
+  --primary: #2563eb;
+  --primary-hover: #1d4ed8;
+  --primary-soft: #eff6ff;
+  --secondary: #7c3aed;
+  --secondary-soft: #f5f3ff;
+  --pending: #b45309;
+  --error: #b91c1c;
+  --success: #15803d;
+  --text: #0f172a;
+  --muted: #475569;
+  --dim: #64748b;
+  --border: #dbe4ef;
+  --border-strong: #94a3b8;
   --rail-width: 72px;
   color-scheme: light;
   -webkit-font-smoothing: antialiased;
@@ -38,7 +43,7 @@ button {
 }
 
 button:focus-visible {
-  outline: 2px solid #6f8c79;
+  outline: 2px solid var(--primary);
   outline-offset: 2px;
 }
 
@@ -64,8 +69,8 @@ p {
   flex-direction: column;
   align-items: center;
   gap: 6px;
-  background: #213328;
-  border-right: 1px solid rgba(255, 255, 255, 0.08);
+  background: #ffffff;
+  border-right: 1px solid var(--border);
   z-index: 10;
 }
 
@@ -75,8 +80,8 @@ p {
   display: grid;
   place-items: center;
   margin-bottom: 12px;
-  color: #d9c38d;
-  border: 1px solid rgba(255, 255, 255, 0.11);
+  color: var(--primary);
+  border: 1px solid var(--border);
   border-radius: 9px;
   font-size: 0.75rem;
   font-weight: 800;
@@ -93,7 +98,7 @@ p {
 .nav-group.lower {
   margin-top: auto;
   padding-top: 10px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  border-top: 1px solid var(--border);
 }
 
 .rail-button {
@@ -105,7 +110,7 @@ p {
   align-items: center;
   justify-content: center;
   gap: 4px;
-  color: #91a297;
+  color: var(--muted);
   background: transparent;
   border: 0;
   border-radius: 8px;
@@ -113,13 +118,13 @@ p {
 }
 
 .rail-button:hover {
-  color: #e8eee9;
-  background: rgba(255, 255, 255, 0.06);
+  color: var(--text);
+  background: var(--surface-muted);
 }
 
 .rail-button.active {
-  color: #ffffff;
-  background: rgba(255, 255, 255, 0.12);
+  color: #1d4ed8;
+  background: #eff6ff;
 }
 
 .nav-label {
@@ -144,7 +149,7 @@ p {
 .eyebrow {
   display: block;
   margin-bottom: 4px;
-  color: var(--sage);
+  color: var(--muted);
   font-size: 0.65rem;
   font-weight: 750;
   letter-spacing: 0.14em;
@@ -200,7 +205,7 @@ h1 {
 
 .empty-state h2,
 .empty-state h3 {
-  color: #5a5751;
+  color: var(--text);
   font-size: 0.92rem;
   font-weight: 650;
 }
@@ -220,9 +225,9 @@ h1 {
   grid-template-columns: minmax(0, 1fr) minmax(240px, 340px);
   align-items: start;
   gap: 40px;
-  color: #f7f4ed;
-  background: var(--forest);
-  border: 1px solid color-mix(in srgb, var(--forest), #ffffff 12%);
+  color: var(--text);
+  background: var(--surface-muted);
+  border: 1px solid var(--border);
   border-radius: 16px;
 }
 
@@ -233,7 +238,7 @@ h1 {
 }
 
 .google-workspace-title .eyebrow {
-  color: #bdc9bd;
+  color: var(--muted);
 }
 
 .google-workspace-title h2 {
@@ -248,22 +253,22 @@ h1 {
   display: grid;
   flex: 0 0 auto;
   place-items: center;
-  color: var(--forest);
-  background: #edf0e9;
+  color: var(--primary);
+  background: var(--primary-soft);
   border-radius: 12px;
 }
 
 .google-workspace-copy > p {
   max-width: 640px;
   margin-top: 20px;
-  color: #dbe1d8;
+  color: var(--muted);
   font-size: 0.92rem;
   line-height: 1.6;
 }
 
 .google-workspace-copy .google-workspace-scope {
   margin-top: 10px;
-  color: #aebbae;
+  color: var(--muted);
   font-size: 0.78rem;
 }
 
@@ -272,8 +277,8 @@ h1 {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  background: rgba(255, 255, 255, 0.07);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: #ffffff;
+  border: 1px solid var(--border);
   border-radius: 14px;
 }
 
@@ -281,7 +286,7 @@ h1 {
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  color: #dbe1d8;
+  color: var(--muted);
   font-size: 0.74rem;
   font-weight: 650;
 }
@@ -289,21 +294,29 @@ h1 {
 .connection-status > span {
   width: 7px;
   height: 7px;
-  background: #c4baae;
+  background: var(--pending);
   border-radius: 50%;
 }
 
 .connection-status.is-connected > span {
-  background: #9bd7a8;
-  box-shadow: 0 0 0 3px rgba(155, 215, 168, 0.14);
+  background: var(--success);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--success), transparent 86%);
 }
 
 .connection-status.is-error > span {
-  background: #e4aa99;
+  background: var(--error);
+}
+
+.connection-status.is-connected {
+  color: var(--success);
+}
+
+.connection-status.is-error {
+  color: var(--error);
 }
 
 .connected-account {
-  color: #f7f4ed;
+  color: var(--text);
   font-size: 0.78rem;
   font-weight: 650;
   overflow-wrap: anywhere;
@@ -311,8 +324,8 @@ h1 {
 
 .google-workspace-action button {
   min-height: 46px;
-  color: var(--forest);
-  background: #edf0e9;
+  color: #ffffff;
+  background: var(--primary);
   border: 0;
   border-radius: 9px;
   font: inherit;
@@ -322,18 +335,18 @@ h1 {
 }
 
 .google-workspace-action button:not(:disabled):hover {
-  background: #ffffff;
+  background: var(--primary-hover);
 }
 
 .google-workspace-action button:disabled {
-  color: #667067;
-  background: #dfe4df;
+  color: #475569;
+  background: #e2e8f0;
   cursor: not-allowed;
   opacity: 1;
 }
 
 .google-workspace-action small {
-  color: #aebbae;
+  color: var(--muted);
   font-size: 0.7rem;
   line-height: 1.45;
 }
@@ -342,7 +355,7 @@ h1 {
   min-width: 0;
   padding-top: 26px;
   grid-column: 1 / -1;
-  border-top: 1px solid rgba(255, 255, 255, 0.14);
+  border-top: 1px solid var(--border);
 }
 
 .google-calendar-heading {
@@ -353,18 +366,18 @@ h1 {
 }
 
 .google-calendar-heading .eyebrow {
-  color: #bdc9bd;
+  color: var(--muted);
 }
 
 .google-calendar-heading h3 {
   margin-top: 4px;
-  color: #f7f4ed;
+  color: var(--text);
   font-size: 1rem;
 }
 
 .calendar-state {
   margin-top: 18px;
-  color: #cbd4c9;
+  color: var(--muted);
   font-size: 0.82rem;
 }
 
@@ -374,8 +387,8 @@ h1 {
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  color: var(--forest);
-  background: #edf0e9;
+  color: var(--primary);
+  background: var(--primary-soft);
   border: 0;
   border-radius: 8px;
   font: inherit;
@@ -397,19 +410,19 @@ h1 {
   grid-template-columns: 22px minmax(0, 1fr) auto;
   align-items: center;
   gap: 10px;
-  color: #dbe1d8;
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  color: var(--muted);
+  border-top: 1px solid var(--border);
 }
 
 .calendar-event-title {
-  color: #f7f4ed;
+  color: var(--text);
   font-size: 0.84rem;
   font-weight: 650;
   overflow-wrap: anywhere;
 }
 
 .calendar-event-list time {
-  color: #bdc9bd;
+  color: var(--muted);
   font-size: 0.74rem;
   white-space: nowrap;
 }
@@ -431,7 +444,7 @@ h1 {
 
 .mail-folders {
   padding: 14px 10px;
-  background: #f7f4ef;
+  background: #f8fafc;
 }
 
 .mail-folders nav {
@@ -446,7 +459,7 @@ h1 {
   display: flex;
   align-items: center;
   gap: 9px;
-  color: #5f5c56;
+  color: var(--muted);
   background: transparent;
   border: 0;
   border-radius: 8px;
@@ -455,12 +468,12 @@ h1 {
 }
 
 .mail-folder:hover {
-  background: #eee9e1;
+  background: #e2e8f0;
 }
 
 .mail-folder.active {
-  color: var(--forest);
-  background: #e5ece7;
+  color: #1d4ed8;
+  background: var(--primary-soft);
   font-weight: 700;
 }
 
@@ -577,7 +590,25 @@ h1 {
   }
 }
 
-@theme { --color-background: #faf7f2; --color-foreground: #1b1c1a; --color-border: #e4ddd2; --color-primary: #273c30; --color-primary-foreground: #ffffff; --color-muted: #f5f1ea; --color-muted-foreground: #77746d; --color-accent: #e9efeb; --color-accent-foreground: #273c30; --color-ring: #718276; }
+@theme {
+  --color-background: #f5f8fc;
+  --color-foreground: #0f172a;
+  --color-border: #dbe4ef;
+  --color-primary: #2563eb;
+  --color-primary-foreground: #ffffff;
+  --color-muted: #f1f5f9;
+  --color-muted-foreground: #475569;
+  --color-accent: #f5f3ff;
+  --color-accent-foreground: #6d28d9;
+  --color-ring: #2563eb;
+  --color-secondary: #7c3aed;
+  --color-secondary-foreground: #ffffff;
+  --color-warning: #b45309;
+  --color-warning-foreground: #ffffff;
+  --color-destructive: #b91c1c;
+  --color-destructive-foreground: #ffffff;
+  --color-success: #15803d;
+}
 
 .meeting-variant-page {
   container: meeting-variant-page / inline-size;
@@ -739,23 +770,100 @@ h1 {
   overflow-wrap: anywhere;
 }
 .workbench-notes-panel .workbench-note-editor:focus-within {
-  outline: 2px solid #3b5646;
+  outline: 2px solid #2563eb;
   outline-offset: 2px;
 }
 .workbench-notes-panel .workbench-note-editor a {
-  color: #273c30;
+  color: #1d4ed8;
   text-decoration: underline;
 }
 
-/* Keep Excalidraw controls in the Workbench forest and sage palette. */
+/* Keep Excalidraw controls in the Workbench blue palette. */
 .workbench-board-panel .excalidraw.theme--light {
-  --color-primary: var(--forest);
-  --color-primary-darker: #213328;
-  --color-primary-darkest: #17271d;
-  --color-primary-hover: #3b5646;
-  --color-primary-light: var(--forest-soft);
-  --color-brand-active: #213328;
-  --color-brand-hover: #3b5646;
-  --color-surface-primary-container: var(--forest-soft);
-  --color-on-primary-container: #213328;
+  --color-primary: var(--primary);
+  --color-primary-darker: #1d4ed8;
+  --color-primary-darkest: #1e3a8a;
+  --color-primary-hover: #3b82f6;
+  --color-primary-light: var(--primary-soft);
+  --color-brand-active: #1d4ed8;
+  --color-brand-hover: #3b82f6;
+  --color-surface-primary-container: var(--primary-soft);
+  --color-on-primary-container: #1e3a8a;
+}
+
+.workbench-print-label {
+  display: none;
+}
+
+@media print {
+  @page {
+    margin: 14mm;
+  }
+
+  html,
+  body,
+  #root {
+    min-width: 0 !important;
+    min-height: 0 !important;
+    height: auto !important;
+    overflow: visible !important;
+    background: #ffffff !important;
+    color: #0f172a !important;
+  }
+
+  [data-print-hide],
+  [data-sidebar="sidebar"] {
+    display: none !important;
+  }
+
+  .workbench-print-label {
+    display: flex !important;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 1rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid #94a3b8;
+    color: #0f172a;
+    font-size: 10pt;
+  }
+
+  .workbench-main {
+    display: block !important;
+    width: 100% !important;
+    max-width: none !important;
+    height: auto !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  .workbench-main *,
+  .workbench-main *::before,
+  .workbench-main *::after {
+    max-height: none !important;
+    overflow: visible !important;
+    box-shadow: none !important;
+    animation: none !important;
+    transition: none !important;
+  }
+
+  .workbench-main table {
+    width: 100% !important;
+    border-collapse: collapse;
+  }
+
+  .workbench-main tr,
+  .workbench-main img,
+  .workbench-main figure,
+  .workbench-main blockquote {
+    break-inside: avoid;
+  }
+
+  .workbench-main h1,
+  .workbench-main h2,
+  .workbench-main h3,
+  .workbench-main h4 {
+    break-after: avoid;
+  }
 }

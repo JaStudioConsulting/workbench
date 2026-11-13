@@ -15,8 +15,8 @@ export default function ProfilePage() {
   useEffect(() => {
     let active = true;
     getProfile()
-      .then((profile) => { if (active) setState({ phase: "ready", profile, message: "" }); })
-      .catch(() => { if (active) setState({ phase: "error", profile: EMPTY_PROFILE, message: "Profile could not be loaded." }); });
+      .then((profile) => { if (active) setState({ phase: "ready", profile, message: profile.persistence === "device" ? "This profile is saved on this device only." : "" }); })
+      .catch((error) => { if (active) setState({ phase: "error", profile: EMPTY_PROFILE, message: error?.message || "Profile could not be loaded." }); });
     return () => { active = false; };
   }, []);
 
@@ -30,9 +30,9 @@ export default function ProfilePage() {
     setState((current) => ({ ...current, phase: "saving", message: "" }));
     try {
       const profile = await saveProfile(state.profile);
-      setState({ phase: "ready", profile, message: "Profile saved." });
-    } catch {
-      setState((current) => ({ ...current, phase: "error", message: "Profile could not be saved." }));
+      setState({ phase: "ready", profile, message: profile.persistence === "device" ? "Saved on this device only. Account sync is unavailable." : "Profile saved to your account." });
+    } catch (error) {
+      setState((current) => ({ ...current, phase: "error", message: error?.message || "Profile could not be saved. Your changes are still in the form; try again." }));
     }
   };
 

@@ -1,7 +1,6 @@
 import { supabase } from "../../supabase-client.js";
 import { gatewayBaseURL } from "../../auth-client.js";
 
-const outreachFallback = [];
 const CHANNELS = new Set(["copy", "mailto", "gmail_draft"]);
 
 function normalizeEntry(entry = {}) {
@@ -31,30 +30,17 @@ function fromRow(row) {
   };
 }
 
-function fallbackRecord(entry) {
-  const record = {
-    id: globalThis.crypto?.randomUUID?.() || `outreach-${Date.now()}-${outreachFallback.length}`,
-    ...entry,
-    createdAt: new Date().toISOString(),
-  };
-  outreachFallback.unshift(record);
-  return record;
-}
-
 async function currentUser(client) {
-  try {
-    const { data, error } = await client.auth.getUser();
-    if (error) return null;
-    return data?.user || null;
-  } catch {
-    return null;
-  }
+  const { data, error } = await client.auth.getUser();
+  if (error) throw new Error("Sign-in status could not be checked. Try again.");
+  const user = data?.user || null;
+  if (!user) throw new Error("Sign in to save outreach history.");
+  return user;
 }
 
 export async function logOutreach(entry, { client = supabase } = {}) {
   const cleaned = normalizeEntry(entry);
   const user = await currentUser(client);
-  if (!user) return fallbackRecord(cleaned);
 
   const { data, error } = await client
     .from("outreach_log")
@@ -70,12 +56,12 @@ export async function logOutreach(entry, { client = supabase } = {}) {
     .select("id,job_id,person_id,candidate_email,subject,body,channel,created_at")
     .single();
 
-  return error ? fallbackRecord(cleaned) : fromRow(data);
+  if (error) throw new Error("Outreach history could not be saved. Your draft is still available; retry saving it to history.");
+  return fromRow(data);
 }
 
 export async function listOutreach({ client = supabase } = {}) {
   const user = await currentUser(client);
-  if (!user) return [...outreachFallback];
 
   const { data, error } = await client
     .from("outreach_log")
@@ -83,7 +69,8 @@ export async function listOutreach({ client = supabase } = {}) {
     .eq("owner_id", user.id)
     .order("created_at", { ascending: false });
 
-  return error ? [...outreachFallback] : (data || []).map(fromRow);
+  if (error) throw new Error("Outreach history could not be loaded. Check your connection and try again.");
+  return (data || []).map(fromRow);
 }
 
 export async function getMailStatus({ request = globalThis.fetch } = {}) {
@@ -100,7 +87,7 @@ export async function getMailStatus({ request = globalThis.fetch } = {}) {
       canRead: Boolean(status.canRead),
     };
   } catch {
-    return { connected: false, canDraft: false, canRead: false };
+    return { connected: false, canDraft: false, canRead: false, error: true };
   }
 }
 
@@ -152,5 +139,5 @@ export async function listMailReplies(emails, { request = globalThis.fetch } = {
 }
 
 export function _resetOutreachForTesting() {
-  outreachFallback.splice(0, outreachFallback.length);
+  // Kept for compatibility with existing tests; there is no local success cache.
 }

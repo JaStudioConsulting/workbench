@@ -179,3 +179,14 @@ test("job details expose a direct fit-review entry point", () => {
   assert.match(source, /Review fit/);
   assert.match(source, /aria-label="Close job details"/);
 });
+
+test("Jobs loads saved Tracker records only and separates empty from load errors", () => {
+  const source = fs.readFileSync(path.join(featureRoot, "JobsMapView.jsx"), "utf8");
+  assert.match(source, /from\("tracker_jobs"\)/);
+  assert.doesNotMatch(source, /\/api\/gws\/sync|1RexJFAEWRwNjzeGThutrA0zMObu2g4r3q0Vu0uiDbQs/);
+  assert.match(source, /setDataSource\(sourceRows\.length \? "ready" : "empty"\)/);
+  assert.match(source, /setDataSource\("error"\)/);
+  assert.match(source, /No saved jobs yet\. Import jobs in Settings/);
+  assert.match(source, /Saved jobs couldn’t load/);
+  assert.match(source, /aria-label="Refresh saved Tracker jobs"/);
+});

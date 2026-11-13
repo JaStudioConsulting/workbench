@@ -18,18 +18,36 @@ function unavailableClient() {
   };
 }
 
-test("outreach logging uses the memory fallback when persistence is unavailable", async () => {
-  const saved = await logOutreach({
+test("outreach logging never reports a local fallback as saved", async () => {
+  await assert.rejects(() => logOutreach({
     jobId: "job-1",
     personId: "person-1",
     candidateEmail: "person@example.invalid",
     subject: "Following up",
     body: "Checking in about the role.",
     channel: "copy",
-  }, { client: unavailableClient() });
+  }, { client: unavailableClient() }), /Sign in to save outreach history/);
+  await assert.rejects(() => listOutreach({ client: unavailableClient() }), /Sign in to save outreach history/);
+});
 
-  assert.equal(saved.channel, "copy");
-  assert.equal((await listOutreach({ client: unavailableClient() })).length, 1);
+test("outreach database failures remain visible to the user", async () => {
+  const client = {
+    auth: { async getUser() { return { data: { user: { id: "user-1" } }, error: null }; } },
+    from() {
+      const query = {
+        insert() { return query; },
+        select() { return query; },
+        single: async () => ({ data: null, error: { message: "offline" } }),
+        eq() { return query; },
+        order: async () => ({ data: null, error: { message: "offline" } }),
+      };
+      return query;
+    },
+  };
+  await assert.rejects(() => logOutreach({
+    jobId: "job-1", personId: "person-1", subject: "Follow-up", body: "Draft", channel: "copy",
+  }, { client }), /draft is still available/);
+  await assert.rejects(() => listOutreach({ client }), /could not be loaded/);
 });
 
 test("mail status is expressed as plain booleans", async () => {
@@ -40,6 +58,11 @@ test("mail status is expressed as plain booleans", async () => {
     }),
   });
   assert.deepEqual(status, { connected: true, canDraft: true, canRead: false });
+});
+
+test("mail status failures remain distinguishable from a disconnected account", async () => {
+  const status = await getMailStatus({ request: async () => { throw new Error("offline"); } });
+  assert.deepEqual(status, { connected: false, canDraft: false, canRead: false, error: true });
 });
 
 test("reply lookup normalizes candidate emails", async () => {

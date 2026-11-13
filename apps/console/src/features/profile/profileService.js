@@ -50,15 +50,21 @@ function isMissingTable(error) {
 }
 
 function fromRow(row) {
-  if (!row) return emptyProfile();
-  return cleanProfile({
+  if (!row) return { ...emptyProfile(), persistence: "account" };
+  return { ...cleanProfile({
     name: row.name,
     businessName: row.business_name,
     title: row.title,
     phone: row.phone,
     signature: row.signature,
     defaultProvince: row.default_province,
-  });
+  }), persistence: "account" };
+}
+
+function fromStorage(storage) {
+  let stored = false;
+  try { stored = Boolean(storage?.getItem(STORAGE_KEY)); } catch { /* storage unavailable */ }
+  return { ...readFallback(storage), persistence: stored ? "device" : "none" };
 }
 
 async function authenticatedUser(client) {
@@ -69,7 +75,7 @@ async function authenticatedUser(client) {
 
 export async function getProfile({ client = supabase, storage = browserStorage() } = {}) {
   const user = await authenticatedUser(client);
-  if (!user) return readFallback(storage);
+  if (!user) return fromStorage(storage);
 
   const { data, error } = await client
     .from("workbench_profile")
@@ -77,9 +83,9 @@ export async function getProfile({ client = supabase, storage = browserStorage()
     .eq("owner_id", user.id)
     .maybeSingle();
 
-  if (isMissingTable(error)) return readFallback(storage);
+  if (isMissingTable(error)) return fromStorage(storage);
   if (error) throw new Error("Profile could not be loaded");
-  return data ? fromRow(data) : readFallback(storage);
+  return data ? fromRow(data) : fromStorage(storage);
 }
 
 export async function saveProfile(profile, { client = supabase, storage = browserStorage() } = {}) {
@@ -103,11 +109,11 @@ export async function saveProfile(profile, { client = supabase, storage = browse
     .select("name,business_name,title,phone,signature,default_province")
     .single();
 
-  if (isMissingTable(error)) return writeFallback(storage, cleaned);
+  if (isMissingTable(error)) return { ...writeFallback(storage, cleaned), persistence: "device" };
   if (error) throw new Error("Profile could not be saved");
   const saved = fromRow(data || row);
   storage?.removeItem(STORAGE_KEY);
-  return saved;
+  return { ...saved, persistence: "account" };
 }
 
 export const PROFILE_STORAGE_KEY = STORAGE_KEY;

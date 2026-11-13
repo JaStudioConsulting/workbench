@@ -19,6 +19,7 @@ function formatDate(value) {
 }
 
 function statusCopy(status) {
+  if (status.error) return "Gmail status could not be checked. Retry to see which actions are available.";
   if (!status.connected) return "Gmail is not connected. Copy and Open in Mail are available.";
   if (!status.canDraft) return status.canRead
     ? "Gmail reply checking is connected. Gmail draft access is not approved."
@@ -31,21 +32,37 @@ function FollowUpDialog({ outreach, profile, canDraft, onClose, onLogged }) {
   const [body, setBody] = useState(initial.body);
   const [working, setWorking] = useState("");
   const [message, setMessage] = useState("");
+  const [pendingLog, setPendingLog] = useState(null);
 
-  useEffect(() => { setBody(initial.body); setMessage(""); }, [initial, outreach]);
+  useEffect(() => { setBody(initial.body); setMessage(""); setPendingLog(null); }, [initial, outreach]);
 
   const activity = { jobId: outreach.jobId, personId: outreach.personId, candidateEmail: outreach.candidateEmail, subject: initial.subject, body };
-  const record = async (channel) => {
-    const logged = await logOutreach({ ...activity, channel });
-    onLogged(logged);
+  const record = async (channel, sourceActivity = activity) => {
+    const entry = { ...sourceActivity, channel };
+    try {
+      const logged = await logOutreach(entry);
+      onLogged(logged);
+      setPendingLog(null);
+      return true;
+    } catch {
+      setPendingLog(entry);
+      return false;
+    }
+  };
+  const retryLog = async () => {
+    if (!pendingLog) return;
+    setWorking("history");
+    const saved = await record(pendingLog.channel, pendingLog);
+    setMessage(saved ? "Outreach history saved." : "Outreach history still could not be saved. Your draft remains here; try again.");
+    setWorking("");
   };
   const copy = async () => {
     setWorking("copy"); setMessage("");
     try {
       if (!globalThis.navigator?.clipboard?.writeText) throw new Error("Copy is unavailable in this browser");
       await globalThis.navigator.clipboard.writeText(`${initial.subject}\n\n${body}`);
-      await record("copy");
-      setMessage("Follow-up copied.");
+      const saved = await record("copy");
+      setMessage(saved ? "Follow-up copied and saved to outreach history." : "Follow-up copied. Outreach history was not saved; retry below.");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Follow-up could not be copied.");
     } finally { setWorking(""); }
@@ -53,8 +70,9 @@ function FollowUpDialog({ outreach, profile, canDraft, onClose, onLogged }) {
   const openMail = async () => {
     setWorking("mailto"); setMessage("");
     try {
-      await record("mailto");
+      const logged = await record("mailto");
       globalThis.location.href = mailtoUrl({ to: outreach.candidateEmail, subject: initial.subject, body });
+      setMessage(logged ? "Opening your mail app. Outreach history saved." : "Opening your mail app. Outreach history was not saved; retry below.");
     } catch {
       setMessage("The mail draft could not be opened.");
     } finally { setWorking(""); }
@@ -67,8 +85,8 @@ function FollowUpDialog({ outreach, profile, canDraft, onClose, onLogged }) {
         setMessage(result.reason === "no_scope" ? "Gmail draft access is not approved." : "Gmail draft could not be saved.");
         return;
       }
-      await record("gmail_draft");
-      setMessage("Gmail draft saved. Review it in Gmail before sending.");
+      const logged = await record("gmail_draft");
+      setMessage(logged ? "Gmail draft saved. Review it in Gmail before sending." : "Gmail draft saved, but outreach history was not saved. Review the draft in Gmail and retry history below.");
     } catch {
       setMessage("Gmail draft could not be saved.");
     } finally { setWorking(""); }
@@ -83,6 +101,7 @@ function FollowUpDialog({ outreach, profile, canDraft, onClose, onLogged }) {
           <div><p className="text-xs text-muted-foreground">Subject</p><p className="text-sm font-medium">{initial.subject}</p></div>
           <div className="grid gap-2"><Label htmlFor="follow-up-body">Body</Label><Textarea id="follow-up-body" rows={9} value={body} onChange={(event) => setBody(event.target.value)} /></div>
           {message ? <p className="text-sm" role="status">{message}</p> : null}
+          {pendingLog ? <Button type="button" variant="outline" onClick={retryLog} disabled={Boolean(working)}>{working === "history" ? "Saving history…" : "Retry save to outreach history"}</Button> : null}
         </div>
         <DialogFooter>
           <Button type="button" variant="outline" onClick={copy} disabled={Boolean(working) || !body.trim()}><Clipboard />{working === "copy" ? "Copying..." : "Copy"}</Button>
@@ -122,7 +141,7 @@ export default function MailPage() {
 
   return (
     <div className="flex flex-col gap-5" data-testid="mail-page">
-      <Card><CardHeader><CardTitle className="flex items-center gap-2 text-base"><Mail size={17} aria-hidden="true" />Mail status</CardTitle><CardDescription>{statusCopy(state.status)}</CardDescription></CardHeader></Card>
+      <Card><CardHeader><div className="flex flex-wrap items-center justify-between gap-2"><CardTitle className="flex items-center gap-2 text-base"><Mail size={17} aria-hidden="true" />Mail status</CardTitle>{state.status.error ? <Button size="sm" variant="outline" onClick={retry}><RefreshCw />Retry</Button> : null}</div><CardDescription>{statusCopy(state.status)}</CardDescription></CardHeader></Card>
       <section aria-labelledby="follow-ups-title">
         <div className="mb-3"><h2 id="follow-ups-title" className="text-lg font-semibold">Follow-ups due</h2><p className="text-sm text-muted-foreground">{state.replies.available ? "Outreach older than three business days without a detected reply." : "Gmail reply status is unavailable."}</p></div>
         {due.length ? <div className="grid gap-3 md:grid-cols-2">{due.map((entry) => <Card key={entry.id}><CardHeader><CardTitle className="text-base">{entry.subject || "Outreach"}</CardTitle><CardDescription>{entry.candidateEmail || "Email not on file"}</CardDescription></CardHeader><CardContent><Button size="sm" onClick={() => setSelected(entry)}>Draft follow-up</Button></CardContent></Card>)}</div> : <div className="rounded-xl border border-dashed p-6 text-sm text-muted-foreground">{state.replies.available ? "No follow-ups are due." : "Reply checking is not available."}</div>}

@@ -4,9 +4,9 @@ import { readFile } from "node:fs/promises";
 import { transformWithEsbuild } from "vite";
 import { makeCandidateNotes } from "../src/features/meetings/afterCallClient.js";
 import { createMeetingDraft, formatSpeakerTranscript, groupCalendarEvents, isMeetingContextLocked, safeJoinUrl } from "../src/features/meetings/meetingModel.js";
-import { getMeetingStatus, startNativeMeetingCapture, stopNativeMeetingCapture, transcribeMeetingAudio } from "../src/features/meetings/meetingGatewayClient.js";
-import { discardRecordingArchive, encodePcm16Wav, isSecureRecordingContext, listInterruptedRecordings, meetingCaptureState, meetingRecordingErrorMessage, meetingRecordingFilename, openRecordingArchive, recoverBrowserRecording, selectWorkbenchRecordingFormat, startBrowserRecording } from "../src/features/meetings/browserRecorder.js";
-import { meetingPrintHtml } from "../src/features/meetings/meetingExport.js";
+import { fetchNativeCaptureAudio, getMeetingStatus, startNativeMeetingCapture, stopNativeMeetingCapture, transcribeMeetingAudio } from "../src/features/meetings/meetingGatewayClient.js";
+import { deleteLocalMeetingDraft, discardRecordingArchive, encodePcm16Wav, isSecureRecordingContext, listInterruptedRecordings, loadLocalMeetingDraft, meetingCaptureState, meetingRecordingErrorMessage, meetingRecordingFilename, openRecordingArchive, recoverBrowserRecording, saveLocalMeetingDraft, selectWorkbenchRecordingFormat, startBrowserRecording } from "../src/features/meetings/browserRecorder.js";
+import { downloadWorkflowResumePdf, meetingPrintHtml } from "../src/features/meetings/meetingExport.js";
 import { MEETING_TEMPLATES, renderMeetingTemplate } from "../src/features/meetings/meetingTemplates.js";
 import { candidateCallHref, startCandidateCallSession } from "../src/features/meetings/candidateCallSession.js";
 import { saveMeetingAndReleaseArchive } from "../src/features/meetings/meetingRetention.js";
@@ -44,7 +44,7 @@ test("archive cleanup failure logs the error and keeps the durable draft", async
 
 test("browser archive deletion reports storage failure to the retention boundary", async () => {
   await assert.rejects(
-    () => discardRecordingArchive("recording-1", { indexedDBImpl: { open: () => { throw new Error("disk failure"); } } }),
+    () => discardRecordingArchive("recording-1", { ownerId: "owner-1", indexedDBImpl: { open: () => { throw new Error("disk failure"); } } }),
     /disk failure/,
   );
 });
@@ -113,6 +113,7 @@ test("browser audio is sent only to the authenticated Workbench gateway", async 
   let request;
   const result = await transcribeMeetingAudio(new Blob(["audio"], { type: "audio/mp4" }), {
     baseURL: "https://gateway.example.invalid",
+    getAccessToken: async () => "synthetic-user-token",
     fetchImpl: async (url, options) => {
       request = { url: url.toString(), options };
       return { ok: true, json: async () => ({ transcript: "Source audio words.", source: "workbench_native" }) };
@@ -122,15 +123,17 @@ test("browser audio is sent only to the authenticated Workbench gateway", async 
   assert.equal(request.url, "https://gateway.example.invalid/api/meetings/transcribe");
   assert.equal(request.options.credentials, "include");
   assert.equal(request.options.headers["Content-Type"], "audio/mp4");
+  assert.equal(request.options.headers.Authorization, "Bearer synthetic-user-token");
 });
 
 test("meeting helper status stays honest and exposes only availability", async () => {
   const available = await getMeetingStatus({
     baseURL: "https://gateway.example.invalid",
+    getAccessToken: async () => "synthetic-user-token",
     fetchImpl: async () => ({ ok: true, json: async () => ({ available: true, enhanced: true, captureAvailable: true, internalPath: "/private/helper" }) }),
   });
   assert.deepEqual(available, { available: true, enhanced: true, captureAvailable: true });
-  const unavailable = await getMeetingStatus({ fetchImpl: async () => { throw new Error("offline"); } });
+  const unavailable = await getMeetingStatus({ getAccessToken: async () => "synthetic-user-token", fetchImpl: async () => { throw new Error("offline"); } });
   assert.deepEqual(unavailable, { available: false, enhanced: false, captureAvailable: false });
 });
 
@@ -144,13 +147,34 @@ test("native capture client attaches context and returns the durable recording",
       transcription: { status: "ready", source: "workbench_native" }, transcript: "You: Hello", segments: [], speakers: ["You"],
     }) };
   };
-  const recording = await startNativeMeetingCapture({ jobId: "job-4", candidateId: "person-9" }, { fetchImpl, baseURL: "https://gateway.example.invalid" });
+  const recording = await startNativeMeetingCapture({ jobId: "job-4", candidateId: "person-9" }, { fetchImpl, baseURL: "https://gateway.example.invalid", getAccessToken: async () => "synthetic-user-token" });
   const stopped = await recording.stop();
   assert.deepEqual(JSON.parse(requests[0].options.body), { jobId: "job-4", candidateId: "person-9" });
+  assert.equal(requests[0].options.headers.Authorization, "Bearer synthetic-user-token");
+  assert.equal(requests[1].options.headers.Authorization, "Bearer synthetic-user-token");
   assert.match(requests[1].url, /capture\/capture-1\/stop$/);
-  assert.equal(stopped.capture.audioUrl, "https://gateway.example.invalid/api/meetings/capture/capture-1/audio");
+  assert.equal("audioUrl" in stopped.capture, false);
   assert.equal(stopped.transcript, "You: Hello");
-  assert.equal((await stopNativeMeetingCapture("capture-1", { fetchImpl, baseURL: "https://gateway.example.invalid" })).capture.id, "capture-1");
+  assert.equal((await stopNativeMeetingCapture("capture-1", { fetchImpl, baseURL: "https://gateway.example.invalid", getAccessToken: async () => "synthetic-user-token" })).capture.id, "capture-1");
+});
+
+test("native capture audio is fetched with the app bearer and returned as a releasable object URL", async () => {
+  let request;
+  const result = await fetchNativeCaptureAudio("capture-1", {
+    baseURL: "https://gateway.example.invalid",
+    getAccessToken: async () => "synthetic-user-token",
+    fetchImpl: async (url, options) => {
+      request = { url: url.toString(), options };
+      return new Response(new Blob(["synthetic audio"], { type: "audio/wav" }), { status: 200 });
+    },
+  });
+  assert.match(request.url, /capture\/capture-1\/audio\?source=mixed$/);
+  assert.equal(request.options.headers.Authorization, "Bearer synthetic-user-token");
+  assert.equal("Cookie" in request.options.headers, false);
+  assert.equal(result.blob.type, "audio/wav");
+  assert.match(result.url, /^blob:/);
+  result.release();
+  result.release();
 });
 
 test("meeting recorder prefers Workbench-compatible MP4 and never selects WebM", () => {
@@ -187,12 +211,42 @@ test("gateway client rejects WebM before making a transcription request", async 
 test("unsupported browsers fail before requesting microphone access", async () => {
   let microphoneRequests = 0;
   await assert.rejects(() => startBrowserRecording({
+    ownerId: "owner-1",
     mediaDevices: { getUserMedia: async () => { microphoneRequests += 1; } },
     MediaRecorderImpl: { isTypeSupported: (type) => type === "audio/webm" },
     MediaStreamImpl: class {},
     AudioContextImpl: null,
   }), /cannot create MP4, MP3, or WAV/);
   assert.equal(microphoneRequests, 0);
+});
+
+test("recording format metadata is persisted before an interruption can occur", async () => {
+  const track = { stop() {} };
+  const microphone = { getAudioTracks: () => [track], getTracks: () => [track] };
+  let meta;
+  let persisted;
+  class FakeRecorder extends EventTarget {
+    state = "inactive";
+    constructor() { super(); }
+    start() { this.state = "recording"; }
+    stop() { this.state = "inactive"; this.dispatchEvent(new Event("stop")); }
+  }
+  const recording = await startBrowserRecording({
+    ownerId: "owner-1",
+    mediaDevices: { getUserMedia: async () => microphone },
+    MediaRecorderImpl: Object.assign(FakeRecorder, { isTypeSupported: (type) => type === "audio/mp4" }),
+    MediaStreamImpl: class {},
+    AudioContextImpl: null,
+    indexedDBImpl: null,
+    archiveFactory: async ({ meta: nextMeta }) => {
+      meta = nextMeta;
+      return { archive: { mode: "test", async append() {}, async finish(patch) { persisted = { ...nextMeta, ...patch }; }, async remove() {} }, warning: null };
+    },
+  });
+  assert.equal(meta.format, "media");
+  assert.equal(persisted.status, "recording");
+  assert.equal(persisted.mimeType, "audio/mp4");
+  await recording.cancel();
 });
 
 test("browser recording falls back to PCM WAV when MP4 is unavailable", async () => {
@@ -214,6 +268,7 @@ test("browser recording falls back to PCM WAV when MP4 is unavailable", async ()
     async close() {}
   }
   const recording = await startBrowserRecording({
+    ownerId: "owner-1",
     mediaDevices: { getUserMedia: async () => microphone },
     MediaRecorderImpl: { isTypeSupported: () => false },
     MediaStreamImpl: class {},
@@ -231,6 +286,7 @@ test("a browser WAV recording is transferred to the authenticated M1 transcripti
   const wav = encodePcm16Wav([new Float32Array([0, 0.25, -0.25])], 16_000);
   const result = await transcribeMeetingAudio(wav, {
     baseURL: "https://workbench.example.invalid",
+    getAccessToken: async () => "synthetic-user-token",
     fetchImpl: async (url, options) => {
       request = { url: url.toString(), options };
       return { ok: true, json: async () => ({ transcript: "Speaker 1: Hello", source: "workbench_native", segments: [], speakers: ["Speaker 1"] }) };
@@ -246,6 +302,7 @@ test("persisted recording chunks survive a recorder interruption and can be reco
   const indexedDBImpl = new FakeIndexedDB();
   const meta = {
     id: "recording-recovery-1",
+    ownerId: "owner-1",
     status: "recording",
     format: "wav",
     mimeType: "audio/wav",
@@ -265,28 +322,59 @@ test("persisted recording chunks survive a recorder interruption and can be reco
   await archive.append(0, new Blob([new Uint8Array([1, 0, 2, 0])]));
   await archive.append(1, new Blob([new Uint8Array([3, 0, 4, 0])]));
   await archive.finish({ status: "complete" });
-  const listed = await listInterruptedRecordings({ indexedDBImpl });
+  const listed = await listInterruptedRecordings({ ownerId: "owner-1", indexedDBImpl });
   assert.equal(listed.length, 1);
   assert.equal(listed[0].jobId, "job-4");
-  const recovered = await recoverBrowserRecording(meta.id, { indexedDBImpl });
+  const recovered = await recoverBrowserRecording(meta.id, { ownerId: "owner-1", indexedDBImpl });
   assert.equal(recovered.meta.candidateId, "person-9");
   assert.equal(recovered.blob.type, "audio/wav");
   assert.equal(recovered.blob.size, 52);
-  await discardRecordingArchive(meta.id, { indexedDBImpl });
-  assert.deepEqual(await listInterruptedRecordings({ indexedDBImpl }), []);
+  await discardRecordingArchive(meta.id, { ownerId: "owner-1", indexedDBImpl });
+  assert.deepEqual(await listInterruptedRecordings({ ownerId: "owner-1", indexedDBImpl }), []);
+});
+
+test("recording recovery and deletion remain isolated between signed-in owners", async () => {
+  const indexedDBImpl = new FakeIndexedDB();
+  const meta = { id: "owner-bound-recording", ownerId: "owner-1", status: "complete", format: "media", mimeType: "audio/mp4", jobId: "4", candidateId: "sourcing:9" };
+  const { archive } = await openRecordingArchive({ indexedDBImpl, meta });
+  await archive.append(0, new Blob(["private audio"], { type: "audio/mp4" }));
+  await archive.finish({ status: "complete" });
+  assert.equal((await listInterruptedRecordings({ ownerId: "owner-1", indexedDBImpl })).length, 1);
+  assert.deepEqual(await listInterruptedRecordings({ ownerId: "owner-2", indexedDBImpl }), []);
+  await assert.rejects(() => recoverBrowserRecording(meta.id, { ownerId: "owner-2", indexedDBImpl }), /no longer available/);
+  await discardRecordingArchive(meta.id, { ownerId: "owner-2", indexedDBImpl });
+  assert.equal((await listInterruptedRecordings({ ownerId: "owner-1", indexedDBImpl })).length, 1);
+  assert.equal((await recoverBrowserRecording(meta.id, { ownerId: "owner-1", indexedDBImpl })).meta.ownerId, "owner-1");
+  await discardRecordingArchive(meta.id, { ownerId: "owner-1", indexedDBImpl });
+  assert.deepEqual(await listInterruptedRecordings({ ownerId: "owner-1", indexedDBImpl }), []);
+});
+
+test("unsaved meeting drafts survive reload on this device and stay owner scoped", async () => {
+  const indexedDBImpl = new FakeIndexedDB();
+  const draft = { ownerId: "owner-1", jobId: "4", candidateId: "sourcing:9", transcript: "Call facts", notes: "Follow up" };
+  await saveLocalMeetingDraft(draft, { indexedDBImpl });
+  assert.equal((await loadLocalMeetingDraft(draft, { indexedDBImpl })).transcript, "Call facts");
+  assert.equal(await loadLocalMeetingDraft({ ...draft, ownerId: "owner-2" }, { indexedDBImpl }), null);
+  await deleteLocalMeetingDraft(draft, { indexedDBImpl });
+  assert.equal(await loadLocalMeetingDraft(draft, { indexedDBImpl }), null);
+});
+
+test("recording recovery-list storage failures are not reported as an empty list", async () => {
+  await assert.rejects(() => listInterruptedRecordings({ ownerId: "owner-1", indexedDBImpl: { open() { throw new Error("disk unavailable"); } } }), /could not be checked/);
 });
 
 test("candidate Call starts recording before handing the number to the OS dialer", async () => {
   const sequence = [];
   const recording = { stop() {} };
   const session = await startCandidateCallSession({
+    ownerId: "owner-1",
     job: { id: "job-4", title: "Maintenance Manager" },
     candidate: { id: "person-9", name: "Candidate Example", phone: "+1 416 555 0100" },
     startRecording: async (options) => { sequence.push(["record", options]); return recording; },
     dial: (href) => sequence.push(["dial", href]),
   });
   assert.equal(candidateCallHref("+1 416 555 0100"), "tel:+14165550100");
-  assert.deepEqual(sequence, [["record", { jobId: "job-4", candidateId: "person-9", jobTitle: "Maintenance Manager", candidateName: "Candidate Example", source: "candidate_call", includeSharedAudio: false }], ["dial", "tel:+14165550100"]]);
+  assert.deepEqual(sequence, [["record", { ownerId: "owner-1", jobId: "job-4", candidateId: "person-9", jobTitle: "Maintenance Manager", candidateName: "Candidate Example", source: "candidate_call", includeSharedAudio: false }], ["dial", "tel:+14165550100"]]);
   assert.equal(session.recording, recording);
   assert.equal(session.job.id, "job-4");
   assert.equal(session.candidate.id, "person-9");
@@ -363,6 +451,7 @@ test("shared call audio failure still records the microphone with a warning", as
     async close() {}
   }
   const recording = await startBrowserRecording({
+    ownerId: "owner-1",
     includeSharedAudio: true,
     mediaDevices: {
       getUserMedia: async () => microphone,
@@ -402,7 +491,13 @@ test("Meetings workspace uses browser microphone recording and the existing Cale
   assert.match(app, /startCandidateCallSession/);
   assert.match(app, /launchContext=\{meetingLaunch\}/);
   assert.match(app, /recordingLocked/);
+  assert.match(app, /key=\{`\$\{sessionUserId\}:\$\{page\}`\}/);
+  assert.match(app, /const openCandidate = \(jobId, personId\) => \{\s*if \(recordingLocked\) return;/);
+  assert.match(app, /const openJobReview = \(job\) => \{\s*if \(recordingLocked\) return;/);
+  assert.match(app, /disabled=\{signingOut \|\| recordingLocked\}/);
   assert.match(workspace, /onLaunchChange\?\.\(\{ phase: "recording"/);
+  assert.match(workspace, /setMeetingDraftDirty\(true\)/);
+  assert.match(workspace, /previousOwnerId/);
   assert.match(variants, /attached from the Call button/);
   assert.match(variants, /restored from Recent meetings/);
   assert.match(index, /Recruiting Workbench needs JavaScript/);
@@ -425,9 +520,9 @@ test("meeting print export is clean black Arial HTML", () => {
   assert.match(html, /I would rehire them\./);
 });
 
-test("candidate notes call the existing after-call workflow then save a write-up draft", async () => {
+test("after-call preparation saves all returned outputs in one approval case", async () => {
   let request;
-  let saved;
+  let savedCase;
   const result = await makeCandidateNotes({
     job: { id: "42", title: "Maintenance Manager", company: "Source company", location: "Ontario" },
     candidate: { id: "sourcing:7", name: "Candidate Example", title: "Supervisor", profileSummary: "Maintenance leadership" },
@@ -436,17 +531,77 @@ test("candidate notes call the existing after-call workflow then save a write-up
     baseURL: "https://gateway.example.invalid",
     fetchImpl: async (url, options) => {
       request = { url: url.toString(), options };
-      return { ok: true, json: async () => ({ loxoDraft: { bullets: ["Meeting transcript: Candidate stated a two week notice period."] } }) };
+      return { ok: true, json: async () => ({
+        audit: { missingSources: [], conflicts: [], finalizationBlocked: false },
+        brandedResume: { content: "Draft resume" },
+        submission: { fields: { profileSummary: ["Source-backed fact"] } },
+        presentationEmail: { subject: "Candidate profile", body: "Draft only" },
+        loxoDraft: { bullets: ["Meeting transcript: Candidate stated a two week notice period."] },
+      }) };
     },
-    createDraft: async (input) => { saved = input; return { id: "draft-1" }; },
+    getAccessToken: async () => "supabase-user-token",
+    casesEnabled: true,
+    saveCase: async (input) => { savedCase = input; return { record: { id: "case-1" } }; },
   });
   assert.equal(new URL(request.url).pathname, "/api/workflows/after-call/prepare");
-  assert.equal(request.options.credentials, "include");
+  assert.equal(request.options.options, undefined);
+  assert.equal(request.options.headers.Authorization, "Bearer supabase-user-token");
+  assert.equal(JSON.parse(request.options.body).candidateId, "sourcing:7");
+  assert.equal(request.options.credentials, undefined);
   const payload = JSON.parse(request.options.body);
-  assert.equal(payload.verifiedFacts[0].source, "transcript");
-  assert.equal(saved.kind, "write_up");
-  assert.match(saved.body, /two week notice period/);
-  assert.equal(result.draft.id, "draft-1");
+  assert.equal(payload.transcriptText, "Candidate stated a two week notice period.");
+  assert.equal(payload.verifiedFacts, undefined);
+  assert.equal(savedCase.candidate.id, "sourcing:7");
+  assert.equal(savedCase.workflow.presentationEmail.body, "Draft only");
+  assert.equal(result.approvalCase.record.id, "case-1");
+  assert.equal(result.blocked, false);
+});
+
+test("missing transcript remains a draft input gap and blocks case review", async () => {
+  let savedCase;
+  let requestPayload;
+  const result = await makeCandidateNotes({
+    job: { id: "42", title: "Maintenance Manager" },
+    candidate: { id: "sourcing:7", title: "Supervisor", profileSummary: "Maintenance leadership" },
+    transcript: "",
+  }, {
+    casesEnabled: true,
+    getAccessToken: async () => "session-token",
+    fetchImpl: async (_url, options) => {
+      requestPayload = JSON.parse(options.body);
+      return { ok: true, json: async () => ({ audit: { missingSources: ["transcript"], conflicts: [], finalizationBlocked: false }, brandedResume: { content: "Draft" }, submission: { fields: {} }, presentationEmail: { subject: "Draft", body: "Draft" }, loxoDraft: { bullets: [] } }) };
+    },
+    saveCase: async (input) => { savedCase = input; return { record: { id: "review-case", status: "blocked" } }; },
+  });
+  assert.equal("transcriptText" in requestPayload, false);
+  assert.equal(requestPayload.candidateId, "sourcing:7");
+  assert.deepEqual(savedCase.workflow.audit.missingSources, ["transcript"]);
+  assert.equal(savedCase.transcript, "");
+  assert.equal(result.blocked, true);
+  assert.equal(result.approvalCase.record.status, "blocked");
+});
+
+test("after-call auth and model errors give recoverable plain messages", async () => {
+  const input = { job: { id: 42, title: "Manager", company: "Example" }, candidate: { id: "sourcing:7", name: "Candidate", title: "Supervisor", profileSummary: "Leadership" }, transcript: "Call text" };
+  let calls = 0;
+  await assert.rejects(makeCandidateNotes(input, { getAccessToken: async () => "", fetchImpl: async () => { calls += 1; } }), /Sign in again/);
+  assert.equal(calls, 0);
+  await assert.rejects(makeCandidateNotes(input, { getAccessToken: async () => "token", fetchImpl: async () => ({ ok: false, json: async () => ({ error: { code: "AI_NOT_CONFIGURED" } }) }) }), /not available right now/);
+  await assert.rejects(makeCandidateNotes(input, { getAccessToken: async () => "token", fetchImpl: async () => ({ ok: false, json: async () => ({ error: { code: "AI_INVALID_OUTPUT" } }) }) }), /checked against the source material/);
+});
+
+test("resume PDF export validates mime type, byte size, and PDF signature", () => {
+  let download = null;
+  let revoked = "";
+  const documentRef = { createElement: () => ({ click() { download = this.download; } }) };
+  const URLImpl = { createObjectURL: (blob) => { assert.equal(blob.type, "application/pdf"); return "blob:resume"; }, revokeObjectURL: (url) => { revoked = url; } };
+  const binary = "%PDF-1.7\nresume";
+  const base64 = btoa(binary);
+  assert.deepEqual(downloadWorkflowResumePdf({ fileName: "Candidate Resume.pdf", mimeType: "application/pdf", base64, sizeBytes: binary.length }, { documentRef, URLImpl }), { sizeBytes: binary.length, fileName: "candidate-resume.pdf" });
+  assert.equal(download, "candidate-resume.pdf");
+  assert.equal(revoked, "blob:resume");
+  assert.throws(() => downloadWorkflowResumePdf({ mimeType: "text/plain", base64, sizeBytes: binary.length }, { documentRef, URLImpl }), /not available/);
+  assert.throws(() => downloadWorkflowResumePdf({ mimeType: "application/pdf", base64: btoa("not pdf"), sizeBytes: 7 }, { documentRef, URLImpl }), /could not be verified/);
 });
 
 test("meetings workspace compiles and uses live selectors, templates, exports, and durable store fallback", async () => {
@@ -460,7 +615,7 @@ test("meetings workspace compiles and uses live selectors, templates, exports, a
   ]);
   assert.match(workspace, /loadLiveReviewJobs/);
   assert.match(workspace, /loadLiveCandidatesForJob/);
-  assert.match(variants, /Make candidate notes/);
+  assert.match(variants, /Prepare after-call review/);
   assert.match(variants, /__variant/);
   assert.match(variants, /transcript-first/);
   assert.match(workspace, /Download Markdown/);

@@ -1,5 +1,5 @@
 import express from "express";
-import { errorEnvelope, McpDiscoverySchema, SafetyStateSchema } from "@ja/shared-types";
+import { CandidateIdSchema, errorEnvelope, McpDiscoverySchema, SafetyStateSchema } from "@ja/shared-types";
 import { createConfiguredAuth, parseExactHttpsOrigins } from "./src/auth.js";
 import { createGoogleWorkspaceHandlers } from "./src/google-workspace-routes.js";
 import { createGoogleApiHandlers } from "./src/google-api.js";
@@ -8,12 +8,15 @@ import { createMcpRequestHandler } from "./src/mcp.js";
 import { discoverMcp, loadRecruitmentContext } from "./src/recruitment-package.js";
 import { createLocalTranscriptionAdapter, meetingAudioBody } from "./src/local-transcription.js";
 import { createNativeCaptureManager, parseByteRange } from "./src/native-capture.js";
-import { createMeetingTranscriptionAccess } from "./src/local-trust.js";
 import { registerAiRoutes } from "./src/ai-routes.js";
-import { registerCandidateRoutes } from "./src/candidate-routes.js";
+import { registerCandidateRoutes, resolveCandidateSupabaseConfig } from "./src/candidate-routes.js";
 import { registerMailRoutes } from "./src/mail-routes.js";
 import { registerNotesBoardsRoutes } from "./src/notes-boards-routes.js";
 import { registerSearchRoutes } from "./src/search-routes.js";
+import { registerTrackerImportRoutes } from "./src/tracker-import-routes.js";
+import { createSupabaseRecruiterAccess } from "./src/supabase-recruiter-auth.js";
+import { registerBrandedResumeEditRoutes } from "./src/branded-resume-edit-routes.js";
+import { registerLocalSessionRoute } from "./src/local-session.js";
 
 function respondError(res, code, message, status = 503) {
   return res.status(status).json(errorEnvelope(code, message));
@@ -70,6 +73,8 @@ export async function createApp({
   notesBoardsFetch,
   searchStore,
   searchFetch,
+  trackerImportDependencies = {},
+  localSessionFetch = globalThis.fetch,
   transcriptionAdapter = createLocalTranscriptionAdapter(),
   captureManager = createNativeCaptureManager(),
   mcpHandlerFactory = createMcpRequestHandler,
@@ -93,9 +98,17 @@ export async function createApp({
   });
 
   // Better Auth must receive raw requests. JSON parsing is intentionally mounted after it.
+  registerLocalSessionRoute(app, { env, fetchImpl: localSessionFetch });
   if (configuredAuth.enabled) app.all("/api/auth/*", configuredAuth.handler);
   else app.all("/api/auth/*", (_req, res) => respondError(res, "AUTH_UNAVAILABLE", configuredAuth.reason));
 
+  // Import confirmations can contain up to 10,000 reviewed row choices.
+  // Parse all importer requests before the gateway-wide 128 KB default.
+  app.use("/api/tracker-imports", express.json({ limit: "10mb" }));
+  // After-call accepts bounded source bundles (2 MiB UTF-8 source text); JSON escaping adds overhead.
+  app.use("/api/workflows/after-call", express.json({ limit: "5mb" }));
+  // Resume edits have a separate 1 MiB structured-content ceiling.
+  app.use("/api/operator-cases", express.json({ limit: "2mb" }));
   app.use(express.json({ limit: "128kb" }));
   app.get("/healthz", (_req, res) => res.json({ ok: true, service: "recruiting-workbench-gateway" }));
   app.get("/api/safety", (_req, res) => res.json(SafetyStateSchema.parse({
@@ -107,8 +120,9 @@ export async function createApp({
 
   const authenticated = requireSession(configuredAuth);
   const authoritativeGoogleSession = requireSession(configuredAuth, { authoritative: true, requireStableUser: true });
-  const meetingTranscriptionAccess = createMeetingTranscriptionAccess({ env, authenticated });
-  app.get("/api/meetings/status", meetingTranscriptionAccess, async (_req, res) => {
+  const supabaseRecruiterAccess = createSupabaseRecruiterAccess({ env, fetchImpl: candidateFetch });
+  registerBrandedResumeEditRoutes(app, { access: supabaseRecruiterAccess, env, fetchImpl: candidateFetch || globalThis.fetch });
+  app.get("/api/meetings/status", supabaseRecruiterAccess, async (_req, res) => {
     res.set("Cache-Control", "private, no-store");
     return res.json({
       available: await transcriptionAdapter.available(),
@@ -116,7 +130,7 @@ export async function createApp({
       captureAvailable: await captureManager.available?.() || false,
     });
   });
-  app.post("/api/meetings/transcribe", meetingTranscriptionAccess, express.raw(meetingAudioBody), async (req, res) => {
+  app.post("/api/meetings/transcribe", supabaseRecruiterAccess, express.raw(meetingAudioBody), async (req, res) => {
     if (!Buffer.isBuffer(req.body) || req.body.length === 0) {
       return respondError(res, "INVALID_INPUT", "Meeting audio is required", 400);
     }
@@ -134,9 +148,9 @@ export async function createApp({
       return respondError(res, "TRANSCRIPTION_FAILED", message, status);
     }
   });
-  app.post("/api/meetings/capture/start", authoritativeGoogleSession, async (req, res) => {
+  app.post("/api/meetings/capture/start", supabaseRecruiterAccess, async (req, res) => {
     try {
-      const capture = await captureManager.start({ jobId: req.body?.jobId, candidateId: req.body?.candidateId, ownerId: req.workbenchSession.user.id });
+      const capture = await captureManager.start({ jobId: req.body?.jobId, candidateId: req.body?.candidateId, ownerId: req.supabaseRecruiter.ownerId });
       return res.status(201).json({ ok: true, capture });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Native meeting capture could not start";
@@ -213,16 +227,16 @@ export async function createApp({
     while (captureFinalizations.size > 100) captureFinalizations.delete(captureFinalizations.keys().next().value);
     return promise;
   }
-  app.post("/api/meetings/capture/:id/stop", authoritativeGoogleSession, async (req, res) => {
+  app.post("/api/meetings/capture/:id/stop", supabaseRecruiterAccess, async (req, res) => {
     try {
-      return res.json(await serializedFinalization(req.params.id, req.workbenchSession.user.id));
+      return res.json(await serializedFinalization(req.params.id, req.supabaseRecruiter.ownerId));
     } catch (error) {
       return respondError(res, "CAPTURE_STOP_FAILED", error instanceof Error ? error.message : "Native capture could not stop", 502);
     }
   });
-  app.get("/api/meetings/capture/:id/audio", authoritativeGoogleSession, async (req, res) => {
+  app.get("/api/meetings/capture/:id/audio", supabaseRecruiterAccess, async (req, res) => {
     try {
-      const audio = await captureManager.audioInfo(req.params.id, String(req.query.source || "mixed"), req.workbenchSession.user.id);
+      const audio = await captureManager.audioInfo(req.params.id, String(req.query.source || "mixed"), req.supabaseRecruiter.ownerId);
       const range = parseByteRange(req.get("range"), audio.size);
       res.set({
         "Accept-Ranges": "bytes",
@@ -260,8 +274,9 @@ export async function createApp({
     app.post("/api/google-workspace/disconnect", authoritativeGoogleSession, googleWorkspaceHandler("disconnect"));
   }
   app.post("/api/gws/sync", authoritativeGoogleSession, googleApi.sync);
-  // AI routes accept the same private-network trust as meetings when LOCAL_TRUSTED_MODE=1.
-  registerAiRoutes(app, { authenticated: meetingTranscriptionAccess, env });
+  // AI routes use the user's approved Supabase app session. Google cookies are
+  // required only by Google-backed features.
+  registerAiRoutes(app, { authenticated: supabaseRecruiterAccess, env });
   registerMailRoutes(app, {
     authenticated: authoritativeGoogleSession,
     getGoogleProviderAccessToken: configuredAuth.getGoogleProviderAccessToken?.bind(configuredAuth),
@@ -284,20 +299,56 @@ export async function createApp({
     searchStore,
     fetchImpl: searchFetch ?? candidateFetch,
   });
+  registerTrackerImportRoutes(app, {
+    ...trackerImportDependencies,
+    env,
+    auth: configuredAuth,
+    authenticated: supabaseRecruiterAccess,
+    googleAuthenticated: authoritativeGoogleSession,
+    fetchImpl: candidateFetch,
+  });
   app.get("/api/mcp/discovery", authenticated, async (_req, res) => {
     try { return res.json(McpDiscoverySchema.parse(discoverMcp(recruiterAuthority))); }
     catch { return respondError(res, "RECRUITER_UNAVAILABLE", "Recruitment authority is unavailable"); }
   });
-  app.post("/api/workflows/after-call/prepare", authenticated, async (req, res) => {
+  app.post("/api/workflows/after-call/prepare", supabaseRecruiterAccess, async (req, res) => {
     if (!recruiterAuthority) return respondError(res, "RECRUITER_UNAVAILABLE", "Recruitment authority is unavailable");
-    try { return res.status(202).json(prepareAfterCallWorkflow(req.body, recruiterAuthority)); }
-    catch (error) { return respondError(res, "INVALID_INPUT", error instanceof Error ? error.message : "Invalid workflow input", 400); }
+    try {
+      const candidateId = CandidateIdSchema.safeParse(req.body?.candidateId);
+      if (!candidateId.success) return respondError(res, "INVALID_INPUT", "Choose a valid candidate record", 400);
+      const supabaseConfig = resolveCandidateSupabaseConfig(env);
+      if (!supabaseConfig.enabled) return respondError(res, "SUPABASE_UNAVAILABLE", "Candidate records are unavailable", 503);
+      const query = new URLSearchParams({ select: "id,candidate_name,current_title", id: `eq.${candidateId.data}`, limit: "1" });
+      const candidateResponse = await (candidateFetch || globalThis.fetch)(`${supabaseConfig.supabaseUrl}/rest/v1/candidates_all?${query}`, {
+        method: "GET",
+        headers: { apikey: supabaseConfig.publishableKey, Authorization: `Bearer ${req.supabaseRecruiter.accessToken}`, Accept: "application/json" },
+      });
+      const rows = await candidateResponse.json().catch(() => null);
+      if (!candidateResponse.ok || !Array.isArray(rows)) return respondError(res, "CANDIDATE_STORAGE_FAILED", "The selected candidate could not be verified", 502);
+      const resolvedCandidate = rows.find((row) => row?.id === candidateId.data);
+      if (!resolvedCandidate) return respondError(res, "CANDIDATE_NOT_FOUND", "The selected candidate is no longer available", 404);
+      return res.status(202).json(await prepareAfterCallWorkflow({ ...req.body, candidateId: candidateId.data }, recruiterAuthority, { env, resolvedCandidate }));
+    }
+    catch (error) {
+      if (error?.code === "AI_NOT_CONFIGURED") return respondError(res, "AI_NOT_CONFIGURED", "AI-assisted after-call drafting is not configured", 503);
+      if (error?.code === "AI_INVALID_OUTPUT") return respondError(res, "AI_INVALID_OUTPUT", "AI returned a draft that could not be source-validated", 502);
+      return respondError(res, "INVALID_INPUT", error instanceof Error ? error.message : "Invalid workflow input", 400);
+    }
   });
   app.all("/mcp", authenticated, async (req, res) => {
     if (!["GET", "POST"].includes(req.method)) return res.status(405).end();
     if (!mcpHandler) return respondError(res, "RECRUITER_UNAVAILABLE", "Recruitment authority is unavailable");
     try { return await mcpHandler(req, res); }
     catch { return respondError(res, "RECRUITER_UNAVAILABLE", "Recruitment authority is unavailable"); }
+  });
+  app.use((error, _req, res, _next) => {
+    if (error?.type === "entity.too.large" || error?.status === 413) {
+      return respondError(res, "PAYLOAD_TOO_LARGE", "Request is too large. Shorten the source text or split the transcript, then try again.", 413);
+    }
+    if (error instanceof SyntaxError && Object.hasOwn(error, "body")) {
+      return respondError(res, "INVALID_JSON", "Request body must be valid JSON", 400);
+    }
+    return respondError(res, "REQUEST_FAILED", "The request could not be processed", 400);
   });
   return app;
 }

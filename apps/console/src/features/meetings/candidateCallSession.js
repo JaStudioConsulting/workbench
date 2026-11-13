@@ -9,6 +9,7 @@ export function candidateCallHref(phone) {
 export async function startCandidateCallSession({
   job,
   candidate,
+  ownerId,
   startRecording = startBrowserRecording,
   dial = (href) => globalThis.location?.assign?.(href),
 } = {}) {
@@ -20,6 +21,7 @@ export async function startCandidateCallSession({
   let recording;
   try {
     recording = await startRecording({
+      ownerId,
       jobId: String(job.id),
       candidateId: String(candidate.id),
       jobTitle: String(job.title || ""),

@@ -24,28 +24,118 @@ export const VerifiedFactSchema = z.object({
 });
 
 export const CandidateInputSchema = z.object({
+  candidateId: z.string().trim().regex(/^(?:(?:sourcing|submission):[1-9]\d*|manual:[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})$/i),
   name: z.string().min(1),
-  title: z.string().min(1),
+  title: z.string().optional().default(""),
   resumeText: z.string().min(1),
   transcriptText: z.string().optional(),
   jobDescription: z.string().min(1),
   callNotes: z.string().optional(),
   verifiedFacts: z.array(VerifiedFactSchema).optional().default([]),
+}).superRefine((input, ctx) => {
+  const encoder = new TextEncoder();
+  const sourceBytes = [input.resumeText, input.transcriptText || "", input.jobDescription, input.callNotes || ""]
+    .reduce((total, source) => total + encoder.encode(source).byteLength, 0);
+  if (sourceBytes > 2 * 1024 * 1024) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["resumeText"],
+      message: "Source text exceeds 2 MiB. Shorten the resume, transcript, job description, or call notes before preparing drafts.",
+    });
+  }
 });
+
+export const WorkflowEvidenceSchema = z.object({
+  source: z.enum(["candidate_record", "resume", "transcript", "call_notes", "job_description"]),
+  quote: z.string().trim().min(1).max(5000),
+}).strict();
+
+export const SourceBackedClaimSchema = z.object({
+  text: z.string().trim().min(1).max(2000),
+  evidence: z.array(WorkflowEvidenceSchema).min(1).max(8),
+}).strict();
+
+export const SourceBackedFieldSchema = z.object({
+  value: z.string().trim().min(1).max(1000).nullable(),
+  evidence: z.array(WorkflowEvidenceSchema).max(8),
+}).strict().superRefine((field, ctx) => {
+  if (field.value && field.evidence.length === 0) ctx.addIssue({ code: "custom", message: "A populated field requires source evidence" });
+  if (!field.value && field.evidence.length > 0) ctx.addIssue({ code: "custom", message: "An empty field cannot claim source evidence" });
+});
+
+export const WorkflowResumeRoleSchema = z.object({
+  title: SourceBackedFieldSchema,
+  dates: SourceBackedFieldSchema,
+  company: SourceBackedFieldSchema,
+  location: SourceBackedFieldSchema,
+  bullets: z.array(SourceBackedClaimSchema).max(12),
+}).strict();
+
+export const WorkflowResumeSchema = z.object({
+  name: SourceBackedFieldSchema,
+  title: SourceBackedFieldSchema,
+  summary: z.array(SourceBackedClaimSchema).max(4),
+  skills: z.array(SourceBackedClaimSchema).max(24),
+  experience: z.array(WorkflowResumeRoleSchema).max(40),
+  education: z.array(SourceBackedClaimSchema).max(12),
+  certifications: z.array(SourceBackedClaimSchema).max(20),
+  additionalInformation: z.array(SourceBackedClaimSchema).max(20),
+}).strict().superRefine((resume, ctx) => {
+  if (resume.skills.length % 2 !== 0) ctx.addIssue({ code: "custom", path: ["skills"], message: "Branded resume skills must be an even count" });
+});
+
+const SubmissionFieldsSchema = z.object({
+  name: SourceBackedFieldSchema,
+  title: SourceBackedFieldSchema,
+  compensationTarget: SourceBackedFieldSchema,
+  currentCompensation: SourceBackedFieldSchema,
+  vacation: SourceBackedFieldSchema,
+  location: SourceBackedFieldSchema,
+  workStatus: SourceBackedFieldSchema,
+  interviewAvailability: SourceBackedFieldSchema,
+  startDate: SourceBackedFieldSchema,
+  reasonForLeaving: SourceBackedFieldSchema,
+  profileSummary: z.array(SourceBackedClaimSchema).max(6),
+}).strict();
+
+export const WorkflowConflictSchema = z.object({
+  field: z.enum(["identity", "current_title", "current_company", "compensation_target", "current_compensation", "availability", "start_date", "location", "work_status", "reason_for_leaving", "other"]),
+  evidence: z.array(WorkflowEvidenceSchema).min(2).max(8),
+  description: z.string().trim().min(1).max(500),
+}).strict();
 
 export const WorkflowOutputSchema = z.object({
   authority: z.literal("recruiter"),
   audit: z.object({
-    providedSources: z.array(z.enum(["resume", "transcript", "call_notes"])),
-    missingSources: z.array(z.enum(["resume", "transcript", "call_notes"])),
-    supportedClaims: z.array(VerifiedFactSchema),
+    providedSources: z.array(z.enum(["candidate_record", "resume", "transcript", "call_notes", "job_description"])),
+    missingSources: z.array(z.enum(["candidate_record", "resume", "transcript", "call_notes", "job_description"])),
+    supportedClaims: z.array(SourceBackedClaimSchema).max(200),
+    conflicts: z.array(WorkflowConflictSchema).max(40),
+    identityReviewRequired: z.boolean(),
+    finalizationBlocked: z.boolean(),
+  }).strict(),
+  brandedResume: z.object({
+    status: z.literal("draft"),
+    exportStatus: z.enum(["draft_rendered", "not_rendered"]),
+    exportMessage: z.string().max(300).nullable(),
+    pdf: z.object({
+      fileName: z.string().min(1).max(200),
+      mimeType: z.literal("application/pdf"),
+      sizeBytes: z.number().int().positive().max(8 * 1024 * 1024),
+      base64: z.string().min(1).max(12 * 1024 * 1024),
+      reviewLabel: z.literal("Draft for recruiter review"),
+    }).strict().nullable(),
+    content: z.string().max(50000),
+    sections: WorkflowResumeSchema,
+  }).strict().superRefine((resume, ctx) => {
+    if (resume.exportStatus === "draft_rendered" && !resume.pdf) ctx.addIssue({ code: "custom", path: ["pdf"], message: "Rendered drafts require a PDF" });
+    if (resume.exportStatus === "not_rendered" && resume.pdf) ctx.addIssue({ code: "custom", path: ["pdf"], message: "Unrendered drafts cannot include a PDF" });
   }),
-  brandedResume: z.object({ status: z.literal("draft"), content: z.string() }),
-  submission: z.object({ status: z.literal("draft"), fields: z.object({ profileSummary: z.array(z.string()) }) }),
-  presentationEmail: z.object({ status: z.literal("draft"), subject: z.string(), body: z.string() }),
-  loxoDraft: z.object({ status: z.literal("draft"), bullets: z.array(z.string()) }),
+  submission: z.object({ status: z.literal("draft"), fields: SubmissionFieldsSchema }).strict(),
+  presentationEmail: z.object({ status: z.literal("draft"), subject: z.string().max(500), body: z.string().max(10000), attachmentStatus: z.literal("not_generated") }).strict(),
+  loxoDraft: z.object({ status: z.literal("draft"), bullets: z.array(SourceBackedClaimSchema).max(20) }).strict(),
   reviewRequired: z.literal(true),
-});
+}).strict();
 
 export const SafetyStateSchema = z.object({
   auth: z.enum(["configured", "unavailable"]),

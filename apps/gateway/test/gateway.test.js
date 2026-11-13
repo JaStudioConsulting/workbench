@@ -3,14 +3,24 @@ import { request as httpRequest } from "node:http";
 import test from "node:test";
 import { createApp } from "../app.js";
 import { createConfiguredAuth, parseAllowedGoogleEmails, parseExactHttpsOrigins } from "../src/auth.js";
-import { prepareAfterCallWorkflow } from "../src/after-call.js";
 import { createDraftOnlyMailService } from "../src/gmail.js";
 import { discoverMcp, loadRecruitmentAuthority, validatePublishedRecruitmentAssets, validateRecruitmentManifest } from "../src/recruitment-package.js";
 import { createMemoryTestStorage, requireDurableStorage } from "../src/storage.js";
 
 const browserOrigin = "https://console.test";
 const testEnv = { APP_TRUSTED_ORIGINS: browserOrigin };
+const supabaseMeetingEnv = { ...testEnv, SUPABASE_URL: "https://example.supabase.co", SUPABASE_PUBLISHABLE_KEY: "sb_publishable_test" };
 const testAuthority = async () => ({ id: "recruiter", routerPath: "recruiter/SKILL.md", capabilities: [] });
+const supabaseUserId = "11111111-1111-4111-8111-111111111111";
+const supabaseFetch = async (url) => ({
+  ok: true,
+  status: 200,
+  json: async () => url.endsWith("/auth/v1/user")
+    ? { id: supabaseUserId, email: "review@example.invalid" }
+    : url.includes("/rest/v1/candidates_all?")
+      ? [{ id: "sourcing:7", candidate_name: "Avery Sampleton", current_title: "Maintenance Supervisor" }]
+      : true,
+});
 const testRecruitmentContext = async () => ({
   authority: { ...await testAuthority(), policies: ["_JA-RULES.md", "_TOOL-MAP.md"] },
   pkg: {
@@ -74,12 +84,14 @@ test("auth malformed environment fails closed without throwing", async () => {
   assert.equal((await createConfiguredAuth({ DATABASE_URL: "configured", BETTER_AUTH_URL: browserOrigin, BETTER_AUTH_SECRET: "x".repeat(32), GOOGLE_CLIENT_ID: "id", GOOGLE_CLIENT_SECRET: "secret", AUTH_TRUSTED_ORIGINS: browserOrigin })).enabled, false);
 });
 
-test("every non-public API route requires Better Auth session", async () => {
+test("API routes require the appropriate approved app or Google session", async () => {
   const noAuth = await createApp({ env: testEnv, recruitmentContextLoader: testRecruitmentContext });
   assert.equal((await request(noAuth, "GET", "/api/mcp/discovery")).status, 503);
   const app = await createApp({ env: testEnv, recruitmentContextLoader: testRecruitmentContext, authConfig: authenticated });
   assert.equal((await request(app, "GET", "/api/mcp/discovery")).status, 401);
   assert.equal((await request(app, "GET", "/api/meetings/status")).status, 401);
+  assert.equal((await request(app, "GET", "/api/ai/status")).status, 401);
+  assert.equal((await request(app, "POST", "/api/workflows/after-call/prepare", { body: {} })).status, 401);
   assert.equal((await request(app, "POST", "/api/meetings/transcribe", { rawBody: Buffer.from("audio"), headers: { "content-type": "audio/mp4" } })).status, 401);
   assert.equal((await request(app, "POST", "/api/meetings/capture/start", { body: { jobId: "job-1", candidateId: "candidate-1" } })).status, 401);
   assert.equal((await request(app, "POST", "/mcp", { body: { jsonrpc: "2.0", id: 1, method: "initialize", params: {} } })).status, 401);
@@ -90,12 +102,84 @@ test("every non-public API route requires Better Auth session", async () => {
   assert.deepEqual(discovery.body.tools.map((tool) => tool.id), ["recruiter", "workspace_status"]);
 });
 
+test("Tracker import gateway wiring permits Supabase-only file imports and keeps Sheets behind Google auth", async () => {
+  const userId = "11111111-1111-4111-8111-111111111111";
+  const importId = "22222222-2222-4222-8222-222222222222";
+  const userEmail = "review@example.invalid";
+  const importCalls = [];
+  const authConfig = {
+    enabled: true,
+    isApprovedEmail: (email) => email === userEmail,
+    handler: (_req, res) => res.status(404).end(),
+    async getSession() { return null; },
+    async getAuthoritativeSession(req) {
+      if (req.headers.cookie === "google-session=connected") return { session: { id: "google-session", userId }, user: { id: userId, email: userEmail } };
+      return null;
+    },
+    async getGoogleProviderAccessToken() { return { accessToken: "google-read-token", scopes: ["https://www.googleapis.com/auth/spreadsheets"] }; },
+  };
+  const candidateFetch = async (url) => ({
+    ok: true, status: 200,
+    async json() {
+      if (String(url).endsWith("/auth/v1/user")) return { id: userId, email: userEmail, role: "authenticated" };
+      return true;
+    },
+  });
+  const store = {
+    async verifyUser(token) {
+      if (token !== "supabase-user-session") throw Object.assign(new Error("Invalid user"), { status: 401, code: "UNAUTHORIZED" });
+      return { id: userId, email: userEmail };
+    },
+    async request(_token, path, options = {}) {
+      importCalls.push({ path, options });
+      if (path === "tracker_imports") return [{ id: importId, status: "preview" }];
+      if (path === "rpc/save_tracker_import_preview") return { rowCount: 1 };
+      if (path.startsWith("tracker_import_source_rows?")) return [];
+      if (path.startsWith("tracker_imports?")) return [];
+      if (path === "rpc/confirm_tracker_import") return { status: "confirmed", importedCount: 1, updatedCount: 0, unchangedCount: 0, skippedCount: 0, failedCount: 0, rows: [] };
+      throw new Error(`Unexpected import request: ${path}`);
+    },
+  };
+  const app = await createApp({
+    env: { ...testEnv, SUPABASE_URL: "https://supabase.example", SUPABASE_PUBLISHABLE_KEY: "publishable-key" },
+    authConfig,
+    candidateFetch,
+    trackerImportDependencies: { store },
+    recruitmentContextLoader: testRecruitmentContext,
+  });
+  const noToken = await request(app, "GET", "/api/tracker-imports");
+  assert.equal(noToken.status, 401);
+  const noGoogleMeta = await request(app, "GET", "/api/tracker-imports/sheets/metadata?spreadsheetId=123456789012345678901234567890", { headers: { authorization: "Bearer supabase-user-session" } });
+  assert.equal(noGoogleMeta.status, 401);
+  const noGoogleSheet = await request(app, "POST", "/api/tracker-imports/preview", {
+    headers: { authorization: "Bearer supabase-user-session" },
+    body: { type: "candidates", source: { kind: "sheet", spreadsheetId: "123456789012345678901234567890", sheetId: 8, sheetTitle: "Candidates", sourceKey: "sheet:123456789012345678901234567890:8", sourceLabel: "Tracker" } },
+  });
+  assert.equal(noGoogleSheet.status, 401);
+  assert.equal(importCalls.length, 0);
+
+  const filePreview = await request(app, "POST", "/api/tracker-imports/preview", {
+    headers: { authorization: "Bearer supabase-user-session" },
+    body: { type: "candidates", source: { kind: "file", sourceKey: "upload:33333333-3333-4333-8333-333333333333", sourceLabel: "Candidates.csv" }, headers: ["Candidate Name"], rows: [["Jamie Recruiter"]] },
+  });
+  assert.equal(filePreview.status, 201);
+  const history = await request(app, "GET", "/api/tracker-imports", { headers: { authorization: "Bearer supabase-user-session" } });
+  assert.equal(history.status, 200);
+  const confirm = await request(app, "POST", `/api/tracker-imports/${importId}/confirm`, {
+    headers: { authorization: "Bearer supabase-user-session" },
+    body: { confirm: true, rows: [{ sourceRowKey: filePreview.body.rows[0].sourceRowKey, action: "insert", reviewedIdentity: true }] },
+  });
+  assert.equal(confirm.status, 200);
+  assert.equal(importCalls.some((call) => call.path === "rpc/confirm_tracker_import"), true);
+});
+
 test("meeting transcription stays authenticated and uses the injected local adapter", async () => {
   const calls = [];
   const app = await createApp({
-    env: testEnv,
+    env: supabaseMeetingEnv,
     recruitmentContextLoader: testRecruitmentContext,
     authConfig: authenticated,
+    candidateFetch: supabaseFetch,
     captureManager: { available: async () => false },
     transcriptionAdapter: {
       available: async () => true,
@@ -123,9 +207,10 @@ test("meeting transcription stays authenticated and uses the injected local adap
 
 test("meeting status reports the enhancement flag without exposing runtime paths", async () => {
   const app = await createApp({
-    env: { ...testEnv, WORKBENCH_NATIVE_MEETING_ENHANCEMENTS: "1" },
+    env: { ...supabaseMeetingEnv, WORKBENCH_NATIVE_MEETING_ENHANCEMENTS: "1" },
     recruitmentContextLoader: testRecruitmentContext,
     authConfig: authenticated,
+    candidateFetch: supabaseFetch,
     captureManager: { available: async () => false },
     transcriptionAdapter: { available: async () => true, transcribe: async () => ({ transcript: "Source words." }) },
   });
@@ -146,16 +231,17 @@ test("native stop is owner-bound and finalizes plus transcribes only once", asyn
     start: async ({ jobId, candidateId }) => ({ id: "capture-1", state: "recording", jobId, candidateId, usedSystemAudio: true }),
     stop: async () => { stops += 1; await new Promise((resolve) => setTimeout(resolve, 10)); return { id: "capture-1", state: "captured", jobId: "job-1", candidateId: "candidate-1", warning: null }; },
     audioInfo: async (_id, source, ownerId) => {
-      assert.equal(ownerId, "synthetic-user");
+      assert.equal(ownerId, supabaseUserId);
       return { path: `/private/${source}.wav` };
     },
-    loadFinalizedResponse: async (_id, ownerId) => { assert.equal(ownerId, "synthetic-user"); return saved; },
-    saveFinalizedResponse: async (_id, ownerId, response) => { assert.equal(ownerId, "synthetic-user"); saved = response; },
+    loadFinalizedResponse: async (_id, ownerId) => { assert.equal(ownerId, supabaseUserId); return saved; },
+    saveFinalizedResponse: async (_id, ownerId, response) => { assert.equal(ownerId, supabaseUserId); saved = response; },
   };
   const app = await createApp({
-    env: testEnv,
+    env: supabaseMeetingEnv,
     recruitmentContextLoader: testRecruitmentContext,
     authConfig: authenticated,
+    candidateFetch: supabaseFetch,
     captureManager,
     transcriptionAdapter: {
       available: async () => true,
@@ -180,11 +266,12 @@ test("native stop is owner-bound and finalizes plus transcribes only once", asyn
   assert.equal(transcriptions, 2);
 });
 
-test("explicit local trusted mode bypasses login only for meeting transcription", async () => {
+test("meeting transcription requires an approved Supabase session even in local trusted mode", async () => {
   const app = await createApp({
-    env: { LOCAL_TRUSTED_MODE: "1" },
+    env: { ...supabaseMeetingEnv, LOCAL_TRUSTED_MODE: "1" },
     recruitmentContextLoader: testRecruitmentContext,
     authConfig: { enabled: false, reason: "Authentication unavailable" },
+    candidateFetch: supabaseFetch,
     transcriptionAdapter: {
       available: async () => true,
       transcribe: async () => ({ transcript: "Local source audio.", source: "workbench_native" }),
@@ -192,21 +279,16 @@ test("explicit local trusted mode bypasses login only for meeting transcription"
   });
   const transcription = await request(app, "POST", "/api/meetings/transcribe", {
     rawBody: Buffer.from("synthetic-audio"),
-    headers: { "content-type": "audio/wav", origin: "__same__" },
+    headers: { "content-type": "audio/wav", origin: "__same__", authorization: "Bearer synthetic-review" },
   });
   assert.equal(transcription.status, 200);
   assert.equal(transcription.body.transcript, "Local source audio.");
   assert.equal((await request(app, "GET", "/api/mcp/discovery")).status, 503);
 
-  const wrongFlag = await createApp({
-    env: { LOCAL_TRUSTED_MODE: "true" },
-    recruitmentContextLoader: testRecruitmentContext,
-    authConfig: { enabled: false, reason: "Authentication unavailable" },
-  });
-  assert.equal((await request(wrongFlag, "POST", "/api/meetings/transcribe", {
+  assert.equal((await request(app, "POST", "/api/meetings/transcribe", {
     rawBody: Buffer.from("synthetic-audio"),
     headers: { "content-type": "audio/wav" },
-  })).status, 503);
+  })).status, 401);
 });
 
 test("MCP initializes and lists only recruiter plus read-only status", async () => {
@@ -256,10 +338,12 @@ test("Recruiter context loads once at startup and only the requested guide loads
   };
   const app = await createApp({
     env: testEnv,
+    candidateFetch: supabaseFetch,
     authConfig: authenticated,
     recruitmentContextLoader: async () => { contextLoads += 1; return context; },
   });
   const headers = { authorization: "Bearer synthetic-review", accept: "application/json, text/event-stream" };
+  const supabaseHeaders = { authorization: "Bearer synthetic-supabase", accept: "application/json" };
 
   assert.equal(contextLoads, 1);
   assert.deepEqual(readPaths, ["_JA-RULES.md", "recruiter/SKILL.md"]);
@@ -286,14 +370,16 @@ test("all recruiter routes fail together when MCP startup initialization fails",
   let factoryCalls = 0;
   const app = await createApp({
     env: testEnv,
+    candidateFetch: supabaseFetch,
     authConfig: authenticated,
     recruitmentContextLoader: async () => { contextLoads += 1; return testRecruitmentContext(); },
     mcpHandlerFactory: async () => { factoryCalls += 1; throw new Error("synthetic router read failure"); },
   });
   const headers = { authorization: "Bearer synthetic-review", accept: "application/json, text/event-stream" };
+  const supabaseHeaders = { authorization: "Bearer synthetic-supabase", accept: "application/json" };
 
   assert.equal((await request(app, "GET", "/api/mcp/discovery", { headers })).status, 503);
-  assert.equal((await request(app, "POST", "/api/workflows/after-call/prepare", { headers, body: {} })).status, 503);
+  assert.equal((await request(app, "POST", "/api/workflows/after-call/prepare", { headers: supabaseHeaders, body: {} })).status, 503);
   assert.equal((await request(app, "POST", "/mcp", { headers, body: { jsonrpc: "2.0", id: 1, method: "tools/list", params: {} } })).status, 503);
   assert.equal(contextLoads, 1);
   assert.equal(factoryCalls, 1);
@@ -327,30 +413,76 @@ test("public safety status contains only supported fields", async () => {
   assert.equal(response.body.externalWrites, false);
 });
 
-test("full synthetic after-call output is recruiter-authorized, draft-only, and source-backed", () => {
-  const facts = [
-    { label: "Team leadership", value: "Led 12 maintenance technicians", source: "resume", evidence: "led 12 maintenance technicians" },
-    { label: "Availability", value: "Two weeks notice", source: "transcript", evidence: "two weeks notice" },
-    { label: "Work preference", value: "Open to Exampleton", source: "call_notes", evidence: "open to exampleton" },
-  ];
-  const output = prepareAfterCallWorkflow({ name: "Avery Sampleton", title: "Maintenance Supervisor", resumeText: "Synthetic resume: Led   12 maintenance TECHNICIANS.", transcriptText: "Synthetic transcript: Two weeks notice.", jobDescription: "Synthetic job", callNotes: "Synthetic call notes: Open to Exampleton.", verifiedFacts: facts }, { id: "recruiter" });
-  assert.equal(output.authority, "recruiter");
-  assert.equal(output.reviewRequired, true);
-  assert.deepEqual(output.audit.providedSources, ["resume", "transcript", "call_notes"]);
-  assert.deepEqual(output.audit.missingSources, []);
-  assert.deepEqual(output.audit.supportedClaims, facts);
-  const text = JSON.stringify(output);
-  for (const fact of facts) assert.match(text, new RegExp(fact.value));
-  assert.equal(output.brandedResume.status, "draft");
-  assert.equal(output.submission.status, "draft");
-  assert.equal(output.presentationEmail.status, "draft");
-  assert.equal(output.loxoDraft.status, "draft");
-  assert.doesNotMatch(text, /send|submit|write|external action/i);
+test("after-call endpoint reports the missing model configuration instead of returning a template", async () => {
+  const app = await createApp({ env: testEnv, candidateFetch: supabaseFetch, authConfig: authenticated, recruitmentContextLoader: testRecruitmentContext });
+  const response = await request(app, "POST", "/api/workflows/after-call/prepare", {
+    headers: { authorization: "Bearer synthetic-supabase" },
+    body: { candidateId: "sourcing:7", name: "Avery Sampleton", title: "Maintenance Supervisor", resumeText: "Avery Sampleton led 12 maintenance technicians.", jobDescription: "Maintenance Manager" },
+  });
+  assert.equal(response.status, 503);
+  assert.equal(response.body.error.code, "AI_NOT_CONFIGURED");
+  assert.match(response.body.error.message, /not configured/i);
 });
 
-test("after-call preparation rejects fabricated evidence and evidence without its declared source", () => {
-  const baseline = { name: "Avery Sampleton", title: "Maintenance Supervisor", resumeText: "Led 12 maintenance technicians.", jobDescription: "Synthetic job", verifiedFacts: [] };
-  assert.throws(() => prepareAfterCallWorkflow({ ...baseline, verifiedFacts: [{ label: "Fabricated evidence", value: "Led 12 maintenance technicians", source: "resume", evidence: "managed a plant" }] }, { id: "recruiter" }), /evidence is not present/);
-  assert.throws(() => prepareAfterCallWorkflow({ ...baseline, verifiedFacts: [{ label: "Fabricated value", value: "Managed a plant", source: "resume", evidence: "led 12 maintenance technicians" }] }, { id: "recruiter" }), /value is not present/);
-  assert.throws(() => prepareAfterCallWorkflow({ ...baseline, verifiedFacts: [{ label: "Availability", value: "Two weeks notice", source: "transcript", evidence: "two weeks notice" }] }, { id: "recruiter" }), /source is missing/);
+test("after-call gateway accepts bounded source bundles and returns a clear 413 beyond its JSON ceiling", async () => {
+  const app = await createApp({ env: testEnv, candidateFetch: supabaseFetch, authConfig: authenticated, recruitmentContextLoader: testRecruitmentContext });
+  const headers = { authorization: "Bearer synthetic-supabase" };
+  const bounded = await request(app, "POST", "/api/workflows/after-call/prepare", {
+    headers,
+    body: { candidateId: "sourcing:7", name: "Avery Sampleton", title: "Maintenance Supervisor", resumeText: "Resume evidence. ".repeat(9000), jobDescription: "Maintenance Manager", transcriptText: "Call evidence. ".repeat(700) },
+  });
+  assert.equal(bounded.status, 503);
+  assert.equal(bounded.body.error.code, "AI_NOT_CONFIGURED");
+
+  const oversized = await request(app, "POST", "/api/workflows/after-call/prepare", {
+    headers,
+    body: { candidateId: "sourcing:7", resumeText: "x".repeat(5 * 1024 * 1024 + 1) },
+  });
+  assert.equal(oversized.status, 413);
+  assert.equal(oversized.body.error.code, "PAYLOAD_TOO_LARGE");
+  assert.match(oversized.body.error.message, /shorten the source text or split the transcript/i);
+});
+
+test("real gateway parser accepts reviewed import confirmations through the 10,000-row cap", async () => {
+  const confirmSizes = [];
+  const importStore = {
+    async verifyUser() { return { id: supabaseUserId, email: "review@example.invalid" }; },
+    async request(_token, path, options = {}) {
+      assert.equal(path, "rpc/confirm_tracker_import");
+      const count = options.body?.p_rows?.length || 0;
+      confirmSizes.push(count);
+      return { status: "confirmed", importedCount: count, rows: [] };
+    },
+  };
+  const app = await createApp({
+    env: { ...testEnv, SUPABASE_URL: "https://supabase.example", SUPABASE_PUBLISHABLE_KEY: "public-key" },
+    candidateFetch: supabaseFetch,
+    authConfig: authenticated,
+    trackerImportDependencies: { store: importStore },
+    recruitmentContextLoader: testRecruitmentContext,
+  });
+  const runId = "33333333-3333-4333-8333-333333333333";
+  const makeRows = (count) => Array.from({ length: count }, (_, index) => ({
+    sourceRowKey: `upload:44444444-4444-4444-8444-444444444444:email:candidate${index + 1}@example.test`,
+    action: "insert",
+  }));
+  const headers = { authorization: "Bearer synthetic-supabase" };
+
+  const ordinaryBatch = await request(app, "POST", `/api/tracker-imports/${runId}/confirm`, {
+    headers, body: { confirm: true, rows: makeRows(1536) },
+  });
+  assert.equal(ordinaryBatch.status, 200);
+  assert.equal(confirmSizes.at(-1), 1536);
+
+  const maximumBatch = await request(app, "POST", `/api/tracker-imports/${runId}/confirm`, {
+    headers, body: { confirm: true, rows: makeRows(10000) },
+  });
+  assert.equal(maximumBatch.status, 200);
+  assert.equal(confirmSizes.at(-1), 10000);
+
+  const overLimitBatch = await request(app, "POST", `/api/tracker-imports/${runId}/confirm`, {
+    headers, body: { confirm: true, rows: makeRows(10001) },
+  });
+  assert.equal(overLimitBatch.status, 400);
+  assert.deepEqual(confirmSizes, [1536, 10000]);
 });

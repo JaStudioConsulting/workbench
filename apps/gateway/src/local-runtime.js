@@ -14,6 +14,9 @@ export async function mountConsoleDist(app, { distDir }) {
     if (!req.accepts("html")) return next();
     return res.sendFile(indexPath, (error) => error ? next(error) : undefined);
   });
+  app.use("/api", (_req, res) => res.status(404).json({
+    error: { code: "NOT_FOUND", message: "API route not found" },
+  }));
   return app;
 }
 

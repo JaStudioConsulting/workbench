@@ -1,7 +1,7 @@
 import { supabase } from "../../supabase-client.js";
 
 const STORAGE_KEY = "workbench.leads.v1";
-const LEAD_FIELDS = ["company", "contact", "role", "status", "nextAction", "nextDate", "notes"];
+const LEAD_FIELDS = ["company", "contact", "email", "linkedinUrl", "externalId", "externalIdSource", "companyWebsite", "role", "status", "nextAction", "nextDate", "notes"];
 
 function text(value) {
   return String(value || "").trim();
@@ -41,11 +41,65 @@ export function normalizeLead(value = {}) {
   return lead;
 }
 
+function normalizeEmail(value) {
+  return text(value).toLowerCase();
+}
+
+function normalizeLinkedIn(value) {
+  const raw = text(value);
+  if (!raw) return "";
+  try {
+    const url = new URL(raw.includes("://") ? raw : `https://${raw}`);
+    if (!/(^|\.)linkedin\.com$/i.test(url.hostname)) return raw.toLowerCase().replace(/\/+$/, "");
+    return `${url.hostname.toLowerCase()}${url.pathname.toLowerCase().replace(/\/+$/, "")}`;
+  } catch {
+    return raw.toLowerCase().replace(/\/+$/, "");
+  }
+}
+
+function companyDomain(value) {
+  const raw = text(value);
+  if (!raw) return "";
+  try {
+    const url = new URL(raw.includes("://") ? raw : `https://${raw}`);
+    return url.hostname.toLowerCase().replace(/^www\./, "");
+  } catch {
+    return "";
+  }
+}
+
+export function findLeadDuplicates(value, leads = []) {
+  const email = normalizeEmail(value?.email);
+  const linkedIn = normalizeLinkedIn(value?.linkedinUrl);
+  const externalId = text(value?.externalId);
+  const externalIdSource = text(value?.externalIdSource).toLowerCase();
+  const domain = companyDomain(value?.companyWebsite);
+  const exact = [];
+  const possible = [];
+  for (const lead of leads || []) {
+    if (value?.id && String(value.id) === String(lead.id)) continue;
+    const sameEmail = email && normalizeEmail(lead.email) === email;
+    const sameLinkedIn = linkedIn && normalizeLinkedIn(lead.linkedinUrl) === linkedIn;
+    const sameExternalId = externalId && text(lead.externalId) === externalId
+      && text(lead.externalIdSource).toLowerCase() === externalIdSource;
+    const matchedBy = [sameEmail && "email", sameLinkedIn && "LinkedIn", sameExternalId && "external ID"].filter(Boolean);
+    if (matchedBy.length) exact.push({ lead, matchedBy });
+    else if (domain && companyDomain(lead.companyWebsite) === domain) possible.push(lead);
+  }
+  return { exact, possible };
+}
+
 function fromLeadRow(row) {
   return {
     id: String(row.id),
+    persistence: "supabase",
     company: row.company || "",
     contact: row.contact || "",
+    email: row.email || "",
+    linkedinUrl: row.linkedin_url || "",
+    externalId: row.external_id || "",
+    externalIdSource: row.external_id_source || "",
+    companyWebsite: row.company_website || "",
     role: row.role || "",
     status: row.status || "",
     nextAction: row.next_action || "",
@@ -74,10 +128,10 @@ function writeLocal(storage, records) {
 async function currentUser(client) {
   try {
     const { data, error } = await client.auth.getUser();
-    if (error) return null;
+    if (error) throw error;
     return data?.user || null;
   } catch {
-    return null;
+    throw new Error("Sign-in status could not be checked. Check your connection and try again.");
   }
 }
 
@@ -136,18 +190,21 @@ export async function loadClientCompanies({ client = supabase } = {}) {
 export async function loadLeadsWithStatus({ client = supabase, storage = browserStorage() } = {}) {
   const user = await currentUser(client);
   if (!user) {
-    return { leads: readLocal(storage), storage: "local", signedIn: false, reason: "signed_out" };
+    return { leads: readLocal(storage).map((lead) => ({ ...lead, persistence: "local" })), storage: "local", signedIn: false, reason: "signed_out" };
   }
   const { data, error } = await client
     .from("leads")
-    .select("id,company,contact,role,status,next_action,next_date,notes,created_at,updated_at")
+    .select("id,company,contact,email,linkedin_url,external_id,external_id_source,company_website,role,status,next_action,next_date,notes,created_at,updated_at")
     .eq("owner_id", user.id)
     .order("updated_at", { ascending: false });
   if (isMissingTable(error)) {
-    return { leads: readLocal(storage), storage: "local", signedIn: true, reason: "table_missing" };
+    return { leads: readLocal(storage).map((lead) => ({ ...lead, persistence: "local" })), storage: "local", signedIn: true, reason: "table_missing" };
   }
   if (error) throw new Error("My leads could not be loaded");
-  return { leads: (data || []).map(fromLeadRow), storage: "supabase", signedIn: true, reason: "" };
+  const remoteLeads = (data || []).map(fromLeadRow);
+  const remoteIds = new Set(remoteLeads.map((lead) => lead.id));
+  const localLeads = readLocal(storage).filter((lead) => !remoteIds.has(String(lead.id))).map((lead) => ({ ...lead, persistence: "local" }));
+  return { leads: [...remoteLeads, ...localLeads], storage: "supabase", signedIn: true, reason: "", localCount: localLeads.length };
 }
 
 export async function listLeads(options = {}) {
@@ -159,8 +216,9 @@ export async function saveLead(value, { client = supabase, storage = browserStor
   const user = await currentUser(client);
   const now = new Date().toISOString();
   const id = value.id ? String(value.id) : globalThis.crypto?.randomUUID?.() || `lead-${Date.now()}`;
-  const localRecord = { id, ...lead, createdAt: value.createdAt || now, updatedAt: now };
+  const localRecord = { id, ...lead, persistence: "local", createdAt: value.createdAt || now, updatedAt: now };
   const saveLocally = () => {
+    if (!storage) throw new Error("This browser cannot save leads on this device. Sign in and try cloud saving again.");
     const records = readLocal(storage);
     const index = records.findIndex((item) => item.id === id);
     if (index >= 0) records[index] = localRecord;
@@ -175,6 +233,11 @@ export async function saveLead(value, { client = supabase, storage = browserStor
     owner_id: user.id,
     company: lead.company,
     contact: lead.contact,
+    email: lead.email,
+    linkedin_url: lead.linkedinUrl,
+    external_id: lead.externalId,
+    external_id_source: lead.externalIdSource,
+    company_website: lead.companyWebsite,
     role: lead.role,
     status: lead.status,
     next_action: lead.nextAction,
@@ -185,11 +248,11 @@ export async function saveLead(value, { client = supabase, storage = browserStor
   const { data, error } = await client
     .from("leads")
     .upsert(row, { onConflict: "id" })
-    .select("id,company,contact,role,status,next_action,next_date,notes,created_at,updated_at")
+    .select("id,company,contact,email,linkedin_url,external_id,external_id_source,company_website,role,status,next_action,next_date,notes,created_at,updated_at")
     .single();
   if (isMissingTable(error)) return saveLocally();
   if (error) throw new Error("Lead could not be saved");
-  storage?.removeItem(STORAGE_KEY);
+  writeLocal(storage, readLocal(storage).filter((item) => String(item.id) !== id));
   return fromLeadRow(data || row);
 }
 
