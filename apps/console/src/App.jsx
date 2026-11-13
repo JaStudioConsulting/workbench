@@ -4,6 +4,7 @@ import { SidebarProvider, Sidebar, SidebarHeader, SidebarContent, SidebarGroup, 
 import { Skeleton } from "./components/ui/skeleton.tsx";
 import ExistingAccountAccess from "./ExistingAccountAccess.jsx";
 import { getWorkbenchSession, signOutWorkbench, subscribeToWorkbenchSession } from "./supabase-auth.js";
+import { getVerifiedLocalWorkbenchSession, openLocalWorkbenchSession } from "./local-session.js";
 import { startCandidateCallSession } from "./features/meetings/candidateCallSession.js";
 import { getMeetingStatus } from "./features/meetings/meetingGatewayClient.js";
 import HeaderSearch from "./features/search/HeaderSearch.jsx";
@@ -72,10 +73,13 @@ function NavGroup({ label, items, page, onSelect, recordingLocked = false }) {
 }
 
 export default function App() {
+  const localSessionMode = import.meta.env?.VITE_TAILSCALE_LOCAL_SESSION_ENABLED === "1";
+  const localSessionOwnerId = String(import.meta.env?.VITE_TAILSCALE_LOCAL_SESSION_OWNER_ID || "");
   const [authLoading, setAuthLoading] = useState(true);
   const [hasSession, setHasSession] = useState(false);
   const [sessionUserId, setSessionUserId] = useState("");
   const [authError, setAuthError] = useState("");
+  const [localSessionRetry, setLocalSessionRetry] = useState(0);
   const [signingOut, setSigningOut] = useState(false);
   const [page, setPage] = useState("Home");
   const [context, setContext] = useState("Independent recruiting");
@@ -92,35 +96,53 @@ export default function App() {
 
   useEffect(() => {
     let active = true;
+    let initialized = false;
     const unsubscribe = subscribeToWorkbenchSession((session) => {
       if (!active) return;
       const nextUserId = String(session?.user?.id || "");
+      const acceptedSession = Boolean(session) && (!localSessionMode
+        || (initialized && localSessionOwnerId && nextUserId === localSessionOwnerId && sessionUserIdRef.current === localSessionOwnerId));
       if (sessionUserIdRef.current && sessionUserIdRef.current !== nextUserId) {
         setPage("Home"); setContext("Independent recruiting"); setRecruiting(null);
         setFocusCandidateId(""); setFocusLeadId(""); setFocusClient(null); setFocusNote(null); setMeetingLaunch(null);
       }
-      sessionUserIdRef.current = nextUserId;
-      setSessionUserId(nextUserId);
-      setHasSession(Boolean(session));
-      setAuthLoading(false);
+      sessionUserIdRef.current = acceptedSession ? nextUserId : "";
+      setSessionUserId(acceptedSession ? nextUserId : "");
+      setHasSession(acceptedSession);
       setAuthError("");
+      if ((session && acceptedSession) || initialized) setAuthLoading(false);
     });
     getWorkbenchSession()
-      .then((session) => {
+      .then(async (savedSession) => {
+        if (!active) return;
+        if (localSessionMode && !localSessionOwnerId) throw new Error("Local session owner is not configured");
+        const verifiedSavedSession = localSessionMode && savedSession
+          ? await getVerifiedLocalWorkbenchSession({ expectedUserId: localSessionOwnerId })
+          : null;
+        const session = localSessionMode
+          ? (verifiedSavedSession
+            ? verifiedSavedSession
+            : await openLocalWorkbenchSession({ expectedUserId: localSessionOwnerId }))
+          : savedSession;
         if (!active) return;
         const nextUserId = String(session?.user?.id || "");
+        if (localSessionMode && nextUserId !== localSessionOwnerId) throw new Error("Unexpected local session owner");
         sessionUserIdRef.current = nextUserId;
         setSessionUserId(nextUserId);
         setHasSession(Boolean(session));
+        initialized = true;
         setAuthLoading(false);
       })
       .catch((error) => {
         if (!active) return;
-        setAuthError(error.message || "Unable to check the Workbench session");
+        setAuthError(localSessionMode
+          ? "Workbench could not open this private session. Check your connection and try again."
+          : (error.message || "Unable to check the Workbench session"));
+        initialized = true;
         setAuthLoading(false);
       });
     return () => { active = false; unsubscribe(); };
-  }, []);
+  }, [localSessionMode, localSessionRetry]);
 
   useEffect(() => {
     document.title = `${page} — JA Workbench`;
@@ -322,9 +344,23 @@ export default function App() {
   };
 
   if (authLoading) {
-    return <main className="flex min-h-screen items-center justify-center" role="status">Checking Workbench session…</main>;
+    return <main className="flex min-h-screen items-center justify-center" role="status">{localSessionMode ? "Opening your workspace…" : "Checking Workbench session…"}</main>;
   }
-  if (!hasSession) return <ExistingAccountAccess sessionError={authError} />;
+  if (!hasSession) {
+    if (localSessionMode) {
+      return (
+        <main className="flex min-h-screen items-center justify-center bg-background p-4">
+          <section className="w-full max-w-md rounded-xl border bg-card p-6 shadow-sm" aria-labelledby="local-session-title">
+            <p className="text-sm font-semibold text-muted-foreground">JA Workbench</p>
+            <h1 id="local-session-title" className="mt-2 text-2xl font-semibold">Opening your workspace…</h1>
+            <p className="mt-3 text-sm text-destructive" role="alert">{authError || "Your private session could not be opened."}</p>
+            <button type="button" className="mt-5 min-h-11 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground" onClick={() => { setAuthError(""); setAuthLoading(true); setLocalSessionRetry((value) => value + 1); }}>Try again</button>
+          </section>
+        </main>
+      );
+    }
+    return <ExistingAccountAccess sessionError={authError} />;
+  }
 
   return (
     <SidebarProvider>
@@ -343,9 +379,9 @@ export default function App() {
           <HeaderSearch onSelectResult={navigateFromSearch} onNavigatePage={selectPage} />
           <Suspense fallback={null}><ContextPicker value={context} onChange={setContext} /></Suspense>
           <button type="button" onClick={() => window.print()} className="min-h-10 rounded-md border px-3 text-sm font-medium" aria-label={`Print current view: ${page}`}>Print current view</button>
-          <button type="button" onClick={handleSignOut} disabled={signingOut || recordingLocked} title={recordingLocked ? "Stop the active recording before signing out" : undefined} className="min-h-10 rounded-md border px-3 text-sm font-medium disabled:opacity-60">
+          {!localSessionMode ? <button type="button" onClick={handleSignOut} disabled={signingOut || recordingLocked} title={recordingLocked ? "Stop the active recording before signing out" : undefined} className="min-h-10 rounded-md border px-3 text-sm font-medium disabled:opacity-60">
             {signingOut ? "Signing out…" : "Sign out"}
-          </button>
+          </button> : null}
         </header>
         {authError ? <p className="px-4 pt-2 text-sm text-destructive" role="alert">{authError}</p> : null}
         <div className="workbench-print-label" aria-hidden="true"><strong>JA Workbench</strong><span>Current view: {page}</span></div>

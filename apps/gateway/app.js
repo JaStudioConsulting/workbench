@@ -16,6 +16,7 @@ import { registerSearchRoutes } from "./src/search-routes.js";
 import { registerTrackerImportRoutes } from "./src/tracker-import-routes.js";
 import { createSupabaseRecruiterAccess } from "./src/supabase-recruiter-auth.js";
 import { registerBrandedResumeEditRoutes } from "./src/branded-resume-edit-routes.js";
+import { registerLocalSessionRoute } from "./src/local-session.js";
 
 function respondError(res, code, message, status = 503) {
   return res.status(status).json(errorEnvelope(code, message));
@@ -73,6 +74,7 @@ export async function createApp({
   searchStore,
   searchFetch,
   trackerImportDependencies = {},
+  localSessionFetch = globalThis.fetch,
   transcriptionAdapter = createLocalTranscriptionAdapter(),
   captureManager = createNativeCaptureManager(),
   mcpHandlerFactory = createMcpRequestHandler,
@@ -96,6 +98,7 @@ export async function createApp({
   });
 
   // Better Auth must receive raw requests. JSON parsing is intentionally mounted after it.
+  registerLocalSessionRoute(app, { env, fetchImpl: localSessionFetch });
   if (configuredAuth.enabled) app.all("/api/auth/*", configuredAuth.handler);
   else app.all("/api/auth/*", (_req, res) => respondError(res, "AUTH_UNAVAILABLE", configuredAuth.reason));
 

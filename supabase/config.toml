@@ -1,0 +1,4 @@
+project_id = "abnfffkmxqixrwzackjf"
+
+[functions.workbench-local-session]
+verify_jwt = false
