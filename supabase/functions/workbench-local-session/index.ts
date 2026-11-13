@@ -3,7 +3,7 @@ import { handleLocalSessionRequest } from "./issuer.js";
 
 const OWNER_ID = "5f00e2f9-fef4-4213-a54f-fc79dd8d7752";
 const TAILSCALE_LOGIN_SHA256 = "56b7ebe5cdb30d74f97a4769911c0bca6861daf22f1699f58d0cdcddc59391fb";
-const MACHINE_TOKEN_SHA256 = "ac18dd728a4c6e1864413a70fb4e053a064d0685d53a57954f2ad3910afd22e4";
+const MACHINE_TOKEN_SHA256 = "019f245a16a0760e79503e0ae9021d384c6c4aaefa4c16040d882c781a8fde3e";
 
 function parseKeyMap(value: string | undefined): Record<string, string> {
   try {

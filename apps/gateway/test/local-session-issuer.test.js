@@ -148,6 +148,8 @@ test("Edge Function handler accepts only empty POST with the machine token and r
   const response = await handleLocalSessionRequest(new Request("https://function.invalid/workbench-local-session", {
     method: "POST",
     headers: { "x-workbench-session-token": TOKEN },
+    body: new ReadableStream({ start(controller) { controller.close(); } }),
+    duplex: "half",
   }), args);
   assert.equal(response.status, 200);
   assert.equal(response.headers.get("cache-control"), "no-store, private");
@@ -168,6 +170,12 @@ test("Edge Function handler keeps issuer errors private and rejects missing toke
   const { args } = dependencies({ userResult: { data: null, error: new Error("provider secret detail") } });
   const missing = await handleLocalSessionRequest(new Request("https://function.invalid/workbench-local-session", { method: "POST" }), args);
   assert.equal(missing.status, 403);
+  const untrustedBody = new ReadableStream({ start() {} });
+  const invalidToken = await handleLocalSessionRequest(new Request("https://function.invalid/workbench-local-session", {
+    method: "POST", headers: { "x-workbench-session-token": "A".repeat(43) }, body: untrustedBody,
+    duplex: "half",
+  }), { ...args, expectedTokenHash: "0".repeat(64) });
+  assert.equal(invalidToken.status, 403);
   const method = await handleLocalSessionRequest(new Request("https://function.invalid/workbench-local-session", { method: "GET" }), args);
   assert.equal(method.status, 404);
   const failed = await handleLocalSessionRequest(new Request("https://function.invalid/workbench-local-session", {

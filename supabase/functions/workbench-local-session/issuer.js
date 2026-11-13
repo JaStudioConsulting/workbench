@@ -32,15 +32,40 @@ function json(body, status) {
   });
 }
 
+async function hasEmptyBody(request, timeoutMs = 1_000) {
+  if (!request.body) return true;
+  let reader;
+  try { reader = request.body.getReader(); } catch { return false; }
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    reader.cancel().catch(() => {});
+  }, timeoutMs);
+  try {
+    while (true) {
+      const chunk = await reader.read();
+      if (timedOut || (!chunk.done && chunk.value?.byteLength)) return false;
+      if (chunk.done) return true;
+    }
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export async function handleLocalSessionRequest(request, config) {
   if (request.method !== "POST") return json({ error: "not found" }, 404);
-  if (request.body !== null) return json({ error: "invalid request" }, 400);
   const token = request.headers.get("x-workbench-session-token") || "";
   if (!/^[A-Za-z0-9_-]{43}$/.test(token)
     || !/^[a-f0-9]{64}$/i.test(config.expectedTokenHash || "")
     || !config.ownerId || !config.supabaseUrl || !config.serviceRoleKey || !config.publishableKey) {
     return json({ error: "unauthorized" }, 403);
   }
+  if (!equalHex(await sha256Hex(token), config.expectedTokenHash.toLowerCase())) {
+    return json({ error: "unauthorized" }, 403);
+  }
+  if (!await hasEmptyBody(request)) return json({ error: "invalid request" }, 400);
   try {
     const session = await issueExistingUserSession({ ...config, token });
     return json({ session }, 200);
