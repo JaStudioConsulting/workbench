@@ -5,6 +5,7 @@ import {
   requestExistingAccountLink,
   signOutWorkbench,
   subscribeToWorkbenchSession,
+  SIGN_IN_LINK_ERROR_MESSAGE,
   SIGN_IN_LINK_MESSAGE,
 } from "../src/supabase-auth.js";
 
@@ -20,14 +21,35 @@ test("existing-account email login disables signup and uses one neutral response
   }]);
 });
 
-test("unknown-account and provider errors do not reveal account existence", async () => {
-  for (const signInWithOtp of [
-    async () => ({ error: { message: "User not found" } }),
-    async () => { throw new Error("SMTP failure"); },
-  ]) {
-    const result = await requestExistingAccountLink("ja@example.invalid", { client: { auth: { signInWithOtp } }, redirectTo: "https://workbench.example" });
-    assert.deepEqual(result, { message: SIGN_IN_LINK_MESSAGE });
+test("unknown account and signup-disabled errors keep the neutral response", async () => {
+  for (const code of ["user_not_found", "signup_disabled"]) {
+    for (const signInWithOtp of [
+      async () => ({ error: { code, message: "private detail" } }),
+      async () => { throw Object.assign(new Error("private detail"), { code }); },
+    ]) {
+      const result = await requestExistingAccountLink("ja@example.invalid", { client: { auth: { signInWithOtp } }, redirectTo: "https://workbench.example" });
+      assert.deepEqual(result, { message: SIGN_IN_LINK_MESSAGE });
+    }
   }
+});
+
+test("returned provider and rate-limit errors become a sanitized recovery error", async () => {
+  for (const error of [
+    { code: "unexpected_failure", message: "SMTP password leaked" },
+    { code: "over_email_send_rate_limit", message: "rate limit internal detail" },
+  ]) {
+    await assert.rejects(
+      requestExistingAccountLink("ja@example.invalid", { client: { auth: { signInWithOtp: async () => ({ error }) } } }),
+      (caught) => caught.message === SIGN_IN_LINK_ERROR_MESSAGE && !caught.message.includes(error.message),
+    );
+  }
+});
+
+test("thrown network errors become a sanitized recovery error", async () => {
+  await assert.rejects(
+    requestExistingAccountLink("ja@example.invalid", { client: { auth: { signInWithOtp: async () => { throw new Error("network failed at private host"); } } } }),
+    (error) => error.message === SIGN_IN_LINK_ERROR_MESSAGE && !error.message.includes("private host"),
+  );
 });
 
 test("invalid email is rejected before contacting Supabase", async () => {

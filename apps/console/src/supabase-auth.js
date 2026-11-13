@@ -1,6 +1,9 @@
 import { supabase } from "./supabase-client.js";
 
 export const SIGN_IN_LINK_MESSAGE = "If this email has an existing Workbench account, open the sign-in link sent to your inbox.";
+export const SIGN_IN_LINK_ERROR_MESSAGE = "Unable to send a sign-in link. Check your connection and try again. If the problem continues, try again later.";
+
+const NON_ENUMERATING_AUTH_ERROR_CODES = new Set(["user_not_found", "signup_disabled"]);
 
 function normalizedEmail(value) {
   return typeof value === "string" ? value.trim().toLowerCase() : "";
@@ -16,15 +19,21 @@ export async function requestExistingAccountLink(email, {
   }
 
   try {
-    await client.auth.signInWithOtp({
+    const { error } = await client.auth.signInWithOtp({
       email: address,
       options: {
         shouldCreateUser: false,
         ...(redirectTo ? { emailRedirectTo: redirectTo } : {}),
       },
     });
-  } catch {
-    // Keep account-existence and provider errors indistinguishable in the UI.
+    if (error && !NON_ENUMERATING_AUTH_ERROR_CODES.has(error.code)) {
+      throw new Error(SIGN_IN_LINK_ERROR_MESSAGE);
+    }
+  } catch (error) {
+    if (error?.message === SIGN_IN_LINK_ERROR_MESSAGE) throw error;
+    if (NON_ENUMERATING_AUTH_ERROR_CODES.has(error?.code)) return { message: SIGN_IN_LINK_MESSAGE };
+    // Do not expose provider, server, network, or account details in the UI.
+    throw new Error(SIGN_IN_LINK_ERROR_MESSAGE);
   }
   return { message: SIGN_IN_LINK_MESSAGE };
 }

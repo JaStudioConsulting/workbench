@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { requestExistingAccountLink, SIGN_IN_LINK_MESSAGE } from "./supabase-auth.js";
+import { requestExistingAccountLink, SIGN_IN_LINK_ERROR_MESSAGE } from "./supabase-auth.js";
 
 export default function ExistingAccountAccess({ sessionError = "" }) {
   const [email, setEmail] = useState("");
@@ -16,7 +16,7 @@ export default function ExistingAccountAccess({ sessionError = "" }) {
       const result = await requestExistingAccountLink(email);
       setMessage(result.message);
     } catch (error) {
-      setInputError(error instanceof TypeError ? error.message : "Unable to request a sign-in link. Try again.");
+      setInputError(error instanceof TypeError ? error.message : SIGN_IN_LINK_ERROR_MESSAGE);
     } finally {
       setBusy(false);
     }
@@ -56,7 +56,7 @@ export default function ExistingAccountAccess({ sessionError = "" }) {
             <button type="submit" disabled={busy} className="min-h-11 w-full rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground disabled:opacity-60">
               {busy ? "Requesting link…" : "Continue with email"}
             </button>
-            <p className="text-xs text-muted-foreground">Only existing Workbench accounts can sign in. If you do not receive a link, check the address or contact your Workbench administrator.</p>
+            <p className="text-xs text-muted-foreground">Only existing Workbench accounts can sign in. If a link does not arrive, check the email address and spam folder, then try again.</p>
           </form>
         )}
       </section>
