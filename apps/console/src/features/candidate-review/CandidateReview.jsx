@@ -20,8 +20,13 @@ import {
 
 export default function CandidateReview({ selectedJob, onSelectJob, onNavigateJobsMap, onStartCandidateCall, initialView = "swipe", focusCandidateId = "" }) {
   const [jobs, setJobs] = useState([]);
-  const [dataLoading, setDataLoading] = useState(true);
-  const [dataError, setDataError] = useState("");
+  const [jobsLoading, setJobsLoading] = useState(true);
+  const [candidatesLoading, setCandidatesLoading] = useState(false);
+  const dataLoading = jobsLoading || candidatesLoading;
+  const [jobsError, setJobsError] = useState("");
+  const [candidatesError, setCandidatesError] = useState("");
+  const dataError = jobsError || candidatesError;
+  const [retrying, setRetrying] = useState(false);
 
   // Match selected jobs ONLY by immutable job ID.
   // Zero title matching. Zero jobs[0] fallback.
@@ -29,6 +34,8 @@ export default function CandidateReview({ selectedJob, onSelectJob, onNavigateJo
   const [activeView, setActiveView] = useState(initialView); // "swipe" | "people"
   const [currentIndex, setCurrentIndex] = useState(0);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [reloadKey, setReloadKey] = useState(0);
+  const [jobsRevision, setJobsRevision] = useState(0);
   const [canadaPrefs, setCanadaPrefs] = useState(() => loadCanadaPrefs());
   const [rejectStatus, setRejectStatus] = useState(null); // { ok, text }
 
@@ -49,6 +56,7 @@ export default function CandidateReview({ selectedJob, onSelectJob, onNavigateJo
 
   useEffect(() => {
     let active = true;
+    setJobsLoading(true);
     loadLiveReviewJobs()
       .then((loadedJobs) => {
         if (!active) return;
@@ -60,18 +68,25 @@ export default function CandidateReview({ selectedJob, onSelectJob, onNavigateJo
         const nextJob = matched || loadedJobs[0] || null;
         setActiveJobId(nextJob ? String(nextJob.id) : "");
         if (nextJob && onSelectJob) onSelectJob(nextJob);
-        setDataError("");
+        setJobsError("");
+        if (!nextJob) {
+          setCandidatesError("");
+          setCandidatesLoading(false);
+          setRetrying(false);
+        }
+        setJobsRevision((revision) => revision + 1);
         setRefreshKey((key) => key + 1);
       })
       .catch((error) => {
         if (!active) return;
-        setDataError(error.message || "Could not load Tracker jobs");
+        setJobsError(error.message || "Could not load Tracker jobs");
+        setRetrying(false);
       })
       .finally(() => {
-        if (active) setDataLoading(false);
+        if (active) setJobsLoading(false);
       });
     return () => { active = false; };
-  }, []);
+  }, [reloadKey]);
 
   // Sync if selectedJob prop changes from outside (e.g. from Jobs Map)
   useEffect(() => {
@@ -89,24 +104,32 @@ export default function CandidateReview({ selectedJob, onSelectJob, onNavigateJo
   }, [selectedJob, jobs]);
 
   useEffect(() => {
-    if (!activeJobId) return;
+    if (!activeJobId) {
+      setCandidatesLoading(false);
+      setCandidatesError("");
+      setRetrying(false);
+      return undefined;
+    }
     let active = true;
-    setDataLoading(true);
+    setCandidatesLoading(true);
     loadLiveCandidatesForJob(activeJobId)
       .then(() => {
         if (!active) return;
-        setDataError("");
+        setCandidatesError("");
         setRefreshKey((key) => key + 1);
       })
       .catch((error) => {
         if (!active) return;
-        setDataError(error.message || "Could not load candidates for this job");
+        setCandidatesError(error.message || "Could not load candidates for this job");
       })
       .finally(() => {
-        if (active) setDataLoading(false);
+        if (active) {
+          setCandidatesLoading(false);
+          setRetrying(false);
+        }
       });
     return () => { active = false; };
-  }, [activeJobId]);
+  }, [activeJobId, jobsRevision]);
 
   // Current job resolved strictly by immutable ID (no fallback to jobs[0])
   const currentJob = useMemo(() => {
@@ -236,9 +259,10 @@ export default function CandidateReview({ selectedJob, onSelectJob, onNavigateJo
       data-testid="candidate-review-feature"
     >
       {dataError ? (
-        <div className="flex items-center gap-2 rounded-lg border border-rose-300 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-800" role="alert">
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-rose-300 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-800" role="alert">
           <AlertCircle size={14} />
           {dataError}
+          <Button type="button" variant="outline" size="sm" className="min-h-9" disabled={dataLoading || retrying} onClick={() => { setRetrying(true); setJobsLoading(true); setReloadKey((key) => key + 1); }}>{dataLoading || retrying ? "Loading…" : "Try again"}</Button>
         </div>
       ) : null}
       {rejectStatus ? (

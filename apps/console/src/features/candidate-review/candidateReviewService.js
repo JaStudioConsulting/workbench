@@ -334,7 +334,7 @@ async function fetchPresentationRows() {
       .select("*")
       .order("id", { ascending: true })
       .range(start, start + PRESENTATION_PAGE_SIZE - 1);
-    if (error) throw new Error("Supabase could not load presentation history");
+    if (error) throw new Error("Could not load presentation history.");
     const page = data || [];
     allRows.push(...page);
     if (page.length < PRESENTATION_PAGE_SIZE) return allRows;

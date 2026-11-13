@@ -375,7 +375,7 @@ export default function App() {
       <SidebarInset className="min-w-0">
         <header data-print-hide className="flex min-h-16 flex-wrap items-center gap-3 border-b px-4 py-3 pt-[max(0.75rem,env(safe-area-inset-top))]">
           <SidebarTrigger />
-          <div className="min-w-0 flex-1"><h1 ref={pageHeadingRef} tabIndex={-1} className="truncate text-xl font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">{page}</h1></div>
+          <div className="min-w-0 max-w-full sm:shrink-0"><h1 ref={pageHeadingRef} tabIndex={-1} className="break-words text-xl font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring sm:whitespace-nowrap">{page}</h1></div>
           <HeaderSearch onSelectResult={navigateFromSearch} onNavigatePage={selectPage} />
           <Suspense fallback={null}><ContextPicker value={context} onChange={setContext} /></Suspense>
           <button type="button" onClick={() => window.print()} className="min-h-10 rounded-md border px-3 text-sm font-medium" aria-label={`Print current view: ${page}`}>Print current view</button>
