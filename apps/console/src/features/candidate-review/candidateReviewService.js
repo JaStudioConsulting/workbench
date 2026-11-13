@@ -367,8 +367,8 @@ export async function loadLiveReviewJobs() {
     supabaseClient.from("candidate_review_feed").select("job_id").limit(1000),
     fetchPresentationRows(),
   ]);
-  if (error) throw new Error("Supabase could not load Tracker jobs");
-  if (linkedError) throw new Error("Supabase could not load candidate job links");
+  if (error) throw new Error("Could not load active jobs.");
+  if (linkedError) throw new Error("Could not load job assignments.");
 
   const linkedJobIds = new Set((linkedRows || []).map((row) => String(row.job_id)));
 
@@ -406,8 +406,8 @@ export async function loadLiveCandidatesForJob(jobId) {
       .order("created_at", { ascending: false }),
     fetchPresentationRows(),
   ]);
-  if (error) throw new Error("Supabase could not load candidates for this job");
-  if (actionsError) throw new Error("Supabase could not load saved review actions");
+  if (error) throw new Error("Could not load candidates for this job.");
+  if (actionsError) throw new Error("Could not load review activity for this job.");
 
   const actionMap = new Map();
   for (const item of actions || []) {

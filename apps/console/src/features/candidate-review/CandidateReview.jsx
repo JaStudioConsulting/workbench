@@ -79,7 +79,7 @@ export default function CandidateReview({ selectedJob, onSelectJob, onNavigateJo
       })
       .catch((error) => {
         if (!active) return;
-        setJobsError(error.message || "Could not load Tracker jobs");
+        setJobsError(error.message || "Could not load active jobs.");
         setRetrying(false);
       })
       .finally(() => {
@@ -181,7 +181,7 @@ export default function CandidateReview({ selectedJob, onSelectJob, onNavigateJo
       ? "Live data unavailable"
       : jobs.length === 0
         ? "No live review jobs available"
-        : "Connected to Supabase";
+        : "Workspace connected";
 
   const handleJobChange = (newJobId) => {
     setActiveJobId(newJobId);
