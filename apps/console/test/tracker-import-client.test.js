@@ -104,8 +104,23 @@ test("history read returns items and large previews stop before sending", async 
     supabaseKey: "sb_publishable_test",
     auth: { async getSession() { return { data: { session: { access_token: "caller-token" } }, error: null }; } },
   };
-  const items = await listTrackerImports({ client, fetchImpl: async () => Response.json({ items: [{ id: "i1", status: "confirmed" }] }) });
+  const items = await listTrackerImports({ client, fetchImpl: async () => Response.json({ items: [{
+    id: "i1",
+    source_type: "candidates",
+    source_key: "upload:11111111-1111-4111-8111-111111111111",
+    source_label: "synthetic.csv",
+    status: "confirmed",
+    created_at: "2026-11-13T17:00:00Z",
+    confirmed_at: "2026-11-13T17:01:00Z",
+  }] }) });
   assert.equal(items[0].id, "i1");
+  assert.deepEqual({ type: items[0].type, sourceKey: items[0].sourceKey, sourceLabel: items[0].sourceLabel, createdAt: items[0].createdAt, confirmedAt: items[0].confirmedAt }, {
+    type: "candidates",
+    sourceKey: "upload:11111111-1111-4111-8111-111111111111",
+    sourceLabel: "synthetic.csv",
+    createdAt: "2026-11-13T17:00:00Z",
+    confirmedAt: "2026-11-13T17:01:00Z",
+  });
   await assert.rejects(
     previewTrackerImport({ rows: [["x".repeat(10 * 1024 * 1024 + 1)]] }, { client, fetchImpl: async () => { throw new Error("must not send"); } }),
     (error) => error instanceof TrackerImportError && error.code === "LIMIT_EXCEEDED",

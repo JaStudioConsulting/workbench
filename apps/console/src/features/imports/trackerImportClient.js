@@ -337,5 +337,12 @@ export async function confirmTrackerImport(importId, rows, options = {}) {
 export async function listTrackerImports(options = {}) {
   const payload = await importRequest("/api/tracker-imports", options);
   if (!Array.isArray(payload.items)) throw new TrackerImportError("Import history couldn't be read. Try refreshing it.");
-  return payload.items;
+  return payload.items.map((item) => ({
+    ...item,
+    type: item.type ?? item.source_type,
+    sourceKey: item.sourceKey ?? item.source_key,
+    sourceLabel: item.sourceLabel ?? item.source_label,
+    createdAt: item.createdAt ?? item.created_at,
+    confirmedAt: item.confirmedAt ?? item.confirmed_at,
+  }));
 }
