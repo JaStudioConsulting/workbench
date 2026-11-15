@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Check, Clipboard, ExternalLink, Loader2, Mail, Sparkles } from "lucide-react";
+import { Check, Clipboard, ExternalLink, Loader2, Mail } from "lucide-react";
 import { Button } from "../../components/ui/button.tsx";
 import { Input } from "../../components/ui/input.tsx";
 import { Textarea } from "../../components/ui/textarea.tsx";
@@ -16,10 +16,9 @@ import {
   canSaveGmailDraft,
   pickRoleOptions,
   renderOutreach,
-  stripDashes,
 } from "./outreachTemplates.js";
 import { copyText } from "./clipboard.js";
-import { getMailStatus, getProfile, logOutreach, personalizeOutreach, province, saveGmailDraft } from "./externals.js";
+import { getMailStatus, getProfile, logOutreach, province, saveGmailDraft } from "./externals.js";
 
 // Outreach is always a draft. Copy, open in Mail, or save a Gmail draft. Ja sends it himself.
 export default function OutreachComposer({ open, onOpenChange, candidate, currentJob, jobs, onDrafted }) {
@@ -104,28 +103,6 @@ export default function OutreachComposer({ open, onOpenChange, candidate, curren
     await record("mailto");
   };
 
-  const personalize = async () => {
-    setError("");
-    setNotice("");
-    setBusy("ai");
-    try {
-      const result = await personalizeOutreach({ job: role, candidate, template, body });
-      if (result?.available === false) {
-        setNotice("AI not set up");
-      } else if (!result?.ok || !result.result?.body) {
-        setError(result?.error || "AI could not personalize this draft. Your text is unchanged.");
-      } else {
-        setBody(stripDashes(result.result.body));
-        if (result.result.subject) setSubject(stripDashes(result.result.subject));
-        setNotice("Personalized with AI. Read it before you use it.");
-      }
-    } catch (caught) {
-      setError(caught?.message || "AI could not personalize this draft.");
-    } finally {
-      setBusy("");
-    }
-  };
-
   const saveDraft = async () => {
     setError("");
     setNotice("");
@@ -200,9 +177,6 @@ export default function OutreachComposer({ open, onOpenChange, candidate, curren
         {error ? <p role="alert" className="text-xs font-semibold text-rose-700">{error}</p> : null}
 
         <div className="flex flex-wrap justify-end gap-2">
-          <Button type="button" variant="outline" onClick={personalize} disabled={busy === "ai" || !body.trim()}>
-            {busy === "ai" ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />} Personalize with AI
-          </Button>
           <Button type="button" variant="outline" onClick={copy} disabled={!body.trim()}>
             <Clipboard size={14} /> Copy
           </Button>

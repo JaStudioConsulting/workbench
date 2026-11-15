@@ -86,7 +86,9 @@ test("meeting draft never invents a transcript", () => {
   });
   assert.equal(draft.transcript, "");
   assert.equal(draft.notes, "");
-  assert.equal(draft.transcriptStatus, "awaiting_transcription");
+  assert.equal(draft.transcriptStatus, "awaiting_input");
+  assert.equal(draft.transcriptionStatus, "disabled");
+  assert.equal(draft.captureStatus, "captured");
   assert.equal(draft.candidate.label, "Candidate Example");
   assert.equal(draft.job.label, "Robotics role");
   assert.deepEqual(draft.segments, []);
@@ -329,8 +331,49 @@ test("persisted recording chunks survive a recorder interruption and can be reco
   assert.equal(recovered.meta.candidateId, "person-9");
   assert.equal(recovered.blob.type, "audio/wav");
   assert.equal(recovered.blob.size, 52);
+  const recoveredAgain = await recoverBrowserRecording(meta.id, { ownerId: "owner-1", indexedDBImpl });
+  assert.deepEqual(new Uint8Array(await recoveredAgain.blob.arrayBuffer()), new Uint8Array(await recovered.blob.arrayBuffer()));
+  assert.equal((await listInterruptedRecordings({ ownerId: "owner-1", indexedDBImpl })).length, 1);
   await discardRecordingArchive(meta.id, { ownerId: "owner-1", indexedDBImpl });
   assert.deepEqual(await listInterruptedRecordings({ ownerId: "owner-1", indexedDBImpl }), []);
+});
+
+test("stopping a recording retains complete audio for repeated recovery without transcription", async () => {
+  const indexedDBImpl = new FakeIndexedDB();
+  let stoppedTracks = 0;
+  let recorderStops = 0;
+  const track = { stop() { stoppedTracks += 1; } };
+  const microphone = { getAudioTracks: () => [track], getTracks: () => [track] };
+  class Recorder extends EventTarget {
+    state = "inactive";
+    start() { this.state = "recording"; }
+    stop() {
+      recorderStops += 1;
+      const chunk = new Event("dataavailable");
+      chunk.data = new Blob(["saved microphone audio"], { type: "audio/mp4" });
+      this.dispatchEvent(chunk);
+      this.state = "inactive";
+      this.dispatchEvent(new Event("stop"));
+    }
+  }
+  const recording = await startBrowserRecording({
+    ownerId: "owner-1", secureContext: true, sessionId: "saved-audio-only",
+    mediaDevices: { getUserMedia: async () => microphone },
+    MediaRecorderImpl: Object.assign(Recorder, { isTypeSupported: (type) => type === "audio/mp4" }),
+    MediaStreamImpl: class {}, AudioContextImpl: null, indexedDBImpl,
+  });
+  const audio = await recording.stop();
+  assert.equal(await audio.text(), "saved microphone audio");
+  assert.equal(await (await recording.stop()).text(), "saved microphone audio");
+  assert.ok(stoppedTracks > 0);
+  assert.equal(recorderStops, 1);
+  assert.equal(recording.captureStatus, "captured");
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const recovered = await recoverBrowserRecording(recording.id, { ownerId: "owner-1", indexedDBImpl });
+    assert.equal(await recovered.blob.text(), "saved microphone audio");
+    assert.equal(recovered.meta.status, "complete");
+  }
+  assert.equal((await listInterruptedRecordings({ ownerId: "owner-1", indexedDBImpl })).length, 1);
 });
 
 test("recording recovery and deletion remain isolated between signed-in owners", async () => {
@@ -503,11 +546,11 @@ test("Meetings workspace uses browser microphone recording and the existing Cale
   assert.match(index, /Recruiting Workbench needs JavaScript/);
 });
 
-test("recruiter templates use transcript sentences and mark absent topics", () => {
+test("recruiter templates preserve source sentences and mark unmatched topics without claiming they were not discussed", () => {
   assert.deepEqual(MEETING_TEMPLATES.map((item) => item.label), ["Candidate screen", "Client intake", "Reference check"]);
   const result = renderMeetingTemplate("candidate_screen", "I am looking because the plant closed. My salary is 90000. I can interview Monday.");
   assert.match(result.sections.find((section) => section.heading === "Motivation").content, /plant closed/);
-  assert.equal(result.sections.find((section) => section.heading === "Experience").content, "Not discussed");
+  assert.equal(result.sections.find((section) => section.heading === "Experience").content, "Not recorded in supplied text");
   assert.match(result.markdown, /## Compensation and vacation/);
 });
 
@@ -604,7 +647,7 @@ test("resume PDF export validates mime type, byte size, and PDF signature", () =
   assert.throws(() => downloadWorkflowResumePdf({ mimeType: "application/pdf", base64: btoa("not pdf"), sizeBytes: 7 }, { documentRef, URLImpl }), /could not be verified/);
 });
 
-test("meetings workspace compiles and uses live selectors, templates, exports, and durable store fallback", async () => {
+test("meetings workspace compiles and uses live selectors, manual transcripts, exports, and durable storage", async () => {
   const [workspace, variants, store, migration, captureMigration, transcriptionMigration] = await Promise.all([
     readFile(new URL("../src/features/meetings/MeetingsWorkspace.jsx", import.meta.url), "utf8"),
     readFile(new URL("../src/features/meetings/MeetingCaptureVariants.jsx", import.meta.url), "utf8"),
@@ -615,7 +658,8 @@ test("meetings workspace compiles and uses live selectors, templates, exports, a
   ]);
   assert.match(workspace, /loadLiveReviewJobs/);
   assert.match(workspace, /loadLiveCandidatesForJob/);
-  assert.match(variants, /Prepare after-call review/);
+  assert.doesNotMatch(variants, /Prepare after-call review/);
+  assert.doesNotMatch(workspace, /transcribeMeetingAudio|makeCandidateNotes|saveMeetingAndReleaseArchive/);
   assert.match(variants, /items=\{jobItems\}/);
   assert.match(variants, /items=\{candidateItems\}/);
   assert.match(variants, /__variant/);
@@ -623,7 +667,8 @@ test("meetings workspace compiles and uses live selectors, templates, exports, a
   assert.match(workspace, /Download Markdown/);
   assert.match(workspace, /Print or save PDF/);
   assert.match(store, /export async function listRecentMeetings/);
-  assert.match(store, /session_only/);
+  assert.match(store, /persistence: "durable"/);
+  assert.doesNotMatch(store, /persistence: "session_only"/);
   assert.match(store, /speaker_segments/);
   assert.match(variants, /Speaker names/);
   assert.match(migration, /ENABLE ROW LEVEL SECURITY/);

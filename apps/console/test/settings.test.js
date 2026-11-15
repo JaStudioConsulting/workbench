@@ -23,20 +23,24 @@ test("settings status stays honest when optional services are unavailable", asyn
   assert.equal(status.google.signIn, "unavailable");
   assert.equal(status.google.localDataSession, "configured");
   assert.equal(status.google.code, "AUTH_UNAVAILABLE");
-  assert.equal(status.ai.label, "AI check not set up");
-  assert.equal(status.meetings.available, false);
+  assert.equal(Object.hasOwn(status, "ai"), false);
+  assert.equal(Object.hasOwn(status, "meetings"), false);
   assert.match(status.loxo.label, /Queued mode/);
 });
 
-test("settings reports the installed meeting helper through its explicit loader", async () => {
+test("settings checks account connections without querying AI or transcription services", async () => {
   const client = { auth: { async getSession() { return { data: { session: {} }, error: null }; } } };
+  const requested = [];
   const request = async (url) => {
+    requested.push(new URL(url).pathname);
     if (String(url).includes("/api/auth/workbench-status")) return { ok: true, status: 200, async json() { return { googleSignIn: "configured", localDataSession: "configured" }; } };
     if (String(url).includes("/api/mail/status")) return { ok: true, async json() { return { connected: false, canRead: false, canDraft: false }; } };
-    return { ok: false, async json() { return {}; } };
+    throw new Error("Settings must not request model services");
   };
-  const status = await loadSettingsStatus({ client, request, meetingsStatusLoader: async () => ({ available: true, enhanced: true, captureAvailable: false }) });
-  assert.equal(status.meetings.available, true);
-  assert.equal(status.meetings.label, "M1 transcription available; recording uses this device's microphone");
+  const status = await loadSettingsStatus({ client, request });
+  assert.deepEqual(requested.sort(), ["/api/auth/workbench-status", "/api/mail/status"]);
+  assert.equal(Object.hasOwn(status, "ai"), false);
+  assert.equal(Object.hasOwn(status, "meetings"), false);
   assert.equal(status.google.signIn, "configured");
+  assert.equal(status.supabase.connected, true);
 });

@@ -1,6 +1,6 @@
 import { supabase } from "../../supabase-client.js";
 
-export const operatorCasesEnabled = import.meta.env?.VITE_OPERATOR_CASES_ENABLED === "1";
+export const operatorCasesEnabled = import.meta.env?.VITE_OPERATOR_CASES_ENABLED !== "0";
 
 function candidateIdentity(candidateId) {
   const match = /^(sourcing|submission):([1-9]\d*)$/.exec(String(candidateId || ""));

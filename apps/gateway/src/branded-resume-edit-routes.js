@@ -33,6 +33,8 @@ function normalizeIdentity(value) {
 }
 
 function caseCandidateId(caseKey) {
+  const automated = /^automation:((?:tracker_candidates|sourcing|submission):[1-9]\d*|manual:[0-9a-f-]{36}):job:(?:[1-9]\d*|none)$/.exec(String(caseKey || ""));
+  if (automated) return automated[1];
   const match = /^after_call:(sourcing|submission):([1-9]\d*):[1-9]\d*$/.exec(String(caseKey || ""));
   return match ? `${match[1]}:${match[2]}` : null;
 }
@@ -125,7 +127,7 @@ export function registerBrandedResumeEditRoutes(app, {
       const ownerId = req.supabaseRecruiter.ownerId;
       const cases = await listCaseRows(fetchImpl, config, req, "operator_cases", { id: `eq.${caseId}`, owner_id: `eq.${ownerId}`, limit: "1" });
       const record = cases[0];
-      if (!record || record.case_type !== "after_call") return respond(res, "CASE_NOT_FOUND", "This after-call review is unavailable", 404);
+      if (!record || !["after_call", "automation"].includes(record.case_type)) return respond(res, "CASE_NOT_FOUND", "This after-call review is unavailable", 404);
       const selectedCandidateId = caseCandidateId(record.case_key);
       if (!selectedCandidateId) return respond(res, "IDENTITY_SOURCE_UNAVAILABLE", "The saved case has no verifiable candidate identity", 409);
       const candidateRows = await listCaseRows(fetchImpl, config, req, "candidates_all", {

@@ -68,11 +68,15 @@ test("AI browser clients use authenticated gateway calls and preserve unavailabl
   assert.deepEqual(calls.map(({ url }) => new URL(url).pathname), ["/api/fit/evaluate", "/api/outreach/personalize"]);
 });
 
-test("FitBadge contract exposes rules evidence and deep AI check", async () => {
+test("FitBadge exposes deterministic evidence without AI controls or requests", async () => {
   const source = await readFile(new URL("../src/features/pipeline/FitBadge.jsx", import.meta.url), "utf8");
   assert.match(source, /scoreFit/);
-  assert.match(source, /Deep check with AI/);
-  assert.match(source, /AI check/);
+  assert.match(source, /Rules check/);
+  assert.match(source, /title="Strengths" items=\{result.strengths\}/);
+  assert.match(source, /title="Gaps" items=\{result.gaps\}/);
+  assert.doesNotMatch(source, /aiClient|evaluateFit|runAiCheck|fitCache|aiResult|Deep check with AI/);
+  const result = await transformWithEsbuild(source, "FitBadge.jsx", { loader: "jsx", jsx: "automatic" });
+  assert.match(result.code, /function FitBadge/);
 });
 
 test("pending stage moves are rebuilt from the persisted activity trail", () => {

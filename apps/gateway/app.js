@@ -1,15 +1,14 @@
 import express from "express";
-import { CandidateIdSchema, errorEnvelope, McpDiscoverySchema, SafetyStateSchema } from "@ja/shared-types";
+import { registerAutomationRoutes } from "./src/automation-routes.js";
+import { errorEnvelope, McpDiscoverySchema, SafetyStateSchema } from "@ja/shared-types";
 import { createConfiguredAuth, getBetterAuthAvailability, parseExactHttpsOrigins } from "./src/auth.js";
 import { createGoogleWorkspaceHandlers } from "./src/google-workspace-routes.js";
 import { createGoogleApiHandlers } from "./src/google-api.js";
-import { prepareAfterCallWorkflow } from "./src/after-call.js";
 import { createMcpRequestHandler } from "./src/mcp.js";
 import { discoverMcp, loadRecruitmentContext } from "./src/recruitment-package.js";
-import { createLocalTranscriptionAdapter, meetingAudioBody } from "./src/local-transcription.js";
 import { createNativeCaptureManager, parseByteRange } from "./src/native-capture.js";
 import { registerAiRoutes } from "./src/ai-routes.js";
-import { registerCandidateRoutes, resolveCandidateSupabaseConfig } from "./src/candidate-routes.js";
+import { registerCandidateRoutes } from "./src/candidate-routes.js";
 import { registerMailRoutes } from "./src/mail-routes.js";
 import { registerNotesBoardsRoutes } from "./src/notes-boards-routes.js";
 import { registerSearchRoutes } from "./src/search-routes.js";
@@ -75,7 +74,6 @@ export async function createApp({
   searchFetch,
   trackerImportDependencies = {},
   localSessionFetch = globalThis.fetch,
-  transcriptionAdapter = createLocalTranscriptionAdapter(),
   captureManager = createNativeCaptureManager(),
   mcpHandlerFactory = createMcpRequestHandler,
 } = {}) {
@@ -116,8 +114,15 @@ export async function createApp({
   app.use("/api/workflows/after-call", express.json({ limit: "5mb" }));
   // Resume edits have a separate 1 MiB structured-content ceiling.
   app.use("/api/operator-cases", express.json({ limit: "2mb" }));
+  app.use("/api/documents", express.json({ limit: "29mb" }));
+  app.use("/api/automation", express.json({ limit: "2mb" }));
   app.use(express.json({ limit: "128kb" }));
   app.get("/healthz", (_req, res) => res.json({ ok: true, service: "recruiting-workbench-gateway" }));
+  // This release has no AI execution path, regardless of installed credentials.
+  app.get("/api/capabilities", (_req, res) => {
+    res.set("Cache-Control", "no-store");
+    return res.json({ ai: false, transcription: false, automation: true });
+  });
   app.get("/api/safety", (_req, res) => res.json(SafetyStateSchema.parse({
     auth: configuredAuth.enabled ? "configured" : "unavailable",
     storage: "unavailable",
@@ -128,32 +133,20 @@ export async function createApp({
   const authenticated = requireSession(configuredAuth);
   const authoritativeGoogleSession = requireSession(configuredAuth, { authoritative: true, requireStableUser: true });
   const supabaseRecruiterAccess = createSupabaseRecruiterAccess({ env, fetchImpl: candidateFetch });
+  registerAutomationRoutes(app, { access: supabaseRecruiterAccess, env, fetchImpl: candidateFetch || globalThis.fetch });
   registerBrandedResumeEditRoutes(app, { access: supabaseRecruiterAccess, env, fetchImpl: candidateFetch || globalThis.fetch });
   app.get("/api/meetings/status", supabaseRecruiterAccess, async (_req, res) => {
     res.set("Cache-Control", "private, no-store");
     return res.json({
-      available: await transcriptionAdapter.available(),
+      available: false,
+      transcription: false,
+      transcriptionStatus: "disabled",
       enhanced: env.WORKBENCH_NATIVE_MEETING_ENHANCEMENTS === "1",
       captureAvailable: await captureManager.available?.() || false,
     });
   });
-  app.post("/api/meetings/transcribe", supabaseRecruiterAccess, express.raw(meetingAudioBody), async (req, res) => {
-    if (!Buffer.isBuffer(req.body) || req.body.length === 0) {
-      return respondError(res, "INVALID_INPUT", "Meeting audio is required", 400);
-    }
-    if (!await transcriptionAdapter.available()) {
-      return respondError(res, "TRANSCRIPTION_UNAVAILABLE", "Local transcription is unavailable");
-    }
-    try {
-      return res.json({ ok: true, ...await transcriptionAdapter.transcribe({
-        audio: req.body,
-        contentType: req.get("content-type"),
-      }) });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Meeting transcription failed";
-      const status = /unsupported|empty|required/i.test(message) ? 400 : 502;
-      return respondError(res, "TRANSCRIPTION_FAILED", message, status);
-    }
+  app.post("/api/meetings/transcribe", supabaseRecruiterAccess, (_req, res) => {
+    return respondError(res, "AI_DISABLED", "AI and transcription are disabled in this release", 409);
   });
   app.post("/api/meetings/capture/start", supabaseRecruiterAccess, async (req, res) => {
     try {
@@ -170,31 +163,8 @@ export async function createApp({
     const persisted = await captureManager.loadFinalizedResponse?.(id, ownerId);
     if (persisted) return persisted;
     const capture = await captureManager.stop(id, ownerId);
-    const tracks = [];
-    for (const source of ["microphone", "system"]) {
-      const audio = await captureManager.audioInfo(id, source, ownerId).catch(() => null);
-      if (!audio) continue;
-      try {
-        const result = await transcriptionAdapter.transcribeFile({ path: audio.path });
-        const fallbackSpeaker = source === "microphone" ? "You" : "Remote speaker";
-        const segments = result.segments?.length
-          ? result.segments.map((segment) => ({ ...segment, source, speaker: source === "microphone" ? "You" : (segment.speaker || fallbackSpeaker) }))
-          : [{ start: 0, end: 0, text: result.transcript, source, speaker: fallbackSpeaker }];
-        tracks.push({ source, result, segments });
-      } catch (error) {
-        tracks.push({ source, error: error instanceof Error ? error.message : "Transcription failed", segments: [] });
-      }
-    }
-    const segments = tracks.flatMap((track) => track.segments).sort((left, right) => left.start - right.start || left.end - right.end);
-    const speakers = [...new Set(segments.map((segment) => segment.speaker).filter(Boolean))];
-    const transcript = [];
-    for (const segment of segments) {
-      const previous = transcript.at(-1);
-      if (previous?.speaker === segment.speaker) previous.text += ` ${segment.text}`;
-      else transcript.push({ speaker: segment.speaker || "Speaker", text: segment.text });
-    }
-    const warnings = [capture.warning, ...tracks.map((track) => track.error || track.result?.warning)].filter(Boolean);
-    const transcriptionReady = transcript.length > 0;
+    // Audio finalization must never start transcription. Existing saved transcripts
+    // remain readable through the persisted-response branch above.
     const response = {
       ok: true,
       capture: {
@@ -206,14 +176,14 @@ export async function createApp({
         candidateId: capture.candidateId,
       },
       transcription: {
-        status: transcriptionReady ? "ready" : "failed",
+        status: "disabled",
         source: "workbench_native",
-        model: tracks.find((track) => track.result?.model)?.result.model || null,
-        warning: warnings.join(" ") || null,
+        model: null,
+        warning: null,
       },
-      transcript: transcript.map((turn) => `${turn.speaker}: ${turn.text}`).join("\n"),
-      segments,
-      speakers,
+      transcript: "",
+      segments: [],
+      speakers: [],
     };
     await captureManager.saveFinalizedResponse?.(id, ownerId, response);
     return response;
@@ -318,29 +288,8 @@ export async function createApp({
     try { return res.json(McpDiscoverySchema.parse(discoverMcp(recruiterAuthority))); }
     catch { return respondError(res, "RECRUITER_UNAVAILABLE", "Recruitment authority is unavailable"); }
   });
-  app.post("/api/workflows/after-call/prepare", supabaseRecruiterAccess, async (req, res) => {
-    if (!recruiterAuthority) return respondError(res, "RECRUITER_UNAVAILABLE", "Recruitment authority is unavailable");
-    try {
-      const candidateId = CandidateIdSchema.safeParse(req.body?.candidateId);
-      if (!candidateId.success) return respondError(res, "INVALID_INPUT", "Choose a valid candidate record", 400);
-      const supabaseConfig = resolveCandidateSupabaseConfig(env);
-      if (!supabaseConfig.enabled) return respondError(res, "SUPABASE_UNAVAILABLE", "Candidate records are unavailable", 503);
-      const query = new URLSearchParams({ select: "id,candidate_name,current_title", id: `eq.${candidateId.data}`, limit: "1" });
-      const candidateResponse = await (candidateFetch || globalThis.fetch)(`${supabaseConfig.supabaseUrl}/rest/v1/candidates_all?${query}`, {
-        method: "GET",
-        headers: { apikey: supabaseConfig.publishableKey, Authorization: `Bearer ${req.supabaseRecruiter.accessToken}`, Accept: "application/json" },
-      });
-      const rows = await candidateResponse.json().catch(() => null);
-      if (!candidateResponse.ok || !Array.isArray(rows)) return respondError(res, "CANDIDATE_STORAGE_FAILED", "The selected candidate could not be verified", 502);
-      const resolvedCandidate = rows.find((row) => row?.id === candidateId.data);
-      if (!resolvedCandidate) return respondError(res, "CANDIDATE_NOT_FOUND", "The selected candidate is no longer available", 404);
-      return res.status(202).json(await prepareAfterCallWorkflow({ ...req.body, candidateId: candidateId.data }, recruiterAuthority, { env, resolvedCandidate }));
-    }
-    catch (error) {
-      if (error?.code === "AI_NOT_CONFIGURED") return respondError(res, "AI_NOT_CONFIGURED", "AI-assisted after-call drafting is not configured", 503);
-      if (error?.code === "AI_INVALID_OUTPUT") return respondError(res, "AI_INVALID_OUTPUT", "AI returned a draft that could not be source-validated", 502);
-      return respondError(res, "INVALID_INPUT", error instanceof Error ? error.message : "Invalid workflow input", 400);
-    }
+  app.post("/api/workflows/after-call/prepare", supabaseRecruiterAccess, (_req, res) => {
+    return respondError(res, "AI_DISABLED", "AI and transcription are disabled in this release", 409);
   });
   app.all("/mcp", authenticated, async (req, res) => {
     if (!["GET", "POST"].includes(req.method)) return res.status(405).end();

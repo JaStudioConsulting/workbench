@@ -1,3 +1,4 @@
+import { startAutomationWorker } from "./src/automation-worker.js";
 import { fileURLToPath } from "node:url";
 import { createLocalRuntimeApp } from "./src/local-runtime.js";
 
@@ -9,3 +10,8 @@ const app = await createLocalRuntimeApp({ distDir });
 app.listen(port, host, () => {
   console.log(`Recruiting Workbench listening on http://${host}:${port}`);
 });
+
+if (process.env.WORKBENCH_AUTOMATION_ENABLED === "1") {
+  const worker = startAutomationWorker();
+  for (const signal of ["SIGTERM", "SIGINT"]) process.once(signal, () => { worker.stop(); process.exit(0); });
+}
