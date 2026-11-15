@@ -1,9 +1,9 @@
 -- Step 2 of 2: evaluate the recruiter gate once per statement on the remaining
--- tables. Apply ONLY after 032 has been applied and its VERIFY section confirms
+-- tables. Apply ONLY after 034 has been applied and its VERIFY section confirms
 -- that candidate_review_feed and presentations no longer time out as
 -- `authenticated`.
 --
--- Same change as 032, applied to every other public policy that still calls
+-- Same change as 034, applied to every other public policy that still calls
 -- public.is_authorized_recruiter() bare: wrap it as
 -- (select public.is_authorized_recruiter()) and any bare auth.uid() as
 -- (select auth.uid()) so the planner hoists them into an InitPlan. Logic, roles,
@@ -212,7 +212,7 @@ ALTER POLICY "Owners can update their Workbench profile" ON public.workbench_pro
   WITH CHECK (((select auth.uid()) = owner_id) AND (select public.is_authorized_recruiter()));
 
 -- ===========================================================================
--- ROLLBACK (commented out). Restores the pre-033 expressions exactly as stored in
+-- ROLLBACK (commented out). Restores the pre-035 expressions exactly as stored in
 -- pg_policies on 2026-11-15 (function call qualified with public. only).
 -- ===========================================================================
 -- ALTER POLICY "automation_current_owner" ON public.automation_current
@@ -371,7 +371,7 @@ ALTER POLICY "Owners can update their Workbench profile" ON public.workbench_pro
 -- VERIFY (commented out). Read-only; run after applying.
 -- ===========================================================================
 -- 1. No bare recruiter-gate call should remain anywhere in public (expect 0 rows).
---    Do this check against the whole schema because 032 + 033 together cover it.
+--    Do this check against the whole schema because 034 + 035 together cover it.
 --    pg_policies deparses the hoisted form as
 --    "( SELECT is_authorized_recruiter() AS is_authorized_recruiter)".
 -- SELECT tablename, policyname
@@ -390,5 +390,5 @@ ALTER POLICY "Owners can update their Workbench profile" ON public.workbench_pro
 --   AND replace(coalesce(qual, '') || ' ' || coalesce(with_check, ''),
 --         '( SELECT auth.uid() AS uid)', '') LIKE '%auth.uid()%';
 --
--- 3. Re-run the two EXPLAIN checks from the 032 VERIFY section (the runner
+-- 3. Re-run the two EXPLAIN checks from the 034 VERIFY section (the runner
 --    supplies the JWT claim via a psql variable) to confirm nothing regressed.

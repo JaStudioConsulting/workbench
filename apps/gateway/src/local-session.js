@@ -72,6 +72,20 @@ export function isTrustedLocalSessionRequest(req, { origins }) {
   return true;
 }
 
+// Shared only by trusted server processes; never bypasses browser access checks.
+export async function issueOwnerSession({ env = process.env, fetchImpl = globalThis.fetch } = {}) {
+  const config = localSessionConfig(env);
+  if (!config.enabled || !config.ownerId || !config.supabaseUrl || !config.publishableKey) throw new Error("Private owner session unavailable");
+  const machineSecret = await loadMachineSecret(config.secretPath);
+  const response = await fetchImpl(`${config.supabaseUrl}/functions/v1/workbench-local-session`, {
+    method: "POST", signal: AbortSignal.timeout(10_000),
+    headers: { apikey: config.publishableKey, Authorization: `Bearer ${config.publishableKey}`, "content-type": "application/json", "x-workbench-session-token": machineSecret },
+  });
+  const session = (await response.json().catch(() => null))?.session;
+  if (!response.ok || session?.user?.id?.toLowerCase() !== config.ownerId || !session?.access_token || !session?.refresh_token) throw new Error("Private owner session unavailable");
+  return session;
+}
+
 export function registerLocalSessionRoute(app, { env = process.env, fetchImpl = globalThis.fetch } = {}) {
   app.post("/api/auth/local-session", async (req, res) => {
     res.set({ "Cache-Control": "no-store, private", Pragma: "no-cache", Vary: "Origin" });
@@ -86,22 +100,7 @@ export function registerLocalSessionRoute(app, { env = process.env, fetchImpl = 
     }
 
     try {
-      const machineSecret = await loadMachineSecret(config.secretPath);
-      const response = await fetchImpl(`${config.supabaseUrl}/functions/v1/workbench-local-session`, {
-        method: "POST",
-        signal: AbortSignal.timeout(10_000),
-        headers: {
-          apikey: config.publishableKey,
-          Authorization: `Bearer ${config.publishableKey}`,
-          "content-type": "application/json",
-          "x-workbench-session-token": machineSecret,
-        },
-      });
-      const payload = await response.json().catch(() => null);
-      const session = payload?.session;
-      if (!response.ok || session?.user?.id?.toLowerCase() !== config.ownerId || !session?.access_token || !session?.refresh_token) {
-        return res.status(503).json(errorEnvelope("LOCAL_SESSION_UNAVAILABLE", "Private workspace access could not be opened. Retry shortly."));
-      }
+      const session = await issueOwnerSession({ env, fetchImpl });
       return res.status(200).json({ session: {
         access_token: session.access_token,
         refresh_token: session.refresh_token,

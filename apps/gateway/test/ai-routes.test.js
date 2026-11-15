@@ -24,7 +24,7 @@ async function request(app, method, path, { body, authenticated = true, cookie, 
 }
 
 function authenticated(req, res, next) {
-  if (req.headers.authorization !== "Bearer test") return res.status(401).json({ error: { code: "UNAUTHORIZED", message: "Sign in required" } });
+  if (req.headers.authorization !== "Bearer test") return res.status(401).json({ error: { code: "UNAUTHORIZED", message: "A valid session is required" } });
   next();
 }
 
@@ -35,101 +35,43 @@ function appFor(options = {}) {
   return app;
 }
 
-function textResponse(value) {
-  return { content: [{ type: "text", text: JSON.stringify(value) }] };
-}
-
-test("AI status accepts a bearer token and rejects missing, cookie-only, or invalid authentication", async () => {
-  const app = appFor({ env: {} });
+test("AI routes remain authenticated while the release reports AI disabled", async () => {
+  const app = appFor({ env: { ANTHROPIC_API_KEY: "test-key" } });
   assert.equal((await request(app, "GET", "/api/ai/status", { authenticated: false })).status, 401);
-  assert.equal((await request(app, "GET", "/api/ai/status", { authenticated: false, cookie: "workbench-session=test" })).status, 401);
-  assert.equal((await request(app, "GET", "/api/ai/status", { authorization: "Bearer invalid" })).status, 401);
-  assert.deepEqual(await request(app, "GET", "/api/ai/status"), { status: 200, body: { available: false } });
-  assert.deepEqual(await request(app, "POST", "/api/fit/evaluate", { body: { job: {}, candidate: {} } }), {
-    status: 503,
-    body: { error: { code: "AI_NOT_CONFIGURED", message: "AI check not set up" } },
+  for (const path of ["/api/fit/evaluate", "/api/outreach/personalize"]) {
+    assert.equal((await request(app, "POST", path, { authenticated: false, body: {} })).status, 401);
+  }
+  assert.deepEqual(await request(app, "GET", "/api/ai/status"), {
+    status: 200, body: { available: false, disabled: true },
   });
 });
 
-test("fit evaluation runs four specialists before a validated summary", async () => {
-  const calls = [];
-  let activeSpecialists = 0;
-  let maxActiveSpecialists = 0;
-  const messages = {
-    async create(params, requestOptions) {
-      calls.push({ params, requestOptions });
-      if (params.system.includes("senior recruiter")) {
-        assert.equal(activeSpecialists, 0);
-        return textResponse({
-          level: "strong",
-          strengths: ["Matched automation work [candidate.workHistory]"],
-          gaps: ["Certification detail is not in source"],
-        });
-      }
-      activeSpecialists += 1;
-      maxActiveSpecialists = Math.max(maxActiveSpecialists, activeSpecialists);
-      await new Promise((resolve) => setTimeout(resolve, 5));
-      activeSpecialists -= 1;
-      return textResponse({ level: "possible", reasons: ["Evidence found in [candidate.profileSummary]"] });
-    },
-  };
+test("AI routes reject valid and incomplete requests before constructing any model client", async () => {
+  let clientsCreated = 0;
   const app = appFor({
-    env: { ANTHROPIC_API_KEY: "test-key", ANTHROPIC_MODEL: "test-model" },
-    clientFactory: (key) => {
-      assert.equal(key, "test-key");
-      return { messages };
-    },
+    env: { ANTHROPIC_API_KEY: "test-key", ANTHROPIC_MODEL: "test-model", WORKBENCH_AI_ENABLED: "1" },
+    clientFactory: () => { clientsCreated += 1; throw new Error("No model client may be constructed"); },
   });
-  const response = await request(app, "POST", "/api/fit/evaluate", {
-    body: {
-      job: { id: "job-1", title: "Automation Technician", requirements: "PLC experience" },
-      candidate: { id: "candidate-1", title: "Automation Technician", profileSummary: "PLC maintenance" },
-    },
-  });
-  assert.equal(response.status, 200);
-  assert.equal(response.body.level, "strong");
-  assert.deepEqual(Object.keys(response.body.specialists), ["skills", "culture", "risk", "market"]);
-  assert.equal(calls.length, 5);
-  assert.equal(maxActiveSpecialists, 4);
-  assert.equal(calls.every(({ params }) => params.model === "test-model"), true);
-  assert.equal(calls.every(({ requestOptions }) => requestOptions.timeout === 60_000), true);
-  assert.equal(calls.some(({ params }) => params.messages[0].content.includes("test-key")), false);
+  const requests = [
+    ["/api/fit/evaluate", { job: { title: "Technician" }, candidate: { title: "Technician" } }],
+    ["/api/fit/evaluate", {}],
+    ["/api/outreach/personalize", { job: {}, candidate: {}, template: "Initial", body: "Hello" }],
+    ["/api/outreach/personalize", {}],
+  ];
+  for (const [path, body] of requests) {
+    assert.deepEqual(await request(app, "POST", path, { body }), {
+      status: 409,
+      body: { error: { code: "AI_DISABLED", message: "AI and transcription are disabled in this release" } },
+    });
+  }
+  assert.equal(clientsCreated, 0);
 });
 
-test("AI routes reject invalid input and malformed provider output", async () => {
-  const app = appFor({
-    env: { ANTHROPIC_API_KEY: "test-key" },
-    clientFactory: () => ({ messages: { create: async () => ({ content: [{ type: "text", text: "not json" }] }) } }),
-  });
-  const invalid = await request(app, "POST", "/api/fit/evaluate", { body: { job: {} } });
-  assert.equal(invalid.status, 400);
-  assert.equal(invalid.body.error.code, "INVALID_REQUEST");
-  const malformed = await request(app, "POST", "/api/fit/evaluate", { body: { job: {}, candidate: {} } });
-  assert.equal(malformed.status, 502);
-  assert.equal(malformed.body.error.code, "AI_INVALID_OUTPUT");
-});
-
-test("outreach personalization returns a draft and never performs a send", async () => {
-  let requestParams;
-  const app = appFor({
-    env: { ANTHROPIC_API_KEY: "test-key" },
-    clientFactory: () => ({ messages: { create: async (params) => {
-      requestParams = params;
-      return textResponse({ subject: "Maintenance opportunity", body: "Your PLC maintenance background matches this role." });
-    } } }),
-  });
-  const response = await request(app, "POST", "/api/outreach/personalize", {
-    body: {
-      job: { title: "Maintenance Supervisor" },
-      candidate: { profileSummary: "PLC maintenance" },
-      template: "Initial outreach",
-      body: "Hello, I have a role to discuss.",
-    },
-  });
-  assert.deepEqual(response, {
-    status: 200,
-    body: { subject: "Maintenance opportunity", body: "Your PLC maintenance background matches this role." },
-  });
-  assert.match(requestParams.system, /draft only/i);
-  assert.doesNotMatch(requestParams.system, /auto.?send/i);
+test("missing AI credentials do not turn the disabled release into a setup prompt", async () => {
+  const app = appFor({ env: {} });
+  for (const path of ["/api/fit/evaluate", "/api/outreach/personalize"]) {
+    const response = await request(app, "POST", path, { body: {} });
+    assert.equal(response.status, 409);
+    assert.equal(response.body.error.code, "AI_DISABLED");
+  }
 });

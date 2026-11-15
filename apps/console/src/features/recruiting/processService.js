@@ -131,3 +131,20 @@ export async function loadProcessData(client = supabase, now = new Date(), { for
     candidateDataAvailable,
   }, now);
 }
+
+export async function loadJobRailData(client = supabase, now = new Date()) {
+  const jobsResult = await client
+    .from("tracker_jobs")
+    .select("job_id,job_title,company,status")
+    .eq("status", "Active")
+    .order("date_opened", { ascending: false, nullsFirst: false });
+
+  if (jobsResult.error) throw new Error("Could not load active Tracker jobs");
+
+  return buildProcessSummary({
+    jobs: jobsResult.data || [],
+    candidates: [],
+    actions: [],
+    candidateDataAvailable: false,
+  }, now);
+}

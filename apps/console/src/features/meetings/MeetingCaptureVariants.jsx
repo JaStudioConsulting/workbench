@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { CalendarDays, ClipboardList, Link2, Mic, Square } from "lucide-react";
+import { CalendarDays, Link2, Mic, Square } from "lucide-react";
 import { Button } from "../../components/ui/button.tsx";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../components/ui/card.tsx";
 import { Input } from "../../components/ui/input.tsx";
@@ -105,8 +105,8 @@ function RecruitingContext({ launchContext, recruiting, selectedJob, selectedJob
   const attached = launchContext?.job?.id && launchContext?.candidate?.id;
   const lockedCall = isMeetingContextLocked({ launchContext, recording, transcribing });
   const attachmentLabel = launchContext?.source === "candidate_call" ? "attached from the Call button" : "restored from Recent meetings";
-  const jobItems = recruiting.jobs.map((job) => ({ value: String(job.id), label: `${job.title} · ${job.company}` }));
-  const candidateItems = recruiting.candidates.map((candidate) => ({ value: String(candidate.id), label: `${candidate.name} · ${candidate.title}` }));
+  const jobItems = [{ value: "", label: "No job attached" }, ...recruiting.jobs.map((job) => ({ value: String(job.id), label: `${job.title} · ${job.company}` }))];
+  const candidateItems = [{ value: "", label: "No candidate attached" }, ...recruiting.candidates.map((candidate) => ({ value: String(candidate.id), label: `${candidate.name} · ${candidate.title}` }))];
   useEffect(() => { if (lockedCall) setEditing(false); }, [lockedCall]);
 
   if (attached && !editing) {
@@ -122,33 +122,49 @@ function RecruitingContext({ launchContext, recruiting, selectedJob, selectedJob
   </div>;
 }
 
-function RecordingControls({ launchContext, recording, beginRecording, finishRecording, recordedAudio, selectedEvent, transcribing, includeSharedAudio, setIncludeSharedAudio, pendingAudio, retryTranscription }) {
+function RecordingControls({ launchContext, recording, beginRecording, finishRecording, recordedAudio, selectedEvent, transcribing, includeSharedAudio, setIncludeSharedAudio }) {
   const callLaunch = launchContext?.source === "candidate_call";
   const preparing = launchContext?.phase === "starting";
   const secure = isSecureRecordingContext();
   const captureNote = recording
     ? meetingCaptureState(recording)
     : secure
-      ? "Recording uses this device's microphone. Audio is sent to this Mac for transcription."
-      : "Recording needs the secure Workbench address. Open the Tailscale HTTPS link, then try again.";
+      ? "Recording uses this device's microphone. Audio stays on this device for playback and download."
+      : "Recording needs a secure Workbench address. Open Workbench on this Mac, then try again.";
   const warning = recording?.warning || (callLaunch ? "Phone call audio is not captured." : "");
   return <div className="flex flex-col gap-3">
     <p className="text-sm text-muted-foreground">{captureNote}{callLaunch ? " The call is placed only after recording starts." : ""}</p>
     {warning ? <p role="status" className="rounded-md border border-amber-700/30 bg-amber-50 p-3 text-sm text-amber-950">{warning}</p> : null}
     {!recording && !callLaunch ? <label className="flex items-start gap-2 text-sm text-muted-foreground"><input className="mt-1" type="checkbox" checked={Boolean(includeSharedAudio)} onChange={(event) => setIncludeSharedAudio?.(event.target.checked)} disabled={!secure} /> Also record this device's shared call audio when the browser allows it</label> : null}
-    <div className="flex flex-wrap gap-2">{preparing ? <Button className="h-auto min-h-9 max-w-full whitespace-normal text-center" disabled><Mic size={14} />Preparing recorder</Button> : !recording ? <Button className="h-auto min-h-9 max-w-full whitespace-normal text-center" onClick={() => beginRecording(selectedEvent)} disabled={!secure}><Mic size={14} />Start recording</Button> : transcribing ? <Button className="h-auto min-h-9 max-w-full whitespace-normal text-center" disabled><Square size={14} />Finalizing recording</Button> : <Button className="h-auto min-h-9 max-w-full whitespace-normal text-center" variant="destructive" onClick={finishRecording}><Square size={14} />Stop recording</Button>}{recordedAudio ? <Button className="h-auto min-h-9 max-w-full whitespace-normal text-center" variant="outline" render={<a href={recordedAudio.url} download={recordedAudio.filename} />}><Link2 size={14} />Download recording</Button> : null}{pendingAudio && !recording && !transcribing ? <Button className="h-auto min-h-9 max-w-full whitespace-normal text-center" variant="outline" onClick={retryTranscription}>Retry M1 transcription</Button> : null}</div>
-    {calendarEnabled && selectedEvent ? <p className="text-sm text-muted-foreground"><CalendarDays size={14} className="inline" aria-hidden="true" /> Linked event: {selectedEvent.title || "Untitled meeting"}</p> : null}
+    <div className="flex flex-wrap gap-2">{preparing ? <Button className="h-auto min-h-9 max-w-full whitespace-normal text-center" disabled><Mic size={14} />Preparing recorder</Button> : !recording ? <Button className="h-auto min-h-9 max-w-full whitespace-normal text-center" onClick={() => beginRecording(selectedEvent)} disabled={!secure || transcribing}><Mic size={14} />Start recording</Button> : transcribing ? <Button className="h-auto min-h-9 max-w-full whitespace-normal text-center" disabled><Square size={14} />Finalizing recording</Button> : <Button className="h-auto min-h-9 max-w-full whitespace-normal text-center" variant="destructive" onClick={finishRecording}><Square size={14} />Stop recording</Button>}{recordedAudio ? <Button className="h-auto min-h-9 max-w-full whitespace-normal text-center" variant="outline" render={<a href={recordedAudio.url} download={recordedAudio.filename} />}><Link2 size={14} />Download recording</Button> : null}</div>
+    {recordedAudio ? <audio className="w-full" controls src={recordedAudio.url} aria-label="Saved meeting recording" /> : null}
+    {selectedEvent ? <p className="text-sm text-muted-foreground"><CalendarDays size={14} className="inline" aria-hidden="true" /> Linked event: {selectedEvent.title || "Untitled meeting"}</p> : null}
   </div>;
 }
 
 function NotesEditor({ transcript, setTranscript, notes, setNotes, transcribing, segments = [], speakers = [], speakerLabels = {}, onSpeakerLabelChange, transcriptRows = 7, notesRows = 4 }) {
   const [segmentQuery, setSegmentQuery] = useState("");
+  const [importError, setImportError] = useState("");
+  const importTranscript = async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    setImportError("");
+    if (!file) return;
+    if (!/\.txt$/i.test(file.name) || file.size > 2 * 1024 * 1024) {
+      setImportError("Choose a .txt transcript no larger than 2 MB.");
+      return;
+    }
+    try { setTranscript(await file.text()); }
+    catch { setImportError("The transcript file could not be read."); }
+  };
   const normalizedQuery = segmentQuery.trim().toLowerCase();
   const visibleSegments = normalizedQuery
     ? segments.filter((segment) => `${speakerLabels[segment.speaker] || segment.speaker || "Speaker"} ${segment.text || ""}`.toLowerCase().includes(normalizedQuery))
     : segments;
   return <div className="flex flex-col gap-3">
-    <label className="text-sm font-medium">Transcript<Textarea className="mt-1" rows={transcriptRows} value={transcript} onChange={(event) => setTranscript(event.target.value)} placeholder={transcribing ? "Transcribing on the M1..." : "Transcript appears here after M1 transcription."} disabled={transcribing} /></label>
+    <label className="text-sm font-medium">Transcript<Textarea className="mt-1" rows={transcriptRows} value={transcript} onChange={(event) => setTranscript(event.target.value)} placeholder="Paste an existing transcript here." disabled={transcribing} /></label>
+    <label className="text-sm font-medium">Import transcript (.txt)<Input className="mt-1" type="file" accept=".txt,text/plain" onChange={importTranscript} disabled={transcribing} /></label>
+    {importError ? <p role="alert" className="text-sm text-destructive">{importError}</p> : null}
     {speakers.length ? <fieldset className="grid gap-2 rounded-lg border p-3 sm:grid-cols-2"><legend className="px-1 text-sm font-semibold">Speaker names</legend>{speakers.map((speaker) => <label className="min-w-0 text-xs text-muted-foreground" key={speaker}>{speaker}<Input className="mt-1" aria-label={`Name for ${speaker}`} value={speakerLabels[speaker] || speaker} onChange={(event) => onSpeakerLabelChange?.(speaker, event.target.value)} /></label>)}</fieldset> : null}
     {segments.length ? <div className="grid gap-2 rounded-lg border bg-muted/20 p-3" aria-label="Structured speaker transcript">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -158,12 +174,12 @@ function NotesEditor({ transcript, setTranscript, notes, setNotes, transcribing,
       {visibleSegments.length ? visibleSegments.map((segment, index) => <p className="break-words text-sm" key={`${segment.start || 0}-${index}`}><span className="font-semibold">{speakerLabels[segment.speaker] || segment.speaker || "Speaker"}:</span> {segment.text}</p>) : <p className="text-sm text-muted-foreground">No speaker lines match this search.</p>}
     </div> : null}
     <label className="text-sm font-medium">Meeting notes<Textarea className="mt-1" rows={notesRows} value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Decisions, follow-ups, and candidate facts." /></label>
-    <p className="text-xs text-muted-foreground">{operatorCasesEnabled ? "Add a transcript or notes to save a meeting draft. Without a transcript, the after-call review is saved as blocked." : "Add a transcript or notes to save a meeting draft. Save the transcript before preparing after-call notes."}</p>
+    <p className="text-xs text-muted-foreground">Save recordings, transcripts, or notes. Candidate and job links are optional.</p>
   </div>;
 }
 
-function CaptureActions({ transcribing, makingNotes, saveDraft, createNotes }) {
-  return <div className="flex flex-wrap gap-2"><Button className="h-auto min-h-9 max-w-full whitespace-normal text-center" onClick={saveDraft} disabled={transcribing}>{transcribing ? "Transcribing..." : "Save meeting draft"}</Button><Button className="h-auto min-h-9 max-w-full whitespace-normal text-center" variant="outline" onClick={createNotes} disabled={makingNotes || transcribing}><ClipboardList size={14} />{makingNotes ? "Preparing..." : "Prepare after-call review"}</Button></div>;
+function CaptureActions({ transcribing, saveDraft }) {
+  return <div className="flex flex-wrap gap-2"><Button className="h-auto min-h-9 max-w-full whitespace-normal text-center" onClick={saveDraft} disabled={transcribing}>{transcribing ? "Saving recording..." : "Save meeting draft"}</Button></div>;
 }
 
 function CaptureHeader({ description }) {
@@ -172,7 +188,7 @@ function CaptureHeader({ description }) {
 
 function GuidedVariant(props) {
   return <Card><CaptureHeader description="Move from recruiting context to source capture, then save the draft." /><CardContent className="flex flex-col gap-5">
-    <section className="flex flex-col gap-3"><h3 className="text-sm font-semibold">Recruiting context</h3><RecruitingContext {...props} />{props.recruiting.phase === "loading" ? <p className="text-sm text-muted-foreground">Loading recruiting records...</p> : null}{props.recruiting.error ? <p role="alert" className="text-sm text-destructive">{props.recruiting.error}</p> : null}{props.recruiting.phase === "ready" && !props.recruiting.jobs.length ? <p className="text-sm text-muted-foreground">No active Tracker jobs are available. Refresh Tracker data, then return here.</p> : null}</section>
+    <section className="flex flex-col gap-3"><h3 className="text-sm font-semibold">Recruiting context</h3><RecruitingContext {...props} />{props.recruiting.phase === "loading" ? <p className="text-sm text-muted-foreground">Loading recruiting records...</p> : null}{props.recruiting.error ? <p role="alert" className="text-sm text-destructive">{props.recruiting.error}</p> : null}{props.recruiting.phase === "ready" && !props.recruiting.jobs.length ? <p className="text-sm text-muted-foreground">No active jobs are available. You can still save a recording or notes.</p> : null}</section>
     <section className="flex flex-col gap-3 border-t pt-5"><h3 className="text-sm font-semibold">Capture</h3><RecordingControls {...props} /></section>
     <section className="flex flex-col gap-3 border-t pt-5"><h3 className="text-sm font-semibold">Document</h3><NotesEditor {...props} transcriptRows={8} notesRows={5} /><CaptureActions {...props} /></section>
   </CardContent></Card>;
@@ -180,7 +196,7 @@ function GuidedVariant(props) {
 
 function SplitVariant(props) {
   return <Card><CaptureHeader description="Keep call controls and source notes visible together." /><CardContent className="grid gap-5 lg:grid-cols-[minmax(16rem,0.8fr)_minmax(0,1.2fr)]">
-    <div className="flex flex-col gap-4"><RecruitingContext {...props} />{props.recruiting.phase === "loading" ? <p className="text-sm text-muted-foreground">Loading recruiting records...</p> : null}{props.recruiting.error ? <p role="alert" className="text-sm text-destructive">{props.recruiting.error}</p> : null}{props.recruiting.phase === "ready" && !props.recruiting.jobs.length ? <p className="text-sm text-muted-foreground">No active Tracker jobs are available. Refresh Tracker data, then return here.</p> : null}<RecordingControls {...props} /></div>
+    <div className="flex flex-col gap-4"><RecruitingContext {...props} />{props.recruiting.phase === "loading" ? <p className="text-sm text-muted-foreground">Loading recruiting records...</p> : null}{props.recruiting.error ? <p role="alert" className="text-sm text-destructive">{props.recruiting.error}</p> : null}{props.recruiting.phase === "ready" && !props.recruiting.jobs.length ? <p className="text-sm text-muted-foreground">No active jobs are available. You can still save a recording or notes.</p> : null}<RecordingControls {...props} /></div>
     <div className="flex flex-col gap-4"><NotesEditor {...props} /><CaptureActions {...props} /></div>
   </CardContent></Card>;
 }
@@ -188,7 +204,7 @@ function SplitVariant(props) {
 function TranscriptFirstVariant(props) {
   return <Card><CaptureHeader description="Start with the transcript, then attach recruiting context and save." /><CardContent className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_18rem]">
     <div className="flex flex-col gap-4"><NotesEditor {...props} transcriptRows={12} notesRows={4} /><CaptureActions {...props} /></div>
-    <aside className="flex flex-col gap-4 rounded-lg border bg-muted/20 p-4"><h3 className="text-sm font-semibold">Attach context</h3><RecruitingContext {...props} />{props.recruiting.phase === "loading" ? <p className="text-sm text-muted-foreground">Loading recruiting records...</p> : null}{props.recruiting.error ? <p role="alert" className="text-sm text-destructive">{props.recruiting.error}</p> : null}{props.recruiting.phase === "ready" && !props.recruiting.jobs.length ? <p className="text-sm text-muted-foreground">No active Tracker jobs are available. Refresh Tracker data, then return here.</p> : null}<RecordingControls {...props} /></aside>
+    <aside className="flex flex-col gap-4 rounded-lg border bg-muted/20 p-4"><h3 className="text-sm font-semibold">Attach context</h3><RecruitingContext {...props} />{props.recruiting.phase === "loading" ? <p className="text-sm text-muted-foreground">Loading recruiting records...</p> : null}{props.recruiting.error ? <p role="alert" className="text-sm text-destructive">{props.recruiting.error}</p> : null}{props.recruiting.phase === "ready" && !props.recruiting.jobs.length ? <p className="text-sm text-muted-foreground">No active jobs are available. You can still save a recording or notes.</p> : null}<RecordingControls {...props} /></aside>
   </CardContent></Card>;
 }
 

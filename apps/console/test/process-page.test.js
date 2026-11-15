@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { buildProcessSummary, hasCandidateProfileData, loadProcessData } from "../src/features/recruiting/processService.js";
+import { buildProcessSummary, hasCandidateProfileData, loadJobRailData, loadProcessData } from "../src/features/recruiting/processService.js";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -73,6 +73,32 @@ test("process summary keeps active jobs honest when candidate stages are unavail
   assert.deepEqual(summary.blocked, []);
 });
 
+test("job rail loads active jobs without downloading candidate or action records", async () => {
+  const tables = [];
+  const client = {
+    from(table) {
+      tables.push(table);
+      const builder = {
+        select() { return builder; },
+        eq() { return builder; },
+        order() {
+          return Promise.resolve({
+            data: [{ job_id: 10, job_title: "Plant Manager", company: "Example Industries", status: "Active" }],
+            error: null,
+          });
+        },
+      };
+      return builder;
+    },
+  };
+
+  const summary = await loadJobRailData(client);
+  assert.deepEqual(tables, ["tracker_jobs"]);
+  assert.equal(summary.jobs.length, 1);
+  assert.equal(summary.candidateDataAvailable, false);
+  assert.deepEqual(summary.jobs[0].stageCounts, {});
+});
+
 test("profile evidence prevents a false missing-source block", () => {
   assert.equal(hasCandidateProfileData({ profile_url: "https://example.invalid/profile" }), true);
   assert.equal(hasCandidateProfileData({ current_title: "Controller" }), true);
@@ -120,16 +146,20 @@ test("stage counts select only job_id and stage and dedupe between JobRail and P
     },
   };
   const [railData, processData] = await Promise.all([
-    loadProcessData(client),
+    loadJobRailData(client),
     loadProcessData(client),
   ]);
   assert.equal(stageCountCalls, 1);
   assert.deepEqual(selected.find(([table]) => table === "candidate_review_feed"), ["candidate_review_feed", "job_id,stage"]);
   assert.ok(selected.some(([table, columns]) => table === "candidate_review_feed" && columns === "job_id,stage,candidate_source,candidate_source_id,candidate_name,resume_text,profile_url,profile_summary,fit_evidence,current_title,current_company"));
-  assert.deepEqual(railData.jobs, processData.jobs);
+  assert.deepEqual(selected.filter(([table]) => table === "tracker_jobs").length, 2);
+  assert.equal(railData.jobs[0].candidateCount, null);
+  assert.deepEqual(railData.jobs[0].stageCounts, {});
+  assert.equal(processData.jobs[0].candidateCount, 1);
+  assert.equal(processData.jobs[0].stageCounts.Applied, 1);
   const rail = fs.readFileSync(path.resolve(root, "src/features/workbench/JobRail.jsx"), "utf8");
   const page = fs.readFileSync(path.resolve(root, "src/features/recruiting/ProcessPage.jsx"), "utf8");
-  assert.match(rail, /loadProcessData\(/);
+  assert.match(rail, /loadJobRailData\(/);
   assert.match(page, /loadProcessData\(/);
 });
 

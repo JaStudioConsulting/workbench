@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { request as httpRequest } from "node:http";
+import { Readable } from "node:stream";
 import test from "node:test";
 import { createApp } from "../app.js";
 import { createConfiguredAuth, parseAllowedGoogleEmails, parseExactHttpsOrigins } from "../src/auth.js";
@@ -42,7 +43,7 @@ const authenticated = {
 };
 authenticated.getAuthoritativeSession = authenticated.getSession;
 
-async function request(app, method, path, { body, rawBody, headers = {} } = {}) {
+async function request(app, method, path, { body, rawBody, headers = {}, rawResponse = false } = {}) {
   const server = await new Promise((resolve) => { const value = app.listen(0, () => resolve(value)); });
   try {
     const payload = rawBody ?? (body === undefined ? undefined : JSON.stringify(body));
@@ -52,11 +53,7 @@ async function request(app, method, path, { body, rawBody, headers = {} } = {}) 
       const req = httpRequest({ port: server.address().port, path, method, headers: { ...resolvedHeaders, ...(payload ? { ...(!headers["content-type"] ? { "content-type": "application/json" } : {}), "content-length": Buffer.byteLength(payload) } : {}) } }, (res) => {
         let data = "";
         res.on("data", (chunk) => { data += chunk; });
-        res.on("end", () => {
-          let body = null;
-          try { body = data ? JSON.parse(data) : null; } catch { body = data; }
-          resolve({ status: res.statusCode, headers: res.headers, body });
-        });
+        res.on("end", () => resolve({ status: res.statusCode, headers: res.headers, body: rawResponse ? data : data ? JSON.parse(data) : null }));
       });
       req.on("error", reject);
       req.end(payload);
@@ -76,6 +73,17 @@ test("public routes work server-to-server while browser CORS is strict", async (
   assert.equal(allowed.headers["access-control-allow-origin"], browserOrigin);
   assert.equal(allowed.headers["access-control-allow-credentials"], "true");
   assert.equal((await request(app, "GET", "/healthz", { headers: { origin: "https://untrusted.test" } })).status, 403);
+});
+
+test("public capabilities keep every AI feature disabled regardless of credentials", async () => {
+  const app = await createApp({
+    env: { ...testEnv, ANTHROPIC_API_KEY: "configured-key", WORKBENCH_AI_ENABLED: "1", WORKBENCH_TRANSCRIPTION_ENABLED: "1" },
+    recruitmentContextLoader: testRecruitmentContext,
+  });
+  const response = await request(app, "GET", "/api/capabilities");
+  assert.equal(response.status, 200);
+  assert.deepEqual(response.body, { ai: false, transcription: false, automation: true });
+  assert.equal(response.headers["cache-control"], "no-store");
 });
 
 test("private Supabase bootstrap and Better Auth Google sign-in report separate capabilities", async () => {
@@ -197,82 +205,80 @@ test("Tracker import gateway wiring permits Supabase-only file imports and keeps
   assert.equal(importCalls.some((call) => call.path === "rpc/confirm_tracker_import"), true);
 });
 
-test("meeting transcription stays authenticated and uses the injected local adapter", async () => {
-  const calls = [];
+test("meeting transcription and status never invoke the model adapter", async () => {
+  let modelCalls = 0;
+  const forbidden = async () => { modelCalls += 1; throw new Error("No model operation may run"); };
   const app = await createApp({
-    env: supabaseMeetingEnv,
+    env: { ...supabaseMeetingEnv, ANTHROPIC_API_KEY: "configured-key" },
     recruitmentContextLoader: testRecruitmentContext,
     authConfig: authenticated,
     candidateFetch: supabaseFetch,
     captureManager: { available: async () => false },
-    transcriptionAdapter: {
-      available: async () => true,
-      transcribe: async (input) => {
-        calls.push(input);
-        return { transcript: "Source audio words.", source: "workbench_native" };
-      },
-    },
+    transcriptionAdapter: { available: forbidden, transcribe: forbidden, transcribeFile: forbidden },
   });
+  const headers = { authorization: "Bearer synthetic-review" };
   const response = await request(app, "POST", "/api/meetings/transcribe", {
-    rawBody: Buffer.from("synthetic-audio"),
-    headers: { authorization: "Bearer synthetic-review", "content-type": "audio/mp4" },
+    rawBody: Buffer.from("synthetic-audio"), headers: { ...headers, "content-type": "audio/mp4" },
   });
-  assert.equal(response.status, 200);
-  assert.deepEqual(response.body, { ok: true, transcript: "Source audio words.", source: "workbench_native" });
-  assert.equal(calls.length, 1);
-  assert.equal(calls[0].contentType, "audio/mp4");
-  assert.deepEqual(calls[0].audio, Buffer.from("synthetic-audio"));
-  const status = await request(app, "GET", "/api/meetings/status", {
-    headers: { authorization: "Bearer synthetic-review" },
-  });
+  assert.equal(response.status, 409);
+  assert.equal(response.body.error.code, "AI_DISABLED");
+  const status = await request(app, "GET", "/api/meetings/status", { headers });
   assert.equal(status.status, 200);
-  assert.deepEqual(status.body, { available: true, enhanced: false, captureAvailable: false });
+  assert.deepEqual(status.body, { available: false, transcription: false, transcriptionStatus: "disabled", enhanced: false, captureAvailable: false });
+  assert.equal(modelCalls, 0);
 });
 
-test("meeting status reports the enhancement flag without exposing runtime paths", async () => {
+test("meeting status reports capture availability separately from disabled transcription", async () => {
   const app = await createApp({
     env: { ...supabaseMeetingEnv, WORKBENCH_NATIVE_MEETING_ENHANCEMENTS: "1" },
     recruitmentContextLoader: testRecruitmentContext,
     authConfig: authenticated,
     candidateFetch: supabaseFetch,
-    captureManager: { available: async () => false },
-    transcriptionAdapter: { available: async () => true, transcribe: async () => ({ transcript: "Source words." }) },
+    captureManager: { available: async () => true },
+    transcriptionAdapter: { available: async () => { throw new Error("Do not inspect the model"); } },
   });
   const response = await request(app, "GET", "/api/meetings/status", {
     headers: { authorization: "Bearer synthetic-review" },
   });
-  assert.deepEqual(response.body, { available: true, enhanced: true, captureAvailable: false });
+  assert.deepEqual(response.body, { available: false, transcription: false, transcriptionStatus: "disabled", enhanced: true, captureAvailable: true });
   assert.doesNotMatch(JSON.stringify(response.body), /path|native\/bin/i);
 });
 
-test("native stop is owner-bound and finalizes plus transcribes only once", async () => {
+test("native stop is owner-bound, finalizes once, and preserves audio without transcription", async () => {
   let stops = 0;
-  let transcriptions = 0;
+  let modelCalls = 0;
   let saved = null;
+  const forbidden = async () => { modelCalls += 1; throw new Error("No model operation may run"); };
   const captureManager = {
     initialize: async () => {},
     available: async () => true,
-    start: async ({ jobId, candidateId }) => ({ id: "capture-1", state: "recording", jobId, candidateId, usedSystemAudio: true }),
-    stop: async () => { stops += 1; await new Promise((resolve) => setTimeout(resolve, 10)); return { id: "capture-1", state: "captured", jobId: "job-1", candidateId: "candidate-1", warning: null }; },
-    audioInfo: async (_id, source, ownerId) => {
+    start: async ({ jobId, candidateId, ownerId }) => {
       assert.equal(ownerId, supabaseUserId);
-      return { path: `/private/${source}.wav` };
+      return { id: "capture-1", state: "recording", jobId, candidateId, usedSystemAudio: true };
+    },
+    stop: async (_id, ownerId) => {
+      assert.equal(ownerId, supabaseUserId);
+      stops += 1;
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      return { id: "capture-1", state: "captured", jobId: "job-1", candidateId: "candidate-1", warning: null };
+    },
+    audioInfo: async (_id, _source, ownerId) => {
+      assert.equal(ownerId, supabaseUserId);
+      const audio = Buffer.from("saved-audio");
+      return { path: "/private/recording.wav", contentType: "audio/wav", size: audio.length, stream: () => Readable.from([audio]) };
     },
     loadFinalizedResponse: async (_id, ownerId) => { assert.equal(ownerId, supabaseUserId); return saved; },
     saveFinalizedResponse: async (_id, ownerId, response) => { assert.equal(ownerId, supabaseUserId); saved = response; },
   };
-  const app = await createApp({
+  const appOptions = {
     env: supabaseMeetingEnv,
     recruitmentContextLoader: testRecruitmentContext,
     authConfig: authenticated,
     candidateFetch: supabaseFetch,
     captureManager,
-    transcriptionAdapter: {
-      available: async () => true,
-      transcribe: async () => ({ transcript: "unused" }),
-      transcribeFile: async ({ path }) => { transcriptions += 1; return { transcript: path.includes("microphone") ? "Hello" : "Hi", segments: [], model: "test" }; },
-    },
-  });
+    transcriptionAdapter: { available: forbidden, transcribe: forbidden, transcribeFile: forbidden },
+  };
+  const app = await createApp(appOptions);
   const headers = { authorization: "Bearer synthetic-review" };
   const started = await request(app, "POST", "/api/meetings/capture/start", { headers, body: { jobId: "job-1", candidateId: "candidate-1" } });
   assert.equal(started.status, 201);
@@ -282,36 +288,42 @@ test("native stop is owner-bound and finalizes plus transcribes only once", asyn
   ]);
   assert.equal(first.status, 200);
   assert.deepEqual(second.body, first.body);
+  assert.equal(first.body.transcription.status, "disabled");
+  assert.equal(first.body.transcript, "");
+  assert.deepEqual(first.body.segments, []);
+  assert.equal(first.body.capture.audioUrl, "/api/meetings/capture/capture-1/audio");
   assert.equal(stops, 1);
-  assert.equal(transcriptions, 2);
+  const audio = await request(app, "GET", first.body.capture.audioUrl, { headers, rawResponse: true });
+  assert.equal(audio.status, 200);
+  assert.equal(audio.headers["content-type"], "audio/wav");
+  assert.equal(audio.body, "saved-audio");
+  assert.equal((await request(app, "GET", first.body.capture.audioUrl)).status, 401);
   const retried = await request(app, "POST", "/api/meetings/capture/capture-1/stop", { headers });
   assert.deepEqual(retried.body, first.body);
+  const restarted = await createApp(appOptions);
+  const recovered = await request(restarted, "POST", "/api/meetings/capture/capture-1/stop", { headers });
+  assert.deepEqual(recovered.body, first.body);
   assert.equal(stops, 1);
-  assert.equal(transcriptions, 2);
+  assert.equal(modelCalls, 0);
 });
 
-test("meeting transcription requires an approved Supabase session even in local trusted mode", async () => {
+test("disabled transcription retains Supabase authentication even in local trusted mode", async () => {
   const app = await createApp({
     env: { ...supabaseMeetingEnv, LOCAL_TRUSTED_MODE: "1" },
     recruitmentContextLoader: testRecruitmentContext,
     authConfig: { enabled: false, reason: "Authentication unavailable" },
     candidateFetch: supabaseFetch,
-    transcriptionAdapter: {
-      available: async () => true,
-      transcribe: async () => ({ transcript: "Local source audio.", source: "workbench_native" }),
-    },
+    transcriptionAdapter: { transcribe: async () => { throw new Error("No model operation may run"); } },
   });
   const transcription = await request(app, "POST", "/api/meetings/transcribe", {
     rawBody: Buffer.from("synthetic-audio"),
     headers: { "content-type": "audio/wav", origin: "__same__", authorization: "Bearer synthetic-review" },
   });
-  assert.equal(transcription.status, 200);
-  assert.equal(transcription.body.transcript, "Local source audio.");
+  assert.equal(transcription.status, 409);
+  assert.equal(transcription.body.error.code, "AI_DISABLED");
   assert.equal((await request(app, "GET", "/api/mcp/discovery")).status, 503);
-
   assert.equal((await request(app, "POST", "/api/meetings/transcribe", {
-    rawBody: Buffer.from("synthetic-audio"),
-    headers: { "content-type": "audio/wav" },
+    rawBody: Buffer.from("synthetic-audio"), headers: { "content-type": "audio/wav" },
   })).status, 401);
 });
 
@@ -389,7 +401,7 @@ test("Recruiter context loads once at startup and only the requested guide loads
   assert.deepEqual(assertedPaths, ["_JA-RULES.md", "recruiter/modules/vet/GUIDE.md"]);
 });
 
-test("all recruiter routes fail together when MCP startup initialization fails", async () => {
+test("MCP fails closed while AI remains disabled when recruiter startup fails", async () => {
   let contextLoads = 0;
   let factoryCalls = 0;
   const app = await createApp({
@@ -403,7 +415,7 @@ test("all recruiter routes fail together when MCP startup initialization fails",
   const supabaseHeaders = { authorization: "Bearer synthetic-supabase", accept: "application/json" };
 
   assert.equal((await request(app, "GET", "/api/mcp/discovery", { headers })).status, 503);
-  assert.equal((await request(app, "POST", "/api/workflows/after-call/prepare", { headers: supabaseHeaders, body: {} })).status, 503);
+  assert.equal((await request(app, "POST", "/api/workflows/after-call/prepare", { headers: supabaseHeaders, body: {} })).body.error.code, "AI_DISABLED");
   assert.equal((await request(app, "POST", "/mcp", { headers, body: { jsonrpc: "2.0", id: 1, method: "tools/list", params: {} } })).status, 503);
   assert.equal(contextLoads, 1);
   assert.equal(factoryCalls, 1);
@@ -437,15 +449,15 @@ test("public safety status contains only supported fields", async () => {
   assert.equal(response.body.externalWrites, false);
 });
 
-test("after-call endpoint reports the missing model configuration instead of returning a template", async () => {
-  const app = await createApp({ env: testEnv, candidateFetch: supabaseFetch, authConfig: authenticated, recruitmentContextLoader: testRecruitmentContext });
+test("after-call endpoint is disabled even when model credentials are configured", async () => {
+  const app = await createApp({ env: { ...testEnv, ANTHROPIC_API_KEY: "configured-key" }, candidateFetch: supabaseFetch, authConfig: authenticated, recruitmentContextLoader: testRecruitmentContext });
   const response = await request(app, "POST", "/api/workflows/after-call/prepare", {
     headers: { authorization: "Bearer synthetic-supabase" },
     body: { candidateId: "sourcing:7", name: "Avery Sampleton", title: "Maintenance Supervisor", resumeText: "Avery Sampleton led 12 maintenance technicians.", jobDescription: "Maintenance Manager" },
   });
-  assert.equal(response.status, 503);
-  assert.equal(response.body.error.code, "AI_NOT_CONFIGURED");
-  assert.match(response.body.error.message, /not configured/i);
+  assert.equal(response.status, 409);
+  assert.equal(response.body.error.code, "AI_DISABLED");
+  assert.match(response.body.error.message, /disabled/i);
 });
 
 test("after-call gateway accepts bounded source bundles and returns a clear 413 beyond its JSON ceiling", async () => {
@@ -455,8 +467,8 @@ test("after-call gateway accepts bounded source bundles and returns a clear 413 
     headers,
     body: { candidateId: "sourcing:7", name: "Avery Sampleton", title: "Maintenance Supervisor", resumeText: "Resume evidence. ".repeat(9000), jobDescription: "Maintenance Manager", transcriptText: "Call evidence. ".repeat(700) },
   });
-  assert.equal(bounded.status, 503);
-  assert.equal(bounded.body.error.code, "AI_NOT_CONFIGURED");
+  assert.equal(bounded.status, 409);
+  assert.equal(bounded.body.error.code, "AI_DISABLED");
 
   const oversized = await request(app, "POST", "/api/workflows/after-call/prepare", {
     headers,

@@ -5,7 +5,8 @@ import { transformWithEsbuild } from "vite";
 
 test("JobRail loads real process data and exposes job selection plus recruiting tools", async () => {
   const source = await readFile(new URL("../src/features/workbench/JobRail.jsx", import.meta.url), "utf8");
-  assert.match(source, /loadProcessData\(/);
+  assert.match(source, /loadJobRailData\(\)/);
+  assert.doesNotMatch(source, /loadProcessData\(\)/);
   assert.match(source, /onSelectJob\?\.\(\{ id: job\.id, loxoJobId: job\.id, title: job\.title, company: job\.company \}\)/);
   assert.match(source, /Object\.entries\(job\.stageCounts \|\| \{\}\)\.filter/);
   assert.match(source, /Number\(count\) > 0/);
@@ -57,5 +58,5 @@ test("Meetings follows the Candidates job unless unsaved meeting content is pres
   ]);
   assert.match(view, /<MeetingsWorkspace launchContext=\{meetingLaunch\} selectedJob=\{selectedJob\}/);
   assert.match(meetings, /workspaceSelectedJob\?\.loxoJobId \|\| workspaceSelectedJob\?\.id/);
-  assert.match(meetings, /meetingDraftDirty \|\| transcript\.trim\(\) \|\| notes\.trim\(\) \|\| recording\?\.active \|\| pendingAudio/);
+  assert.match(meetings, /meetingDraftDirty \|\| transcript\.trim\(\) \|\| notes\.trim\(\) \|\| recording\?\.active/);
 });

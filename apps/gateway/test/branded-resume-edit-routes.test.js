@@ -3,6 +3,7 @@ import express from "express";
 import test from "node:test";
 import { request as httpRequest } from "node:http";
 import { registerBrandedResumeEditRoutes } from "../src/branded-resume-edit-routes.js";
+import { assembleTemplates } from "../src/automation-domain.js";
 
 const ownerId = "11111111-1111-4111-8111-111111111111";
 const caseId = "22222222-2222-4222-8222-222222222222";
@@ -28,15 +29,15 @@ const sections = {
 const originalSections = structuredClone(sections);
 originalSections.summary[0].text = "Plant maintenance leader";
 
-function makeApp({ rpcStatus = 201, rpcBody } = {}) {
+function makeApp({ rpcStatus = 201, rpcBody, caseType = "after_call", artifactContent } = {}) {
   const app = express();
   app.use(express.json());
   const calls = [];
-  const caseRow = { id: caseId, owner_id: ownerId, case_type: "after_call", case_key: "after_call:sourcing:7:9" };
+  const caseRow = { id: caseId, owner_id: ownerId, case_type: caseType, case_key: caseType === "automation" ? "automation:sourcing:7:job:none" : "after_call:sourcing:7:9" };
   const artifact = {
     id: artifactId, case_id: caseId, owner_id: ownerId, artifact_type: "branded_resume",
     updated_at: updatedAt, review_state: "approved",
-    content: {
+    content: artifactContent || {
       text: "Original resume text", sections: originalSections,
       audit: { supportedClaims: [{ text: evidence.quote, evidence: [evidence] }] },
       pdf: { fileName: "original.pdf" },
@@ -150,4 +151,46 @@ test("resume edit preserves the candidate identity gate when the edited name dif
   assert.equal(result.body.artifact.content.audit.identityReviewRequired, true);
   assert.equal(result.body.artifact.content.audit.finalizationBlocked, true);
   assert.equal(result.body.artifact.content.editReview.identityReviewRequired, true);
+});
+
+test("automated resume templates support human edits and retrying failed PDF export", async (t) => {
+  for (const retry of [false, true]) await t.test(retry ? "retry saved text after PDF failure" : "edit template wording", async () => {
+    const drafts = await assembleTemplates({
+      candidate: { id: "sourcing:7", candidate_name: "Avery Sample" }, resume: originalSections,
+    }, { renderer: async () => {
+      if (retry) throw new Error("Synthetic PDF failure");
+      return { fileName: "template.pdf" };
+    } });
+    const template = drafts.outputs.find((output) => output.type === "branded_resume").content;
+    assert.ok(template.audit);
+    assert.deepEqual(template.audit.supportedClaims, []);
+    if (retry) {
+      assert.equal(template.pdf, null);
+      assert.equal(template.exportStatus, "not_rendered");
+    }
+    const { app, calls } = makeApp({ caseType: "automation", artifactContent: template });
+    const editedSections = structuredClone(template.sections);
+    if (!retry) editedSections.summary[0].text = "Experienced maintenance leader";
+    const result = await request(app, { artifactId, expectedUpdatedAt: updatedAt, sections: editedSections });
+    assert.equal(result.status, 201);
+    assert.equal(result.body.artifact.generated_by, "human");
+    assert.equal(result.body.artifact.review_state, "draft");
+    assert.deepEqual(result.body.artifact.content.sections, editedSections);
+    assert.deepEqual(result.body.artifact.content.audit, template.audit);
+    assert.equal(result.body.artifact.content.pdf.mimeType, "application/pdf");
+    assert.equal(result.body.artifact.content.exportStatus, "draft_rendered");
+    assert.equal(result.body.artifact.content.exportMessage, null);
+    assert.deepEqual(result.body.artifact.content.editReview.humanEditedPaths, retry ? [] : ["resume.summary[0]"]);
+    assert.equal(calls.filter((call) => call.kind === "render").length, 1);
+  });
+});
+
+test("after-call resumes still require their saved audit before edits or export", async () => {
+  const { app, calls, artifact } = makeApp();
+  delete artifact.content.audit;
+  const result = await request(app, { artifactId, expectedUpdatedAt: updatedAt, sections: originalSections });
+  assert.equal(result.status, 409);
+  assert.equal(result.body.error.code, "STRUCTURED_RESUME_UNAVAILABLE");
+  assert.equal(calls.some((call) => call.kind === "render"), false);
+  assert.equal(calls.some((call) => call.kind === "fetch" && String(call.url).includes("/rpc/")), false);
 });

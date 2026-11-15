@@ -176,40 +176,21 @@ function aiError(res, error) {
   ));
 }
 
-export function registerAiRoutes(app, {
-  authenticated,
-  env = process.env,
-  clientFactory = (apiKey) => new Anthropic({ apiKey }),
-} = {}) {
+export function registerAiRoutes(app, { authenticated } = {}) {
   if (typeof authenticated !== "function") throw new Error("authenticated middleware is required");
 
   app.get("/api/ai/status", authenticated, (_req, res) => {
-    res.json({ available: Boolean(env.ANTHROPIC_API_KEY) });
+    res.set("Cache-Control", "private, no-store");
+    return res.json({ available: false, disabled: true });
   });
 
-  app.post("/api/fit/evaluate", authenticated, async (req, res) => {
-    const input = FitInputSchema.safeParse(req.body);
-    if (!input.success) return validationError(res, input.error);
-    if (!env.ANTHROPIC_API_KEY) return res.status(503).json(errorEnvelope("AI_NOT_CONFIGURED", "AI check not set up"));
-    try {
-      const result = await evaluateWithAi(clientFactory(env.ANTHROPIC_API_KEY), env.ANTHROPIC_MODEL || "claude-sonnet-5-5", input.data);
-      return res.json(result);
-    } catch (error) {
-      return aiError(res, error);
-    }
-  });
-
-  app.post("/api/outreach/personalize", authenticated, async (req, res) => {
-    const input = OutreachInputSchema.safeParse(req.body);
-    if (!input.success) return validationError(res, input.error);
-    if (!env.ANTHROPIC_API_KEY) return res.status(503).json(errorEnvelope("AI_NOT_CONFIGURED", "AI check not set up"));
-    try {
-      const result = await personalizeWithAi(clientFactory(env.ANTHROPIC_API_KEY), env.ANTHROPIC_MODEL || "claude-sonnet-5-5", input.data);
-      return res.json(result);
-    } catch (error) {
-      return aiError(res, error);
-    }
-  });
+  // No environment setting or installed credential enables AI in this release.
+  // Keep these routes explicit so stale clients receive an actionable response.
+  const disabled = (_req, res) => res.status(409).json(errorEnvelope(
+    "AI_DISABLED", "AI and transcription are disabled in this release",
+  ));
+  app.post("/api/fit/evaluate", authenticated, disabled);
+  app.post("/api/outreach/personalize", authenticated, disabled);
 }
 
 export const aiSchemas = Object.freeze({ FitInputSchema, FitResultSchema, OutreachInputSchema, OutreachResultSchema });

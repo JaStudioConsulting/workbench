@@ -7,7 +7,7 @@
 - Tailscale and iPad access are off. Gmail integration is removed. Calendar, Google sign-in, and Google Sheets import by link are disabled by default; CSV/XLSX import works.
 - Tracker source tables remain read-only; existing review actions and drafts use RLS.
 - Migrations `008`–`011`, `020`–`022`, and operator/import migrations `023`–`029`, `031` are applied and verified in project `abnfffkmxqixrwzackjf`. Migration `030` remains deferred and is not applied.
-- Slow database reads on `candidate_review_feed` and presentations have a draft fix in `apps/gateway/migrations/032`; it is not applied. Branded resume PDF tests need Python `reportlab`.
+- Slow database reads on `candidate_review_feed` and presentations have a draft fix in `apps/gateway/migrations/034_rls_initplan_tracker_policies.sql` and `apps/gateway/migrations/035_rls_initplan_remaining_policies.sql`; they are not applied. Branded resume PDF tests need Python `reportlab`.
 
 ## Reviewed source and release gates
 
@@ -26,7 +26,7 @@ The operator approval desk remains behind `VITE_OPERATOR_CASES_ENABLED` (default
 
 ## Acceptance still required
 
-- Apply and verify migration `032` only through the approved hosted-database workflow.
+- Apply and verify migrations `034` and `035` only through the approved hosted-database workflow.
 - Install Python `reportlab` to run branded resume PDF tests.
 - Keep migration `030` deferred unless separately authorized; retention scheduling and cleanup remain unaccepted.
 

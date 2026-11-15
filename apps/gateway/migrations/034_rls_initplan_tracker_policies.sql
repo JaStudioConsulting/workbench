@@ -1,5 +1,5 @@
 -- Step 1 of 2: evaluate the recruiter gate once per statement on the four tables
--- behind the failing views. 033 covers every other table and is applied only
+-- behind the failing views. 035 covers every other table and is applied only
 -- after this step is verified to fix the plans (a deliberately narrow first
 -- change to a live database, for a fix that is still unproven).
 --
@@ -45,7 +45,7 @@ ALTER POLICY "ja_read" ON public.tracker_submissions
   USING ((select public.is_authorized_recruiter()));
 
 -- ===========================================================================
--- ROLLBACK (commented out). Restores the pre-032 expressions exactly as stored
+-- ROLLBACK (commented out). Restores the pre-034 expressions exactly as stored
 -- in pg_policies on 2026-11-15 (function call qualified with public. only).
 -- ===========================================================================
 -- ALTER POLICY "ja_delete" ON public.candidate_review_actions USING (public.is_authorized_recruiter());
@@ -80,7 +80,7 @@ ALTER POLICY "ja_read" ON public.tracker_submissions
 --    or secret store, never typed into the repo):
 --      psql "$DATABASE_URL" -v claims='{"role":"authenticated","email":"<runner supplies>"}' -f verify.sql
 --    Expect an InitPlan for is_authorized_recruiter and hash joins, and a
---    runtime well under the 8s statement timeout (compare with the pre-032
+--    runtime well under the 8s statement timeout (compare with the pre-034
 --    plan).
 -- BEGIN;
 -- SET LOCAL ROLE authenticated;

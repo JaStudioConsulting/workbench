@@ -11,7 +11,7 @@ import { updateMpcArtifact } from "./mpcService.js";
 import { renderBrandedResumeVersion } from "./resumeVersionClient.js";
 
 const labels = {
-  after_call: "After-call case", mpc: "MPC case", daily: "Daily review case",
+  automation: "Automatic templates", after_call: "After-call case", mpc: "MPC case", daily: "Daily review case",
   branded_resume: "Branded resume", candidate_submission: "Candidate submission",
   presentation_email: "Presentation email", loxo_update: "Loxo update bullets",
   candidate_positioning: "Candidate positioning", target_companies: "Target companies",
@@ -30,8 +30,8 @@ const actionStatusLabels = { proposed: "Needs review", approved: "Approved", que
 const operationLabels = { manual_loxo_entry: "Manual Loxo entry", review_submission: "Review candidate submission", create_gmail_draft: "Create an email draft" };
 
 function fieldText(field) {
-  if (field && typeof field === "object" && "value" in field) return field.value == null || field.value === "" ? "Not provided" : String(field.value);
-  return field == null || field === "" ? "Not provided" : String(field);
+  if (field && typeof field === "object" && "value" in field) return field.value == null || field.value === "" ? "Not recorded" : String(field.value);
+  return field == null || field === "" ? "Not recorded" : String(field);
 }
 
 function EvidenceQuotes({ evidence = [] }) {
@@ -41,7 +41,7 @@ function EvidenceQuotes({ evidence = [] }) {
 }
 
 function displayPlainText(content = {}, type = "") {
-  if (type === "candidate_submission") return "Submission fields are shown below.";
+  if (type === "candidate_submission") return Object.entries(content.fields || {}).map(([key,value]) => `${submissionLabels[key] || key}: ${Array.isArray(value) ? value.map(x => x.text).join("\n") || "Not recorded" : fieldText(value)}`).join("\n\n");
   if (type === "candidate_positioning") return "Candidate positioning is shown below.";
   if (type === "target_companies") return "Target companies are shown below.";
   if (type === "contacts") return "Contact details are shown below.";
@@ -115,7 +115,7 @@ function ArtifactContent({ artifact }) {
     }
     case "presentation_email":
     case "outreach_draft":
-      return <div className="grid gap-2 rounded-md border p-3"><p className="text-sm"><strong>Subject:</strong> {content.subject || "Not provided"}</p><div><h4 className="text-xs font-medium text-muted-foreground">Message</h4><p className="mt-1 whitespace-pre-wrap text-sm">{content.body || "No message text was saved."}</p></div>{artifact.artifact_type === "presentation_email" ? <p className="text-xs text-muted-foreground">{content.attachmentStatus === "generated" ? "An attachment was generated." : "No attachment was generated."}</p> : null}</div>;
+      return <div className="grid gap-2 rounded-md border p-3"><p className="text-sm"><strong>Subject:</strong> {content.subject || "Not recorded"}</p><div><h4 className="text-xs font-medium text-muted-foreground">Message</h4><p className="mt-1 whitespace-pre-wrap text-sm">{content.body || "No message text was saved."}</p></div>{artifact.artifact_type === "presentation_email" ? <p className="text-xs text-muted-foreground">{content.attachmentStatus === "generated" ? "An attachment was generated." : "No attachment was generated."}</p> : null}</div>;
     case "loxo_update":
       return <ClaimList title="Proposed update notes" items={content.bullets} />;
     case "candidate_positioning":
@@ -206,6 +206,7 @@ function actionSnapshotMatches(action, artifact) {
 }
 
 function ArtifactCard({ artifact, versionNumber, blocked, busy, onSave, onReview }) {
+  blocked = blocked || ["needs_information", "failed", "outdated"].includes(artifact.content?.status);
   const [editing, setEditing] = useState(false);
   const [downloadError, setDownloadError] = useState("");
   const [value, setValue] = useState(() => artifact.content || {});
@@ -222,6 +223,8 @@ function ArtifactCard({ artifact, versionNumber, blocked, busy, onSave, onReview
       {evidence.length ? <details className="rounded-md border p-3 text-sm"><summary className="cursor-pointer font-medium">Source quotes ({evidence.length})</summary><ul className="mt-2 grid gap-2">{evidence.map((item, index) => <li key={`${item.source}:${index}`}><blockquote className="border-l-2 pl-3">“{item.quote}”</blockquote><p className="mt-1 text-xs text-muted-foreground">{item.source?.replaceAll("_", " ") || "Source not named"}</p></li>)}</ul></details> : null}
       {artifact.artifact_type === "branded_resume" && artifact.content?.exportStatus === "not_rendered" ? <p className="text-xs text-muted-foreground">{artifact.content.exportMessage || "This edited resume has no current PDF export."}</p> : null}
       {artifact.artifact_type === "branded_resume" && artifact.content?.pdf && !editing ? <div className="grid gap-1"><Button type="button" variant="outline" className="justify-self-start" onClick={() => { setDownloadError(""); try { downloadWorkflowResumePdf(artifact.content.pdf); } catch (error) { setDownloadError(error.message || "The resume PDF could not be downloaded."); } }}>Download resume PDF</Button><p className="text-xs text-muted-foreground">Draft for recruiter review.</p>{downloadError ? <p className="text-sm text-destructive" role="alert">{downloadError}</p> : null}</div> : null}
+      {artifact.artifact_type === "branded_resume" && artifact.content?.sections && !artifact.content?.pdf && !editing ? <Button variant="outline" disabled={busy} onClick={() => onSave(artifact, artifact.content)}>Retry PDF export</Button> : null}
+      {!editing ? <Button variant="outline" onClick={() => { const blob = new Blob([displayPlainText(artifact.content, artifact.artifact_type)], { type: "text/plain;charset=utf-8" }); const url = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = url; a.download = `${artifact.artifact_type}.txt`; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); }}>Download text</Button> : null}
       <div className="flex flex-wrap gap-2">
         {editing ? <><Button variant="outline" disabled={busy} onClick={async () => { const saved = await onSave(artifact, value); if (saved) setEditing(false); }}>Save edits</Button><Button type="button" variant="ghost" disabled={busy} onClick={() => { setValue(artifact.content || {}); setEditing(false); }}>Cancel edits</Button></> : editableTypes.includes(artifact.artifact_type) ? <Button variant="outline" disabled={busy} onClick={() => setEditing(true)}>Edit output</Button> : null}
         <Button disabled={busy || blocked || artifact.review_state === "approved"} onClick={() => onReview(artifact.id, "approved")}><Check size={15} />Approve output</Button>

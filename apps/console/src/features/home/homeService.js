@@ -7,9 +7,13 @@ function candidateKey(value = {}) {
 }
 
 function startOfDay(value) {
+  if (value == null || value === "") return null;
   const date = new Date(value);
   if (!Number.isFinite(date.getTime())) return null;
-  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const key = /^\d{4}-\d{2}-\d{2}$/.test(String(value)) ? String(value) : new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Toronto", year: "numeric", month: "2-digit", day: "2-digit",
+  }).format(date);
+  return new Date(`${key}T00:00:00.000Z`);
 }
 
 export function businessDaysSince(value, now = new Date()) {
@@ -18,13 +22,47 @@ export function businessDaysSince(value, now = new Date()) {
   if (!start || !end || start >= end) return 0;
   let count = 0;
   const cursor = new Date(start);
-  cursor.setDate(cursor.getDate() + 1);
+  cursor.setUTCDate(cursor.getUTCDate() + 1);
   while (cursor <= end) {
-    const day = cursor.getDay();
+    const day = cursor.getUTCDay();
     if (day !== 0 && day !== 6) count += 1;
-    cursor.setDate(cursor.getDate() + 1);
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
   }
   return count;
+}
+
+export function followUpsDue(outreach, replies, now = new Date()) {
+  return (outreach || []).flatMap((entry) => {
+    if (businessDaysSince(entry.createdAt, now) < 3) return [];
+    const email = String(entry.candidateEmail || "").trim().toLowerCase();
+    const replyKnown = Boolean(replies?.available && email);
+    const repliedAt = replyKnown ? replies.latestByEmail?.[email] : null;
+    if (repliedAt && Date.parse(repliedAt) >= Date.parse(entry.createdAt)) return [];
+    return [{ ...entry, replyStatus: replyKnown ? "not_detected" : "unknown" }];
+  });
+}
+
+export function leadRemindersDue(leads, now = new Date()) {
+  const today = startOfDay(now);
+  if (!today) return [];
+  return (leads || []).filter((lead) => {
+    const due = startOfDay(lead.next_date);
+    return due && due <= today;
+  }).sort((left, right) => String(left.next_date).localeCompare(String(right.next_date)));
+}
+
+export function latestReadyCaseDrafts(artifacts = [], cases = []) {
+  const caseById = new Map(cases.map((record) => [record.id, record]));
+  const latest = new Map();
+  for (const artifact of [...artifacts].sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))) {
+    const key = `${artifact.case_id}:${artifact.artifact_type}`;
+    if (!latest.has(key)) latest.set(key, artifact);
+  }
+  return [...latest.values()].filter((artifact) => {
+    const status = artifact.content?.status || artifact.content?.readiness;
+    return artifact.review_state === "draft" && caseById.has(artifact.case_id)
+      && !["needs_information", "needs_input", "failed", "not_available"].includes(status);
+  }).map((artifact) => ({ ...artifact, kind: artifact.artifact_type, title: caseById.get(artifact.case_id).title }));
 }
 
 export function groupWaitingActions(actions, candidates = []) {
@@ -63,33 +101,47 @@ async function checked(query, message) {
   return data || [];
 }
 
-export async function loadHomeData({ client = supabase, includeCases = false, force = false } = {}) {
-  const results = await Promise.allSettled([
-    checked(
+export async function loadHomeData({ client = supabase, now = new Date(), includeCases = true, force = false } = {}) {
+  const errors = {};
+  const loadPart = async (key, promise) => {
+    try { return await promise; }
+    catch (error) { errors[key] = error?.message || `This part of Today could not be loaded.`; return []; }
+  };
+  const [actions, candidates, cases, leads, outreach] = await Promise.all([
+    loadPart("waiting", checked(
       client.from("candidate_review_actions").select("id,job_id,candidate_source,candidate_source_id,action_type,activity_type,note,created_at,status").eq("status", "waiting_for_loxo").order("created_at", { ascending: true }),
       "Waiting actions could not be loaded",
-    ),
-    checked(
-      client.from("review_drafts").select("id,job_id,candidate_source,candidate_source_id,kind,status,created_at").eq("status", "ready").order("created_at", { ascending: false }),
-      "Ready drafts could not be loaded",
-    ),
-    readThroughCache(scopedReadKey("home:candidate-names", client), () => checked(
+    )),
+    loadPart("candidateNames", readThroughCache(scopedReadKey("home:candidate-names", client), () => checked(
       client.from("candidate_review_feed").select("candidate_source,candidate_source_id,candidate_name").limit(1000),
       "Candidate names could not be loaded",
-    ), { force }),
-    includeCases ? listOperatorCases({ client }) : Promise.resolve([]),
+    ), { force })),
+    includeCases ? loadPart("cases", listOperatorCases({ client })) : Promise.resolve([]),
+    loadPart("reminders", checked(
+      client.from("leads").select("id,company,contact,next_action,next_date,status").lte("next_date", startOfDay(now).toISOString().slice(0, 10)).order("next_date", { ascending: true }),
+      "Recorded reminders could not be loaded",
+    )),
+    loadPart("followUps", checked(
+      client.from("outreach_log").select("id,job_id,person_id,candidate_email,subject,created_at").order("created_at", { ascending: false }).limit(250),
+      "Recorded outreach could not be loaded",
+    )),
   ]);
-  const [actionsResult, draftsResult, candidatesResult, casesResult] = results;
-  const errors = {};
-  for (const [key, result] of [["waiting", actionsResult], ["drafts", draftsResult], ["candidateNames", candidatesResult], ["cases", casesResult]]) {
-    if (result.status === "rejected") errors[key] = result.reason?.message || "This part of Today could not be loaded.";
+  let drafts = [];
+  if (cases.length) {
+    const artifacts = await loadPart("drafts", checked(
+      client.from("case_artifacts").select("id,case_id,artifact_type,review_state,generated_by,created_at,content->status,content->readiness")
+        .in("case_id", cases.map((record) => record.id)).order("created_at", { ascending: false }).limit(250),
+      "Ready drafts could not be loaded",
+    ));
+    drafts = latestReadyCaseDrafts(artifacts.map((artifact) => ({ ...artifact, content: { status: artifact.status, readiness: artifact.readiness } })), cases);
   }
-  const actions = actionsResult.status === "fulfilled" ? actionsResult.value : [];
-  const candidates = candidatesResult.status === "fulfilled" ? candidatesResult.value : [];
+  const normalizedOutreach = outreach.map((entry) => ({ ...entry, candidateEmail: entry.candidate_email, createdAt: entry.created_at }));
   return {
     waiting: groupWaitingActions(actions, candidates),
-    drafts: draftsResult.status === "fulfilled" ? draftsResult.value : [],
-    cases: casesResult.status === "fulfilled" ? casesResult.value : [],
+    drafts,
+    cases,
+    followUps: followUpsDue(normalizedOutreach, { available: false, latestByEmail: {} }, now),
+    reminders: leadRemindersDue(leads, now),
     errors,
   };
 }

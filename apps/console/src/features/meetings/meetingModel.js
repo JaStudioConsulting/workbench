@@ -61,9 +61,19 @@ export function groupCalendarEvents(events, now = new Date()) {
   return grouped;
 }
 
-export function createMeetingDraft({ event = null, candidate = null, job = null, transcript = "", notes = "", recording = null, transcription = null, segments = [], speakers = [], speakerLabels = {}, existingId = null } = {}) {
+function meetingDraftId() {
+  if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
+  if (!globalThis.crypto?.getRandomValues) throw new Error("Secure draft identifiers are unavailable. Reload before saving.");
+  const bytes = globalThis.crypto.getRandomValues(new Uint8Array(16));
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = [...bytes].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
+export function createMeetingDraft({ event = null, candidate = null, job = null, transcript = "", notes = "", recording = null, transcription = null, segments = [], speakers = [], speakerLabels = {}, existingId = null, idempotencyKey = null } = {}) {
   return {
-    idempotencyKey: globalThis.crypto?.randomUUID?.() || `meeting-${Date.now()}`,
+    idempotencyKey: idempotencyKey || existingId || meetingDraftId(),
     existingId,
     event: event ? {
       title: event.title || "Untitled meeting",
@@ -71,16 +81,16 @@ export function createMeetingDraft({ event = null, candidate = null, job = null,
       end: event.end,
       joinUrl: safeJoinUrl(event.joinUrl),
     } : null,
-    candidate: candidate?.label ? { id: candidate.id || null, label: candidate.label.trim() } : null,
-    job: job?.label ? { id: job.id || null, label: job.label.trim() } : null,
+    candidate: candidate && (candidate.id != null || candidate.label) ? { id: candidate.id ?? null, label: String(candidate.label || "").trim() } : null,
+    job: job && (job.id != null || job.label) ? { id: job.id ?? null, label: String(job.label || "").trim() } : null,
     transcript: String(transcript || "").trim(),
     notes: String(notes || "").trim(),
-    transcriptStatus: String(transcript || "").trim() ? "ready" : "awaiting_transcription",
-    source: recording?.source || "browser_recording",
+    transcriptStatus: String(transcript || "").trim() ? "ready" : "awaiting_input",
+    source: recording?.source || "manual",
     recordingId: recording?.id || null,
     captureStatus: recording?.status || (String(transcript || "").trim() ? "transcribed" : "captured"),
     captureWarning: recording?.warning || null,
-    transcriptionStatus: transcription?.status || (String(transcript || "").trim() ? "ready" : "pending"),
+    transcriptionStatus: transcription?.status || (String(transcript || "").trim() ? "ready" : "disabled"),
     transcriptionWarning: transcription?.warning || null,
     transcriptionSource: transcription?.source || null,
     transcriptionModel: transcription?.model || null,

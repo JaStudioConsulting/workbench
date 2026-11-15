@@ -1,3 +1,4 @@
+import AutomationPanel from "../automation/AutomationPanel.jsx";
 import { useEffect, useState } from "react";
 import { AlertTriangle, FileCheck2, RefreshCw } from "lucide-react";
 import { Badge } from "../../components/ui/badge.tsx";
@@ -45,11 +46,12 @@ export default function ProcessPage() {
     return () => { active = false; };
   }, [caseState.requestId]);
 
-  if (state.status === "loading") return <LoadingState />;
-  if (state.status === "error") return <ErrorState message={state.error} onRetry={() => load(true)} />;
+  if (state.status === "loading") return <div className="flex flex-col gap-4"><AutomationPanel /><LoadingState /></div>;
+  if (state.status === "error") return <div className="flex flex-col gap-4"><AutomationPanel /><ErrorState message={state.error} onRetry={load} /></div>;
 
   const { jobs, blocked, candidateDataAvailable } = state.data;
   return <div className="flex flex-col gap-4" data-testid="live-process-view">
+    <AutomationPanel />
     {!candidateDataAvailable ? <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950" role="status">Active jobs loaded. Candidate stage counts are currently unavailable.</div> : null}
     {jobs.length ? <>
       <Card>
@@ -78,7 +80,7 @@ export default function ProcessPage() {
         {caseState.status === "loading" ? <p className="text-sm text-muted-foreground" role="status">Loading approval history…</p> : null}
         {caseState.status === "error" ? <div className="flex flex-wrap items-center justify-between gap-2" role="alert"><p className="text-sm text-destructive">{caseState.error}</p><Button type="button" size="sm" variant="outline" onClick={() => setCaseState((current) => ({ ...current, requestId: current.requestId + 1 }))}>Retry</Button></div> : null}
         {caseState.status === "ready" && !caseState.items.length ? <p className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">No approval cases are saved.</p> : null}
-        {caseState.items.length ? <ul className="grid gap-2 sm:grid-cols-2">{caseState.items.map((item) => <li key={item.id}><button type="button" className="w-full rounded-md border p-3 text-left hover:bg-muted/40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring" onClick={() => setSelectedCaseId(item.id)}><span className="block font-medium">{item.title || "Untitled case"}</span><span className="mt-1 block text-xs text-muted-foreground">{item.case_type === "mpc" ? "MPC" : "After call"} · {String(item.status || "unknown").replaceAll("_", " ")}</span></button></li>)}</ul> : null}
+        {caseState.items.length ? <ul className="grid gap-2 sm:grid-cols-2">{caseState.items.map((item) => <li key={item.id}><button type="button" className="w-full rounded-md border p-3 text-left hover:bg-muted/40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring" onClick={() => setSelectedCaseId(item.id)}><span className="block font-medium">{item.title || "Untitled case"}</span><span className="mt-1 block text-xs text-muted-foreground">{item.case_type === "automation" ? "Automatic templates" : item.case_type === "mpc" ? "MPC" : "After call"} · {String(item.status || "unknown").replaceAll("_", " ")}</span></button></li>)}</ul> : null}
       </CardContent>
       <OperatorCaseWorkspace open={Boolean(selectedCaseId)} caseId={selectedCaseId} onOpenChange={(open) => { if (!open) setSelectedCaseId(""); }} onChanged={() => setCaseState((current) => ({ ...current, requestId: current.requestId + 1 }))} />
     </Card> : null}

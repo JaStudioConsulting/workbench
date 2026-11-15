@@ -7,7 +7,7 @@
 - Gmail integration is removed. Calendar, Google sign-in, and Google Sheets import by link are off behind default-off flags `VITE_GOOGLE_CALENDAR_ENABLED` and `VITE_GOOGLE_WORKSPACE_ENABLED`. CSV/XLSX import works.
 - The interface is one screen: Jobs column, Candidates (People / Swipe / Board), Today, and Meetings. Map, Process, Leads, Settings, and Profile open as panels. The old 12 pages are not pages.
 - The top agent decides and delegates; use cheaper workers for hands-on work.
-- Open items: slow reads on `candidate_review_feed` and presentations have a draft fix in `apps/gateway/migrations/032`, not applied. Branded resume PDF tests need Python `reportlab`.
+- Open items: slow reads on `candidate_review_feed` and presentations have a draft fix in `apps/gateway/migrations/034_rls_initplan_tracker_policies.sql` and `apps/gateway/migrations/035_rls_initplan_remaining_policies.sql`, not applied. Branded resume PDF tests need Python `reportlab`.
 
 ## Source of truth and codebase knowledge
 

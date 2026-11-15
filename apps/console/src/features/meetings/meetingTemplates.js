@@ -46,7 +46,7 @@ export function renderMeetingTemplate(templateId, transcript) {
   const sentences = transcriptSentences(transcript);
   const sections = template.sections.map(([heading, keywords]) => {
     const matches = sentences.filter((sentence) => keywords.some((keyword) => sentence.toLowerCase().includes(keyword)));
-    return { heading, content: matches.length ? matches.join(" ") : "Not discussed" };
+    return { heading, content: matches.length ? matches.join(" ") : "Not recorded in supplied text" };
   });
   return {
     id: template.id,
