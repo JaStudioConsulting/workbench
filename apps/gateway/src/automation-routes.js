@@ -11,12 +11,13 @@ export function registerAutomationRoutes(app,{access,env=process.env,fetchImpl=g
   const restFor=req=>createAutomationRest({env,fetchImpl,accessToken:req.supabaseRecruiter.accessToken});
   const wrap=fn=>async(req,res)=>{try{await fn(req,res);}catch(error){res.status(400).json({error:{code:'AUTOMATION_FAILED',message:error.message || 'Automatic processing unavailable'}});}};
   app.get('/api/automation/jobs',access,wrap(async(req,res)=>{
-    const query=new URLSearchParams({select:'id,record_key,candidate_name,job_title,state,attempts,case_id,result,last_error,created_at,updated_at',state:'neq.outdated',order:'created_at.desc',limit:'100'});
+    const query=new URLSearchParams({select:'id,record_key,candidate_name,job_title,state,attempts,case_id,result,last_error,created_at,updated_at',state:'neq.outdated',order:'updated_at.desc',limit:'100'});
     if(req.query.candidateId){const id=CandidateIdSchema.parse(req.query.candidateId);query.set('record_key',`like.automation:${id}:job:*`);}
     const rows=await restFor(req)(`automation_job_status?${query}`);
     // Present latest source version per record, retaining historical versions in storage.
     const seen=new Set();res.json({jobs:rows.filter(row=>{if(seen.has(row.record_key))return false;seen.add(row.record_key);return true;})});
   }));
+  app.post('/api/automation/prioritize',access,wrap(async(req,res)=>{const candidateId=CandidateIdSchema.parse(req.body?.candidateId);res.json({prioritized:await restFor(req)('rpc/prioritize_workbench_automation',{method:'POST',body:{candidate_id:candidateId}})});}));
   app.post('/api/automation/reconcile',access,wrap(async(req,res)=>{res.json({queued:await restFor(req)('rpc/reconcile_workbench_automation',{method:'POST',body:{}})});}));
   app.post('/api/automation/jobs/:id/retry',access,wrap(async(req,res)=>{
     if(!UUID.test(req.params.id))throw new Error('Invalid processing task');

@@ -6,8 +6,8 @@ Open **Process → Automatic processing** to find a candidate, review output sta
 
 ## Runtime
 
-- Apply migration 032 explicitly after 031. Do not apply deferred 030.
-- Set `WORKBENCH_AUTOMATION_ENABLED=1` for the M1 gateway. One supervised worker reconciles saved records every 60 seconds and drains durable jobs. It uses the protected machine-session issuer and an owner-scoped user token; no database service key is copied into the app.
+- Apply migrations 032 and 033 explicitly after 031. Do not apply deferred 030.
+- Set `WORKBENCH_AUTOMATION_ENABLED=1` for the M1 gateway. One supervised worker reconciles saved records every 60 seconds and drains durable jobs. Selected candidates and recently edited inputs take priority over the first-run backlog. It uses the protected machine-session issuer and an owner-scoped user token; no database service key is copied into the app.
 - Set `WORKBENCH_DATA_DIR`, `WORKBENCH_CAPTURE_ROOT`, and `WORKBENCH_TRANSCRIBE_PATH` to stable absolute paths outside release directories. The native helper is used only for capture; transcription stays disabled. Automatic native audio expiry is off.
 - Build with `VITE_TAILSCALE_LOCAL_SESSION_ENABLED=1`, the configured `VITE_TAILSCALE_LOCAL_SESSION_OWNER_ID`, and `VITE_OPERATOR_CASES_ENABLED=1`. This preserves private access without a routine sign-in screen.
 - Monitor `/healthz`, `/api/capabilities`, owner-protected `/api/automation/jobs`, and the gateway worker log. Failed jobs retain their error; automatic retries stop after three retries. Manual retry is owner-protected.
