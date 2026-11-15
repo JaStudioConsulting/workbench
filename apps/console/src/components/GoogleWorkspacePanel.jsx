@@ -2,10 +2,11 @@ import { useEffect, useState } from "react";
 import { Cloud } from "lucide-react";
 import { authClient } from "../auth-client.js";
 import { getGoogleWorkspaceStatus, getWorkbenchAuthStatus, googleConnectionGuidance } from "../google-workspace-client.js";
-import LoginButton from "./LoginButton.tsx";
 import { UpcomingCalendar } from "./UpcomingCalendar.jsx";
+import LoginButton from "./LoginButton.tsx";
+import { calendarEnabled } from "../featureFlags.js";
 
-const SERVICES = ["Calendar", "Gmail", "Drive", "Sheets"];
+const SERVICES = calendarEnabled ? ["Calendar", "Sheets"] : ["Sheets"];
 
 export function GoogleWorkspacePanel() {
   const session = authClient.useSession();
@@ -25,6 +26,7 @@ export function GoogleWorkspacePanel() {
   }, []);
 
   useEffect(() => {
+    if (!calendarEnabled) return undefined;
     if (!account) {
       setCalendarStatus("disconnected");
       return undefined;
@@ -47,15 +49,15 @@ export function GoogleWorkspacePanel() {
       : capabilityError || session.error
         ? "Google status unavailable"
         : account
-          ? calendarStatus === "connected" ? "Google account connected" : "Google sign-in active"
+          ? calendarEnabled && calendarStatus === "connected" ? "Google account connected" : "Google sign-in active"
           : "Google sign-in required";
   const recoveryText = googleUnavailable
     ? `${authAvailability.localDataSession === "configured" ? "Your private Workbench data session is active. " : ""}${googleConnectionGuidance("AUTH_UNAVAILABLE").message}`
     : capabilityError || session.error
       ? "Google sign-in status could not be checked. Check your connection and reload Settings."
-      : account && calendarStatus === "disconnected"
+      : calendarEnabled && account && calendarStatus === "disconnected"
         ? "Calendar access is not connected. Sign out, then sign in with Google again and approve the requested access."
-        : account && calendarStatus === "unavailable"
+        : calendarEnabled && account && calendarStatus === "unavailable"
           ? "Google Workspace status could not be checked. Check your connection and reload Settings."
           : "";
 
@@ -71,12 +73,12 @@ export function GoogleWorkspacePanel() {
             <h2 id="google-workspace-title">Google Workspace</h2>
           </div>
         </div>
-        <p>Connect one Google account to use Calendar, Gmail, Drive, and Sheets in the Workbench.</p>
+        <p>Connect one Google account to import Sheets data.</p>
         <p className="google-workspace-scope">Access is managed by Better Auth. The Workbench never handles or stores Google tokens in the browser.</p>
       </div>
 
       <div className="google-workspace-action">
-        <span className={`connection-status is-${pending || authAvailability.phase === "checking" ? "neutral" : account && calendarStatus === "connected" ? "connected" : "error"}`} aria-live="polite">
+        <span className={`connection-status is-${pending || authAvailability.phase === "checking" ? "neutral" : account && (!calendarEnabled || calendarStatus === "connected") ? "connected" : "error"}`} aria-live="polite">
           <span aria-hidden="true" />{statusText}
         </span>
         {account ? <strong className="connected-account">{account}</strong> : null}
@@ -88,7 +90,7 @@ export function GoogleWorkspacePanel() {
       <div aria-label="Google Workspace services">
         {SERVICES.map((service) => <span key={service}>{service}</span>)}
       </div>
-      {calendarStatus === "connected" ? <UpcomingCalendar /> : null}
+      {calendarEnabled && calendarStatus === "connected" ? <UpcomingCalendar /> : null}
     </section>
   );
 }

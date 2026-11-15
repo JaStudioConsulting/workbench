@@ -12,8 +12,8 @@ export async function renderBrandedResumeVersion(caseId, { artifactId, expectedU
 } = {}) {
   let token;
   try { token = await getAccessToken(); }
-  catch { throw new Error("Sign in again before saving resume edits."); }
-  if (!token) throw new Error("Sign in again before saving resume edits.");
+  catch { throw new Error("Workbench could not reach your workspace. Reload the page, then save again."); }
+  if (!token) throw new Error("Workbench could not reach your workspace. Reload the page, then save again.");
   let response;
   try {
     response = await fetchImpl(new URL(`/api/operator-cases/${encodeURIComponent(caseId)}/branded-resume/versions`, baseURL), {
@@ -27,7 +27,7 @@ export async function renderBrandedResumeVersion(caseId, { artifactId, expectedU
   const payload = await response.json().catch(() => null);
   if (!response.ok) {
     const messages = {
-      UNAUTHORIZED: "Your sign-in expired. Sign in again, then retry.",
+      UNAUTHORIZED: "Your workspace session ended. Reload the page and try again.",
       FORBIDDEN: "This account cannot edit this resume.",
       ARTIFACT_VERSION_CONFLICT: "A newer resume version exists. Reload the case before editing.",
       STALE_ARTIFACT: "A newer resume version exists. Reload the case before editing.",

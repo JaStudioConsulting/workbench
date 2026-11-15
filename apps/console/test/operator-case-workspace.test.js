@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
-import { blockingEvidence, buildAfterCallCaseReferences, buildDailyCaseReferences, saveAfterCallCase } from "../src/features/operator-cases/operatorCaseService.js";
+import { blockingEvidence, buildAfterCallCaseReferences, buildDailyCaseReferences, markDailyReviewActionReported, saveAfterCallCase } from "../src/features/operator-cases/operatorCaseService.js";
+import { _clearReadCacheForTesting, readThroughCache } from "../src/lib/readCache.js";
 
 test("only required missing, conflicting, or stale evidence blocks approval", () => {
   const blocked = blockingEvidence([
@@ -11,6 +12,24 @@ test("only required missing, conflicting, or stale evidence blocks approval", ()
     { required: true, evidence_status: "confirmed", label: "Candidate" },
   ]);
   assert.deepEqual(blocked.map((item) => item.label), ["Transcript unavailable", "Compensation conflict"]);
+});
+
+test("reporting a daily review action invalidates candidate review reads after RPC success", async () => {
+  _clearReadCacheForTesting();
+  let reads = 0;
+  await readThroughCache("candidate-review:actions:7", async () => ++reads);
+  let rpcCalls = 0;
+  const result = await markDailyReviewActionReported(12, { client: { async rpc(name, args) {
+    rpcCalls += 1;
+    assert.equal(name, "complete_daily_review_action");
+    assert.deepEqual(args, { p_case_action_id: 12 });
+    return { data: { status: "user_reported" }, error: null };
+  } } });
+  assert.deepEqual(result, { status: "user_reported" });
+  assert.equal(rpcCalls, 1);
+  await readThroughCache("candidate-review:actions:7", async () => ++reads);
+  assert.equal(reads, 2);
+  _clearReadCacheForTesting();
 });
 
 test("after-call cases reject malformed candidate source IDs before database access", async () => {

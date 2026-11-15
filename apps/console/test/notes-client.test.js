@@ -63,5 +63,5 @@ test("notes require a verified subject and a Supabase session", async () => {
   assert.equal(normalizeNoteSubject("candidate", "manual:bad"), null);
   await assert.rejects(() => listSubjectNotes("candidate", "manual:bad"), /verified/);
   const client = { auth: { getSession: async () => ({ data: { session: null }, error: null }) } };
-  await assert.rejects(() => listSubjectNotes("job", "1", { client, fetchImpl: () => { throw new Error("should not fetch"); } }), /Sign in/);
+  await assert.rejects(() => listSubjectNotes("job", "1", { client, fetchImpl: () => { throw new Error("should not fetch"); } }), /Workbench could not reach your workspace/);
 });

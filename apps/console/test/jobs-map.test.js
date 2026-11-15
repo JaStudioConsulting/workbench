@@ -44,7 +44,7 @@ test("Jobs and People selects map stored filter values to readable labels", () =
   assert.match(jobsSource, /value: "ALL", label: "All Owners"/);
   assert.match(jobsSource, /value: "ALL", label: "Any Distance"/);
   assert.match(jobsSource, /value: "ALL", label: "All Regions"/);
-  assert.match(jobsSource, /aria-label="Filter jobs by region" className="min-w-0 flex-1 text-xs"/);
+  assert.match(jobsSource, /aria-label="Filter jobs by region" className="min-w-\[9rem\] flex-1 text-xs"/);
 
   assert.match(peopleSource, /items=\{STAGE_FILTER_ITEMS\}/);
   assert.match(peopleSource, /items=\{submissionJobItems\}/);
@@ -196,6 +196,7 @@ test("radius filtering excludes jobs without resolvable coordinates", () => {
 
 test("job details expose a direct fit-review entry point", () => {
   const source = fs.readFileSync(path.join(featureRoot, "JobsMapView.jsx"), "utf8");
+  assert.doesNotMatch(source, /ID:\s*\{selectedJob\.originalJobId\}/);
   assert.match(source, /onOpenJobReview/);
   assert.match(source, /Review fit/);
   assert.match(source, /aria-label="Close job details"/);

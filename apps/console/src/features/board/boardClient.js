@@ -23,7 +23,7 @@ export function normalizeBoardSubject(subjectType, subjectId) {
 async function accessToken(client = supabase) {
   const { data, error } = await client.auth.getSession();
   const token = data?.session?.access_token;
-  if (error || !token) throw new BoardClientError("Sign in to save boards.", 401, "UNAUTHORIZED");
+  if (error || !token) throw new BoardClientError("Workbench could not reach your workspace. Reload the page, then save boards again.", 401, "UNAUTHORIZED");
   return token;
 }
 

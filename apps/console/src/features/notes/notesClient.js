@@ -23,7 +23,7 @@ export function normalizeNoteSubject(subjectType, subjectId) {
 async function accessToken(client = supabase) {
   const { data, error } = await client.auth.getSession();
   const token = data?.session?.access_token;
-  if (error || !token) throw new NotesClientError("Sign in to save notes.", 401, "UNAUTHORIZED");
+  if (error || !token) throw new NotesClientError("Workbench could not reach your workspace. Reload the page, then save notes again.", 401, "UNAUTHORIZED");
   return token;
 }
 

@@ -1,11 +1,11 @@
 # Architecture
 
-The Workbench is split so the browser console does not own privileged integration credentials. M1 serves `main` at `f4f3349027ebe7b9d9e3a44b198825ae2a0a3e4c` on `http://100.121.104.40:8092/`. `/healthz` and served asset identity were verified; authenticated save/reload, full page acceptance and physical iPad/Pencil behavior remain unverified.
+Workbench runs on Ja's Mac at `http://127.0.0.1:<port>`. It silently opens a workspace session through `POST /api/auth/local-session`, which is loopback-only, rejects forwarded/proxy requests, and uses a machine secret file. There is no owner login, OAuth prompt, or session gate. Tailscale and iPad access are off.
 
 ```text
 Browser
   └─ React console + Express gateway :8092
-       ├─ Supabase Auth: email magic link
+       ├─ Hosted Supabase data; local Supabase/Docker is not used
        ├─ Supabase read: Tracker jobs and candidates
        ├─ Supabase write: review actions, drafts, profile, outreach log,
        │    leads, meeting drafts (owner-only RLS)
@@ -13,15 +13,12 @@ Browser
        ├─ Full-text search (migrations 010, 021)
        ├─ Notes and Boards (migrations 020, 022)
        ├─ Meeting transcript retention (migration 030)
-       ├─ Google Calendar: approved read-only connection
-       ├─ Gmail: draft creation and reply detection only, when the
-       │    existing connection already grants that scope
        ├─ Anthropic (gateway only): fit check and outreach personalization
        ├─ Meetings: browser capture to Workbench native transcription
        └─ Resume/write-up: source-grounded drafts only
 ```
 
-The M1 launch agent serves the built console and same-origin gateway together. The Tailscale address is private network access, not a public deployment. The gateway invokes the Workbench-owned `native/bin/workbench-transcribe` helper; local model files live under `native/support`. The helper is built from `packages/workbench-transcription-native`; no separate transcription app or nested source repository is part of the runtime.
+The console and same-origin gateway run together on loopback. Gmail is removed. Calendar, Google sign-in, and Google Sheets import by link are disabled by default with `VITE_GOOGLE_CALENDAR_ENABLED` and `VITE_GOOGLE_WORKSPACE_ENABLED`; CSV/XLSX import works. The Supabase CLI is a dev dependency for managing the hosted database from this Mac. The gateway invokes the Workbench-owned `native/bin/workbench-transcribe` helper; local model files live under `native/support`. The helper is built from `packages/workbench-transcription-native`.
 
 Supabase project `abnfffkmxqixrwzackjf` is the approved project for this app. Browser code uses the publishable key; privileged keys are never committed. RLS keeps Tracker imports read-only while allowing approved review and draft writes.
 
@@ -29,9 +26,9 @@ Supabase project `abnfffkmxqixrwzackjf` is the approved project for this app. Br
 
 Synthetic fixtures remain test-only. The production console does not replace a failed live query with fixture records. Adzuna is a future manual connector, not a background data source; see [`ADZUNA-MARKET-CANDIDATE.md`](ADZUNA-MARKET-CANDIDATE.md).
 
-## Pages and source changes
+## Interface
 
-Home, Candidates, Candidate Review, Pipeline, Leads, Jobs, Meetings and Mail are work areas; Process, Settings and Profile are supporting pages. The deployed build includes candidate-edit overlays, presentation tracking, global search, a Notes directory/editor, Boards, responsive/touch iPad support and meeting audio/transcript retention behavior. Migrations `008`–`011` and `020`–`022` are applied and ledger-confirmed in the approved project; database view counts were read. Migration `030` is explicitly deferred and not applied. Authenticated save/reload, full page and physical iPad/Pencil acceptance remain unverified.
+The one-screen interface has a Jobs column, Candidates (People / Swipe / Board), Today, and Meetings. Map, Process, Leads, Settings, and Profile open as panels. The former 12-page layout no longer exists.
 
 ## Queued Loxo changes
 

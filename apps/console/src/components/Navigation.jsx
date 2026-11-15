@@ -2,7 +2,7 @@ import { Home, Mail, Users, Contact, GitBranch, UserCog, User, Settings } from "
 
 const NAV_ITEMS = [
   { id: "home", label: "Home", icon: Home, group: "primary" },
-  { id: "mail", label: "Mail", icon: Mail, group: "primary" },
+  { id: "mail", label: "Outreach", icon: Mail, group: "primary" },
   { id: "candidates", label: "Candidates", icon: Users, group: "primary" },
   { id: "leads", label: "Leads", icon: Contact, group: "primary" },
   { id: "process", label: "Process", icon: GitBranch, group: "secondary" },

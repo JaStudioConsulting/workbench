@@ -34,7 +34,7 @@ export async function createMcpRequestHandler({ context, contextLoader = loadRec
       description: "Read-only Workbench safety status.",
       inputSchema: {},
       annotations: { readOnlyHint: true },
-    }, async () => textResult("Workbench supports Supabase-backed candidate review, leads, outreach logs, and meeting drafts for authorized sessions. This status does not check current connectivity. Gmail is draft-only when connected; Loxo changes queue for review. No email send or Loxo write occurs automatically."));
+    }, async () => textResult("Workbench supports Supabase-backed candidate review, leads, outreach logs, and meeting drafts for authorized sessions. This status does not check current connectivity. Loxo changes queue for review. No email send or Loxo write occurs automatically."));
     const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
     await server.connect(transport);
     await transport.handleRequest(req, res, req.body);

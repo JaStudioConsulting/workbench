@@ -17,7 +17,10 @@ import {
 } from "../src/features/imports/trackerImportClient.js";
 
 test("Import selectors map stored values to readable labels", async () => {
-  const source = await readFile(new URL("../src/features/imports/ImportDataPanel.jsx", import.meta.url), "utf8");
+  const [source, flags] = await Promise.all([
+    readFile(new URL("../src/features/imports/ImportDataPanel.jsx", import.meta.url), "utf8"),
+    readFile(new URL("../src/featureFlags.js", import.meta.url), "utf8"),
+  ]);
   assert.match(source, /items=\{TRACKER_IMPORT_TYPES\}/);
   assert.match(source, /items=\{sheetTabItems\}/);
   assert.match(source, /items=\{fileSourceItems\}/);
@@ -25,6 +28,10 @@ test("Import selectors map stored values to readable labels", async () => {
   assert.match(source, /items=\{mappingItems\}/);
   assert.match(source, /items=\{identityItems\}/);
   assert.match(source, /items=\{previewFilterItems\}/);
+  assert.match(source, /Google Sheets import is switched off for now\. Import a CSV or XLSX file instead\./);
+  assert.match(source, /googleWorkspaceEnabled \? <label/);
+  assert.match(source, /useState\(googleWorkspaceEnabled \? "sheet" : "file"\)/);
+  assert.match(flags, /VITE_GOOGLE_WORKSPACE_ENABLED === "1"/);
 });
 
 test("CSV parser preserves quoted commas and rejects malformed or oversized grids", () => {
@@ -135,6 +142,6 @@ test("import API errors map to concise recovery guidance", async () => {
   );
   await assert.rejects(
     listTrackerImports({ client: { supabaseKey: "k", auth: { async getSession() { return { data: { session: null }, error: null }; } } }, fetchImpl: async () => { throw new Error("must not send"); } }),
-    /sign in again/i,
+    /Workbench could not reach your workspace/i,
   );
 });

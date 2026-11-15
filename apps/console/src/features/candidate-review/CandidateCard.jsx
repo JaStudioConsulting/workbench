@@ -61,6 +61,11 @@ export default function CandidateCard({
   const [boardOpened, setBoardOpened] = useState(false);
   const [ticked, setTicked] = useState(() => new Set());
   const startXRef = useRef(0);
+  const editorTriggerRef = useRef(null);
+  const closeEditor = () => {
+    setEditorMode(null);
+    globalThis.requestAnimationFrame?.(() => globalThis.requestAnimationFrame?.(() => editorTriggerRef.current?.focus()));
+  };
 
   useEffect(() => {
     setOverlayRecord(getCachedCandidateRecord(rawCandidate?.id));
@@ -338,7 +343,7 @@ export default function CandidateCard({
             type="button"
             size="sm"
             variant="outline"
-            onClick={() => setEditorMode("edit")}
+            onClick={(event) => { editorTriggerRef.current = event.currentTarget; setEditorMode("edit"); }}
             className="h-7 px-2 text-xs font-semibold"
             aria-label={`Edit ${candidate.name}`}
             data-testid="card-edit-candidate-button"
@@ -349,7 +354,7 @@ export default function CandidateCard({
             type="button"
             size="sm"
             variant="outline"
-            onClick={() => setEditorMode("create")}
+            onClick={(event) => { editorTriggerRef.current = event.currentTarget; setEditorMode("create"); }}
             className="h-7 px-2 text-xs font-semibold"
             data-testid="card-add-candidate-button"
           >
@@ -535,9 +540,10 @@ export default function CandidateCard({
       />
       <CandidateEditorDialog
         open={Boolean(editorMode)}
-        onOpenChange={(open) => !open && setEditorMode(null)}
+        onOpenChange={(open) => !open && closeEditor()}
         mode={editorMode || "edit"}
         candidate={editorMode === "edit" ? candidate : null}
+        finalFocus={() => editorTriggerRef.current}
         onSaved={(savedRecord) => {
           if (savedRecord?.id === rawCandidate?.id) {
             setOverlayRecord(savedRecord);

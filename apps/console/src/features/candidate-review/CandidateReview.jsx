@@ -11,6 +11,7 @@ import { isInCanada } from "./externals.js";
 import {
   getCandidatesForJob,
   getSubmissionHistory,
+  getPresentationHistoryError,
   recordCandidateDecision,
   recordCandidateSubmission,
   logCandidateActivity,
@@ -103,7 +104,7 @@ export default function CandidateReview({ selectedJob, onSelectJob, onNavigateJo
     loadLiveCandidatesForJob(activeJobId)
       .then(() => {
         if (!active) return;
-        setDataError("");
+        setDataError(getPresentationHistoryError());
         setRefreshKey((key) => key + 1);
       })
       .catch((error) => {
@@ -376,7 +377,7 @@ export default function CandidateReview({ selectedJob, onSelectJob, onNavigateJo
               Show unknown location
             </button>
           ) : null}
-          <span className="text-xs text-muted-foreground">{shownCandidates.length} shown</span>
+          <span className="text-xs text-muted-foreground">{shownCandidates.length} for this job</span>
         </div>
       ) : null}
 

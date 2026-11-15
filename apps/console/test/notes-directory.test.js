@@ -244,7 +244,7 @@ test("listAllOwnerNotes needs a Supabase session and surfaces gateway auth failu
   const signedOut = { auth: { getSession: async () => ({ data: { session: null }, error: null }) } };
   await assert.rejects(
     () => listAllOwnerNotes({ client: signedOut, fetchImpl: () => { fetched = true; return Response.json({}); } }),
-    /Sign in/,
+    /Workbench could not reach your workspace/,
   );
   assert.equal(fetched, false);
 

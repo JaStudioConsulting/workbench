@@ -117,8 +117,6 @@ export default function WorkbenchOneView({
 }) {
   const [workView, setWorkView] = useState(() => destination === "Pipeline" ? "board" : destination === "Candidate Review" ? "swipe" : "people");
   const [mobileTab, setMobileTab] = useState(() => destination === "Meetings" ? "meetings" : destination === "Home" || destination === "Mail" ? "today" : "work");
-  const [focusedOutreach, setFocusedOutreach] = useState(null);
-  const outreachRequest = useRef(0);
   const desktop = useDesktopLayout();
 
   useEffect(() => {
@@ -144,14 +142,7 @@ export default function WorkbenchOneView({
     onNavigate(destinationForWorkView(value));
   };
   const closeUtility = useCallback(() => onNavigate(destinationForWorkView(workView)), [onNavigate, workView]);
-  const navigateFromToday = (next, item) => {
-    if (next === "Mail" && item) {
-      outreachRequest.current += 1;
-      setFocusedOutreach({ requestId: outreachRequest.current, item });
-      return;
-    }
-    onHomeNavigate(next, item);
-  };
+  const navigateFromToday = (next, item) => onHomeNavigate(next, item);
 
   const jobsPanel = <PanelBoundary name="Jobs"><Suspense fallback={<LoadingPanel />}><JobRail
     selectedJob={selectedJob}
@@ -162,11 +153,11 @@ export default function WorkbenchOneView({
     disabled={recordingLocked}
   /></Suspense></PanelBoundary>;
 
-  const workPanel = <PanelBoundary name="Candidate work"><section className="relative min-h-0 min-w-0 overflow-hidden rounded-xl border bg-card" aria-label="Candidate work">
+  const workPanel = <PanelBoundary name="Candidate work"><section className="relative h-full min-h-0 min-w-0 overflow-hidden rounded-xl border bg-card" aria-label="Candidate work">
     <Tabs value={workView} onValueChange={chooseWorkView} className="h-full min-h-0 flex-col gap-0 overflow-hidden" inert={utilityOpen ? true : undefined} aria-hidden={utilityOpen ? "true" : undefined}>
       <div className="flex flex-wrap items-center justify-between gap-3 border-b p-3">
-        <div><p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Work</p><h2 className="font-semibold">Candidates</h2></div>
-        <TabsList aria-label="Candidate view"><TabsTrigger value="people" disabled={recordingLocked}>People</TabsTrigger><TabsTrigger value="swipe" disabled={recordingLocked}>Swipe</TabsTrigger><TabsTrigger value="board" disabled={recordingLocked}>Board</TabsTrigger></TabsList>
+        <div><p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Work</p><h2 className="sr-only">Candidate work</h2></div>
+        <TabsList aria-label="Candidate view"><TabsTrigger value="people" disabled={recordingLocked}>People</TabsTrigger><TabsTrigger value="swipe" disabled={recordingLocked}>Swipe</TabsTrigger><TabsTrigger value="board" disabled={recordingLocked}>Pipeline</TabsTrigger></TabsList>
       </div>
       <div className="min-h-0 flex-1 overflow-auto p-3 md:p-4">
         <Suspense fallback={<LoadingPanel />}>
@@ -179,24 +170,25 @@ export default function WorkbenchOneView({
     {utilityOpen ? <UtilityPanel destination={destination} selectedJob={selectedJob} focusLeadId={focusLeadId} focusClient={focusClient} focusNote={focusNote} meetingsStatusLoader={meetingsStatusLoader} onSelectJob={onSelectJob} onOpenJobReview={onOpenJobReview} onOpenNoteSubject={onOpenNoteSubject} onClose={closeUtility} /> : null}
   </section></PanelBoundary>;
 
-  const todayPanel = <PanelBoundary name="Today"><section className="min-h-0 overflow-auto rounded-xl border bg-card p-3" aria-label="Today">
-    <Suspense fallback={<LoadingPanel />}><div className="grid gap-5"><HomePage onNavigate={navigateFromToday} recentMeetingsLoader={recentMeetingsLoader} /><MailPage showFollowUps={false} focusOutreach={focusedOutreach} /></div></Suspense>
+  const todayPanel = <PanelBoundary name="Today"><section className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border bg-card p-3" aria-label="Today">
+    <div className="min-h-0 flex-1 overflow-y-auto"><Suspense fallback={<LoadingPanel />}><div className="grid gap-5"><HomePage onNavigate={navigateFromToday} recentMeetingsLoader={recentMeetingsLoader} /><MailPage /></div></Suspense></div>
   </section></PanelBoundary>;
 
-  const meetingsPanel = <PanelBoundary name="Meetings"><section className="min-h-0 overflow-auto rounded-xl border bg-card p-3" aria-label="Meetings and notes">
-    <Suspense fallback={<LoadingPanel />}><MeetingsWorkspace launchContext={meetingLaunch} onLaunchChange={onMeetingLaunchChange} /></Suspense>
+  const meetingsPanel = <PanelBoundary name="Meetings"><section className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border bg-card p-3" aria-label="Meetings and notes">
+    <div className="min-h-0 flex-1 overflow-y-auto"><Suspense fallback={<LoadingPanel />}><MeetingsWorkspace launchContext={meetingLaunch} selectedJob={selectedJob} onLaunchChange={onMeetingLaunchChange} /></Suspense></div>
   </section></PanelBoundary>;
 
-  if (desktop) return <div className="grid min-h-0 min-w-0 gap-3 overflow-hidden" style={{ gridTemplateColumns: "240px minmax(440px, 1fr) 320px", gridTemplateRows: "minmax(0, 1fr)", height: "calc(100vh - 6rem)" }} data-testid="workbench-one-view">
-    {jobsPanel}
-    {workPanel}
-    <aside className="grid min-h-0 min-w-0 gap-3 overflow-hidden" style={{ maxHeight: "calc(100vh - 6rem)", gridTemplateRows: "minmax(0, 1fr) minmax(0, 1fr)" }} aria-label="Today and meetings">{todayPanel}{meetingsPanel}</aside>
+  return <div className={`grid min-w-0 gap-3 ${desktop ? "h-[calc(100dvh-6rem)] min-h-0 overflow-hidden" : ""}`} style={desktop
+    ? { gridTemplateColumns: "minmax(200px, 240px) minmax(0, 1fr) minmax(240px, 320px)", gridTemplateRows: "minmax(0, 1fr)", height: "calc(100dvh - 6rem)" }
+    : { gridTemplateColumns: "minmax(0, 1fr)" }} data-testid="workbench-one-view">
+    <div className="contents">{!desktop ? <Tabs value={mobileTab} onValueChange={(value) => { if (!recordingLocked) setMobileTab(value); }} className="min-w-0 flex-col gap-3">
+      <TabsList className="sticky top-[4.5rem] z-30 grid h-10 w-full max-w-full shrink-0 grid-cols-3" aria-label="Workbench panels"><TabsTrigger className="h-full" value="today" disabled={recordingLocked}>Today</TabsTrigger><TabsTrigger className="h-full" value="work" disabled={recordingLocked}>Work</TabsTrigger><TabsTrigger className="h-full" value="meetings">Meetings</TabsTrigger></TabsList>
+    </Tabs> : null}</div>
+    <div className={desktop ? "h-full min-h-0 min-w-0" : mobileTab === "work" ? "min-h-0 min-w-0" : "hidden"}>{jobsPanel}</div>
+    <div className={desktop ? "h-full min-h-0 min-w-0" : mobileTab === "work" ? "min-h-0 min-w-0" : "hidden"}>{workPanel}</div>
+    <aside className={`min-h-0 min-w-0 gap-3 ${desktop ? "grid h-full overflow-hidden" : "grid"}`} style={desktop ? { gridTemplateRows: "minmax(0, 1fr) minmax(0, 1fr)" } : undefined} aria-label="Today and meetings">
+      <div className={desktop || mobileTab === "today" ? "min-h-0 min-w-0" : "hidden"}>{todayPanel}</div>
+      <div className={desktop || mobileTab === "meetings" ? "min-h-0 min-w-0" : "hidden"}>{meetingsPanel}</div>
+    </aside>
   </div>;
-
-  return <Tabs value={mobileTab} onValueChange={(value) => { if (!recordingLocked) setMobileTab(value); }} className="min-w-0 flex-col gap-3" data-testid="workbench-one-view">
-    <TabsList className="sticky top-[4.5rem] z-30 grid h-10 w-full max-w-full shrink-0 grid-cols-3" aria-label="Workbench panels"><TabsTrigger className="h-full" value="today" disabled={recordingLocked}>Today</TabsTrigger><TabsTrigger className="h-full" value="work" disabled={recordingLocked}>Work</TabsTrigger><TabsTrigger className="h-full" value="meetings">Meetings</TabsTrigger></TabsList>
-    {mobileTab === "today" ? <TabsContent value="today" className="min-w-0">{todayPanel}</TabsContent> : null}
-    {mobileTab === "work" ? <TabsContent value="work" className="grid min-w-0 gap-3">{jobsPanel}{workPanel}</TabsContent> : null}
-    {mobileTab === "meetings" ? <TabsContent value="meetings" className="min-w-0">{meetingsPanel}</TabsContent> : null}
-  </Tabs>;
 }

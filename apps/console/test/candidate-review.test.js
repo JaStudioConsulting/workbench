@@ -31,6 +31,7 @@ import {
   loadLiveCandidatesForJob,
   getCachedLiveReviewJobs,
   getCachedLiveCandidatesForJob,
+  getPresentationHistoryError,
   clearLiveReviewCache,
   loadLivePresentations,
   _setSupabaseClientForTesting,
@@ -47,6 +48,45 @@ import {
 const here = path.dirname(fileURLToPath(import.meta.url));
 const featureDir = path.resolve(here, "../src/features/candidate-review");
 const appFile = path.resolve(here, "../src/App.jsx");
+
+test("presentation history failure keeps live candidates and exposes its notice", async () => {
+  _resetStoreForTesting();
+  let presentationCalls = 0;
+  const client = {
+    from(table) {
+      const query = {
+        select() { return query; },
+        eq() { return query; },
+        limit() { return query; },
+        order() { return query; },
+        range() { return query; },
+        then(resolve, reject) {
+          if (table === "candidate_review_feed") return Promise.resolve({ data: [{
+            job_id: 10,
+            candidate_source: "sourcing",
+            candidate_source_id: 8,
+            candidate_name: "Candidate Eight",
+            stage: "Applied",
+          }], error: null }).then(resolve, reject);
+          if (table === "candidate_review_actions") return Promise.resolve({ data: [], error: null }).then(resolve, reject);
+          if (table === "presentations") {
+            presentationCalls += 1;
+            return Promise.resolve({ data: null, error: Object.assign(new Error("slow read"), { status: 500 }) }).then(resolve, reject);
+          }
+          throw new Error(`Unexpected table: ${table}`);
+        },
+      };
+      return query;
+    },
+  };
+  _setSupabaseClientForTesting(client);
+  const candidates = await loadLiveCandidatesForJob("10");
+  assert.equal(candidates.length, 1);
+  assert.equal(candidates[0].name, "Candidate Eight");
+  assert.equal(getPresentationHistoryError(), "Supabase could not load presentation history");
+  assert.equal(presentationCalls, 2);
+  _resetStoreForTesting();
+});
 
 test("candidate review resolves the latest external job after an async job load", () => {
   const source = fs.readFileSync(path.join(featureDir, "CandidateReview.jsx"), "utf8");
@@ -549,7 +589,7 @@ test("persisted presentations survive reload, keep queued actions pending, and n
     stage: "Submitted",
     resume_text: "",
   });
-  await loadLiveCandidatesForJob("10");
+  await loadLiveCandidatesForJob("10", { force: true });
   const stageOnly = getCandidatesForJob("10").find((c) => c.id === "submission:2");
   assert.equal(stageOnly.isSubmitted, false);
   assert.equal(stageOnly.presentationState, null);
@@ -563,7 +603,7 @@ test("persisted presentations survive reload, keep queued actions pending, and n
       candidate_name: "Synthetic pagination record",
     });
   }
-  await loadLivePresentations();
+  await loadLivePresentations({ force: true });
   assert.equal(getSubmissionHistory().length, 1003);
 });
 
@@ -894,7 +934,7 @@ test("reject refuses an unknown reason and reports a failed Loxo note honestly",
 });
 
 test("Quick One template fills from job data and never invents a blurb", async () => {
-  const { OUTREACH_TEMPLATES, renderOutreach, buildBlurb, pickRoleOptions, buildMailto, canSaveGmailDraft } = await import("../src/features/candidate-review/outreachTemplates.js");
+  const { OUTREACH_TEMPLATES, renderOutreach, buildBlurb, pickRoleOptions, buildMailto } = await import("../src/features/candidate-review/outreachTemplates.js");
   assert.equal(OUTREACH_TEMPLATES[0].name, "Quick One");
   assert.equal(OUTREACH_TEMPLATES[0].subject, "Quick One");
 
@@ -918,8 +958,6 @@ test("Quick One template fills from job data and never invents a blurb", async (
   assert.deepEqual(pickRoleOptions(job, jobs, provinceOf).map((j) => j.id), ["1", "2"]);
 
   assert.equal(buildMailto({ to: "a@example.invalid", subject: "Hi there", body: "x\ny" }), "mailto:a@example.invalid?subject=Hi%20there&body=x%0Ay");
-  assert.equal(canSaveGmailDraft({ ok: true }), true);
-  assert.equal(canSaveGmailDraft({ scopes: { compose: false } }), false);
 });
 
 test("experience timeline parses dates, totals without double counting, flags short stints", async () => {

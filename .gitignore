@@ -1,4 +1,5 @@
 node_modules/
+.pnpm-store/
 dist/
 .env
 .env.*
@@ -17,3 +18,4 @@ native/support/
 .claude/agents/
 .claude/settings.local.json
 .codex/
+supabase/.temp/

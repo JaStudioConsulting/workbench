@@ -17,14 +17,14 @@ test("mobile shell and empty table use min-width-safe responsive wrappers", () =
   const picker = fs.readFileSync(path.join(root, "src/ContextPicker.jsx"), "utf8");
   assert.match(app, /min-w-0 overflow-x-clip/);
   assert.match(app, /header data-print-hide className="sticky top-0[^\n]+flex min-h-16 flex-wrap/);
-  assert.match(oneView, /gridTemplateColumns: "240px minmax\(440px, 1fr\) 320px"/);
+  assert.match(oneView, /gridTemplateColumns: "minmax\(200px, 240px\) minmax\(0, 1fr\) minmax\(240px, 320px\)"/);
   assert.match(oneView, /aria-label="Workbench panels"/);
   assert.match(oneView, /value="today" disabled=\{recordingLocked\}>Today<\/TabsTrigger>/);
   assert.match(oneView, /value="work" disabled=\{recordingLocked\}>Work<\/TabsTrigger>/);
   assert.match(oneView, /if \(recordingLocked\) \{\s*setMobileTab\("meetings"\)/);
   assert.match(oneView, /destination === "Notes"\) setMobileTab\("work"\)/);
-  assert.match(oneView, /focusOutreach=\{focusedOutreach\}/);
-  assert.match(oneView, /setFocusedOutreach\(\{ requestId: outreachRequest\.current, item \}\);\s*return;/);
+  assert.match(oneView, /<MailPage \/>/);
+  assert.match(oneView, /const navigateFromToday = \(next, item\) => onHomeNavigate\(next, item\)/);
   assert.match(empty, /workbench-table min-w-0 max-w-full/);
   assert.match(picker, /w-full min-w-0 justify-between sm:w-auto sm:min-w-56/);
 });

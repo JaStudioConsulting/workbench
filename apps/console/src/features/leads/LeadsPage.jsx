@@ -112,7 +112,7 @@ export default function LeadsPage({ focusLeadId = "", focusClient = null, initia
       ? "Saved to your account"
       : storageState.signedIn
         ? "Saved on this device only. Cloud saving is unavailable."
-        : "Saved on this device only. Sign in to sync.";
+        : "Saved on this device only. Reload to sync.";
 
   return (
     <div className="flex flex-col gap-6" data-testid="leads-page">

@@ -1,18 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { businessDaysSince, followUpsDue, groupWaitingActions, listMpcCandidates, waitingAgeLabel } from "../src/features/home/homeService.js";
+import { groupWaitingActions, listMpcCandidates, waitingAgeLabel } from "../src/features/home/homeService.js";
 import { candidateReviewIdFromHomeItem } from "../src/features/home/homeNavigation.js";
-
-test("business-day age excludes weekends", () => {
-  assert.equal(businessDaysSince("2026-11-06T14:00:00Z", new Date("2026-11-11T14:00:00Z")), 3);
-});
-
-test("follow-ups require known reply status and three business days", () => {
-  const outreach = [{ candidateEmail: "person@example.invalid", createdAt: "2026-11-02T14:00:00Z" }];
-  assert.equal(followUpsDue(outreach, { available: false, latestByEmail: {} }, new Date("2026-11-06T14:00:00Z")).length, 0);
-  assert.equal(followUpsDue(outreach, { available: true, latestByEmail: {} }, new Date("2026-11-06T14:00:00Z")).length, 1);
-  assert.equal(followUpsDue(outreach, { available: true, latestByEmail: { "person@example.invalid": "2026-11-03T14:00:00Z" } }, new Date("2026-11-06T14:00:00Z")).length, 0);
-});
 
 test("waiting actions group by job and candidate", () => {
   const groups = groupWaitingActions([

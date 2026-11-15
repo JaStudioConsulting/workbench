@@ -102,7 +102,7 @@ export function meetingRecordingErrorMessage(error) {
 }
 
 export function meetingCaptureState(recording) {
-  if (!recording) return "Recording uses this device's microphone. Audio is sent to the M1 for transcription.";
+  if (!recording) return "Recording uses this device's microphone. Audio is sent to this Mac for transcription.";
   if (recording.twoSided) return "Recording this device's microphone and shared call audio.";
   return "Recording this device's microphone only. The other party's audio is not captured.";
 }
@@ -274,7 +274,7 @@ export async function saveLocalMeetingDraft(draft, { indexedDBImpl = globalThis.
   const ownerId = String(draft?.ownerId || "").trim();
   const jobId = String(draft?.jobId || "").trim();
   const candidateId = String(draft?.candidateId || "").trim();
-  if (!ownerId || !jobId || !candidateId) throw new Error("Sign in and choose a job and candidate to keep an unsaved draft on this device.");
+  if (!ownerId || !jobId || !candidateId) throw new Error("Workbench could not reach your workspace. Reload the page, then choose a job and candidate to keep an unsaved draft on this device.");
   if (!indexedDBImpl?.open) throw new Error("This browser cannot keep an unsaved meeting draft after you close the page.");
   const saved = {
     id: localMeetingDraftId(ownerId, jobId, candidateId),
@@ -460,7 +460,7 @@ export async function startBrowserRecording({
     error.code = "INSECURE_CONTEXT";
     throw error;
   }
-  if (!String(ownerId || "").trim()) throw new Error("Sign in before starting a recording that can be recovered on this device.");
+  if (!String(ownerId || "").trim()) throw new Error("Workbench could not reach your workspace. Reload the page, then start a recording again.");
   if (!mediaDevices?.getUserMedia) throw new Error("This browser cannot record meetings.");
   const format = selectWorkbenchRecordingFormat(MediaRecorderImpl);
   const canRecordWav = typeof AudioContextImpl === "function"

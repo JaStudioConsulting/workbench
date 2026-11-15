@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import express from "express";
 import { registerAiRoutes } from "../src/ai-routes.js";
 
-async function request(app, method, path, { body, authenticated = true } = {}) {
+async function request(app, method, path, { body, authenticated = true, cookie, authorization } = {}) {
   const server = app.listen(0, "127.0.0.1");
   await new Promise((resolve) => server.once("listening", resolve));
   try {
@@ -11,7 +11,8 @@ async function request(app, method, path, { body, authenticated = true } = {}) {
     const response = await fetch(`http://127.0.0.1:${address.port}${path}`, {
       method,
       headers: {
-        ...(authenticated ? { authorization: "Bearer test" } : {}),
+        ...(authorization ? { authorization } : authenticated ? { authorization: "Bearer test" } : {}),
+        ...(cookie ? { cookie } : {}),
         ...(body === undefined ? {} : { "content-type": "application/json" }),
       },
       body: body === undefined ? undefined : JSON.stringify(body),
@@ -38,9 +39,11 @@ function textResponse(value) {
   return { content: [{ type: "text", text: JSON.stringify(value) }] };
 }
 
-test("AI status and routes require authentication and report missing setup honestly", async () => {
+test("AI status accepts a bearer token and rejects missing, cookie-only, or invalid authentication", async () => {
   const app = appFor({ env: {} });
   assert.equal((await request(app, "GET", "/api/ai/status", { authenticated: false })).status, 401);
+  assert.equal((await request(app, "GET", "/api/ai/status", { authenticated: false, cookie: "workbench-session=test" })).status, 401);
+  assert.equal((await request(app, "GET", "/api/ai/status", { authorization: "Bearer invalid" })).status, 401);
   assert.deepEqual(await request(app, "GET", "/api/ai/status"), { status: 200, body: { available: false } });
   assert.deepEqual(await request(app, "POST", "/api/fit/evaluate", { body: { job: {}, candidate: {} } }), {
     status: 503,

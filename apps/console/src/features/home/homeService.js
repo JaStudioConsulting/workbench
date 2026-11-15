@@ -1,5 +1,5 @@
 import { supabase } from "../../supabase-client.js";
-import { listMailReplies, listOutreach } from "../mail/mailClient.js";
+import { readThroughCache, scopedReadKey } from "../../lib/readCache.js";
 import { listOperatorCases } from "../operator-cases/operatorCaseService.js";
 
 function candidateKey(value = {}) {
@@ -25,15 +25,6 @@ export function businessDaysSince(value, now = new Date()) {
     cursor.setDate(cursor.getDate() + 1);
   }
   return count;
-}
-
-export function followUpsDue(outreach, replies, now = new Date()) {
-  if (!replies?.available) return [];
-  return (outreach || []).filter((entry) => {
-    if (!entry.candidateEmail || businessDaysSince(entry.createdAt, now) < 3) return false;
-    const repliedAt = replies.latestByEmail?.[entry.candidateEmail.toLowerCase()];
-    return !repliedAt || Date.parse(repliedAt) < Date.parse(entry.createdAt);
-  });
 }
 
 export function groupWaitingActions(actions, candidates = []) {
@@ -72,8 +63,8 @@ async function checked(query, message) {
   return data || [];
 }
 
-export async function loadHomeData({ client = supabase, now = new Date(), includeCases = false } = {}) {
-  const [actions, drafts, candidates, outreach, cases] = await Promise.all([
+export async function loadHomeData({ client = supabase, includeCases = false, force = false } = {}) {
+  const results = await Promise.allSettled([
     checked(
       client.from("candidate_review_actions").select("id,job_id,candidate_source,candidate_source_id,action_type,activity_type,note,created_at,status").eq("status", "waiting_for_loxo").order("created_at", { ascending: true }),
       "Waiting actions could not be loaded",
@@ -82,32 +73,34 @@ export async function loadHomeData({ client = supabase, now = new Date(), includ
       client.from("review_drafts").select("id,job_id,candidate_source,candidate_source_id,kind,status,created_at").eq("status", "ready").order("created_at", { ascending: false }),
       "Ready drafts could not be loaded",
     ),
-    checked(
+    readThroughCache(scopedReadKey("home:candidate-names", client), () => checked(
       client.from("candidate_review_feed").select("candidate_source,candidate_source_id,candidate_name").limit(1000),
       "Candidate names could not be loaded",
-    ),
-    listOutreach({ client }),
+    ), { force }),
     includeCases ? listOperatorCases({ client }) : Promise.resolve([]),
   ]);
-  const emails = [...new Set(outreach.map((entry) => entry.candidateEmail).filter(Boolean))];
-  const replies = await listMailReplies(emails);
+  const [actionsResult, draftsResult, candidatesResult, casesResult] = results;
+  const errors = {};
+  for (const [key, result] of [["waiting", actionsResult], ["drafts", draftsResult], ["candidateNames", candidatesResult], ["cases", casesResult]]) {
+    if (result.status === "rejected") errors[key] = result.reason?.message || "This part of Today could not be loaded.";
+  }
+  const actions = actionsResult.status === "fulfilled" ? actionsResult.value : [];
+  const candidates = candidatesResult.status === "fulfilled" ? candidatesResult.value : [];
   return {
     waiting: groupWaitingActions(actions, candidates),
-    drafts,
-    outreach,
-    replies,
-    followUps: followUpsDue(outreach, replies, now),
-    cases,
+    drafts: draftsResult.status === "fulfilled" ? draftsResult.value : [],
+    cases: casesResult.status === "fulfilled" ? casesResult.value : [],
+    errors,
   };
 }
 
-export async function listMpcCandidates({ client = supabase } = {}) {
-  const rows = await checked(
+export async function listMpcCandidates({ client = supabase, force = false } = {}) {
+  const rows = await readThroughCache(scopedReadKey("home:mpc-candidates", client), () => checked(
     client.from("candidate_review_feed")
       .select("candidate_source,candidate_source_id,candidate_name,current_title,current_company")
       .limit(5000),
     "Candidates could not be loaded. Retry, or check that live Tracker data is available.",
-  );
+  ), { force });
   const unique = new Map();
   for (const row of rows) {
     const candidateId = Number(row.candidate_source_id);

@@ -1,7 +1,5 @@
 import { gatewayBaseURL } from "../../auth-client.js";
-import { getWorkbenchAuthStatus } from "../../google-workspace-client.js";
 import { supabase } from "../../supabase-client.js";
-import { getMailStatus } from "../mail/mailClient.js";
 
 export const RECRUITING_TEMPLATES = Object.freeze([
   "Branded resume",
@@ -23,9 +21,12 @@ export function saveCanadaFilter(enabled, storage = globalThis.localStorage) {
   return Boolean(enabled);
 }
 
-async function readAiStatus(request) {
+async function readAiStatus(request, client) {
   try {
-    const response = await request(new URL("/api/ai/status", gatewayBaseURL), { credentials: "include", headers: { accept: "application/json" } });
+    const { data, error } = await client.auth.getSession();
+    const token = data?.session?.access_token;
+    if (error || !token) return { available: null, label: "AI check not set up" };
+    const response = await request(new URL("/api/ai/status", gatewayBaseURL), { credentials: "include", headers: { accept: "application/json", Authorization: `Bearer ${token}` } });
     if (!response.ok) return { available: null, label: "AI check not set up" };
     const payload = await response.json();
     return { available: Boolean(payload.available || payload.configured), label: payload.available || payload.configured ? "Fit check ready" : "Fit check not set up" };
@@ -35,18 +36,15 @@ async function readAiStatus(request) {
 }
 
 export async function loadSettingsStatus({ client = supabase, request = globalThis.fetch, meetingsStatusLoader } = {}) {
-  const [sessionResult, authStatus, mail, ai, meetings] = await Promise.all([
+  const [sessionResult, ai, meetings] = await Promise.all([
     client.auth.getSession().catch(() => ({ data: { session: null }, error: new Error("unavailable") })),
-    getWorkbenchAuthStatus({ fetchImpl: request }).catch(() => ({ googleSignIn: "unknown", localDataSession: "unknown" })),
-    getMailStatus({ request }),
-    readAiStatus(request),
+    readAiStatus(request, client),
     typeof meetingsStatusLoader === "function"
       ? meetingsStatusLoader().catch(() => ({ available: null }))
       : Promise.resolve({ available: false }),
   ]);
   return {
     supabase: { connected: Boolean(sessionResult?.data?.session), error: Boolean(sessionResult?.error) },
-    google: { ...mail, signIn: authStatus.googleSignIn, localDataSession: authStatus.localDataSession },
     ai,
     loxo: { queued: true, label: "Queued mode: changes wait for you or $recruiter" },
     meetings: {

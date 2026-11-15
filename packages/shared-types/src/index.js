@@ -11,7 +11,6 @@ export const GOOGLE_WORKSPACE_CONTAINER_SCOPES = Object.freeze([
   "email",
   "profile",
   "https://www.googleapis.com/auth/calendar.readonly",
-  "https://www.googleapis.com/auth/gmail.readonly",
   "https://www.googleapis.com/auth/drive.readonly",
   "https://www.googleapis.com/auth/spreadsheets",
 ]);
@@ -140,7 +139,6 @@ export const WorkflowOutputSchema = z.object({
 export const SafetyStateSchema = z.object({
   auth: z.enum(["configured", "unavailable"]),
   storage: z.enum(["durable", "memory_test_only", "unavailable"]),
-  gmail: z.literal("draft_only"),
   externalWrites: z.literal(false),
 });
 
@@ -189,11 +187,6 @@ export const GoogleWorkspaceSyncRequestSchema = z.discriminatedUnion("service", 
     spreadsheetId: z.string().trim().min(1).max(200),
     range: z.string().trim().min(1).max(200),
   }).strict(),
-  z.object({
-    service: z.literal("gmail"),
-    query: z.string().trim().max(500).default(""),
-    maxResults: z.number().int().min(1).max(20).default(20),
-  }).strict(),
 ]);
 
 export const GoogleWorkspaceSyncResponseSchema = z.discriminatedUnion("service", [
@@ -202,10 +195,6 @@ export const GoogleWorkspaceSyncResponseSchema = z.discriminatedUnion("service",
     spreadsheetId: z.string().min(1),
     range: z.string().min(1),
     rows: z.array(z.array(z.string().max(2000)).max(50)).max(200),
-  }).strict(),
-  z.object({
-    service: z.literal("gmail"),
-    threads: z.array(z.object({ id: z.string().min(1).max(200) }).strict()).max(20),
   }).strict(),
 ]);
 

@@ -91,7 +91,7 @@ export async function getProfile({ client = supabase, storage = browserStorage()
 export async function saveProfile(profile, { client = supabase, storage = browserStorage() } = {}) {
   const cleaned = cleanProfile(profile);
   const user = await authenticatedUser(client);
-  if (!user) throw new Error("Sign in to save your profile");
+  if (!user) throw new Error("Workbench could not reach your workspace. Reload the page, then save your profile again.");
 
   const row = {
     owner_id: user.id,

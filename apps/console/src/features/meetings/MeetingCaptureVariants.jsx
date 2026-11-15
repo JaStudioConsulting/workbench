@@ -8,6 +8,7 @@ import { Textarea } from "../../components/ui/textarea.tsx";
 import { isSecureRecordingContext, meetingCaptureState } from "./browserRecorder.js";
 import { isMeetingContextLocked } from "./meetingModel.js";
 import { operatorCasesEnabled } from "../operator-cases/operatorCaseService.js";
+import { calendarEnabled } from "../../featureFlags.js";
 
 const VARIANTS = [
   { id: "guided", label: "Guided", rightWhen: "The workflow is occasional and sequence matters", cost: "More vertical travel" },
@@ -115,7 +116,7 @@ function RecruitingContext({ launchContext, recruiting, selectedJob, selectedJob
     </div>;
   }
 
-  return <div className="grid gap-3 sm:grid-cols-2">
+  return <div className="grid min-w-0 grid-cols-1 gap-3">
     <label className="text-sm font-medium">Job<Select items={jobItems} value={selectedJobId} onValueChange={(value) => setSelectedJobId(String(value))} disabled={lockedCall}><SelectTrigger aria-label="Select meeting job" className="mt-1 w-full"><SelectValue placeholder="Select job" /></SelectTrigger><SelectContent>{recruiting.jobs.map((job) => <SelectItem key={job.id} value={String(job.id)}>{job.title} · {job.company}</SelectItem>)}</SelectContent></Select></label>
     <label className="text-sm font-medium">Candidate<Select items={candidateItems} value={selectedCandidateId} onValueChange={(value) => setSelectedCandidateId(String(value))} disabled={lockedCall || !selectedJobId || recruiting.phase === "loading_candidates"}><SelectTrigger aria-label="Select meeting candidate" className="mt-1 w-full"><SelectValue placeholder={recruiting.phase === "loading_candidates" ? "Loading candidates" : "Select candidate"} /></SelectTrigger><SelectContent>{recruiting.candidates.map((candidate) => <SelectItem key={candidate.id} value={String(candidate.id)}>{candidate.name} · {candidate.title}</SelectItem>)}</SelectContent></Select></label>
   </div>;
@@ -128,7 +129,7 @@ function RecordingControls({ launchContext, recording, beginRecording, finishRec
   const captureNote = recording
     ? meetingCaptureState(recording)
     : secure
-      ? "Recording uses this device's microphone. Audio is sent to the M1 for transcription."
+      ? "Recording uses this device's microphone. Audio is sent to this Mac for transcription."
       : "Recording needs the secure Workbench address. Open the Tailscale HTTPS link, then try again.";
   const warning = recording?.warning || (callLaunch ? "Phone call audio is not captured." : "");
   return <div className="flex flex-col gap-3">
@@ -136,7 +137,7 @@ function RecordingControls({ launchContext, recording, beginRecording, finishRec
     {warning ? <p role="status" className="rounded-md border border-amber-700/30 bg-amber-50 p-3 text-sm text-amber-950">{warning}</p> : null}
     {!recording && !callLaunch ? <label className="flex items-start gap-2 text-sm text-muted-foreground"><input className="mt-1" type="checkbox" checked={Boolean(includeSharedAudio)} onChange={(event) => setIncludeSharedAudio?.(event.target.checked)} disabled={!secure} /> Also record this device's shared call audio when the browser allows it</label> : null}
     <div className="flex flex-wrap gap-2">{preparing ? <Button className="h-auto min-h-9 max-w-full whitespace-normal text-center" disabled><Mic size={14} />Preparing recorder</Button> : !recording ? <Button className="h-auto min-h-9 max-w-full whitespace-normal text-center" onClick={() => beginRecording(selectedEvent)} disabled={!secure}><Mic size={14} />Start recording</Button> : transcribing ? <Button className="h-auto min-h-9 max-w-full whitespace-normal text-center" disabled><Square size={14} />Finalizing recording</Button> : <Button className="h-auto min-h-9 max-w-full whitespace-normal text-center" variant="destructive" onClick={finishRecording}><Square size={14} />Stop recording</Button>}{recordedAudio ? <Button className="h-auto min-h-9 max-w-full whitespace-normal text-center" variant="outline" render={<a href={recordedAudio.url} download={recordedAudio.filename} />}><Link2 size={14} />Download recording</Button> : null}{pendingAudio && !recording && !transcribing ? <Button className="h-auto min-h-9 max-w-full whitespace-normal text-center" variant="outline" onClick={retryTranscription}>Retry M1 transcription</Button> : null}</div>
-    {selectedEvent ? <p className="text-sm text-muted-foreground"><CalendarDays size={14} className="inline" aria-hidden="true" /> Linked event: {selectedEvent.title || "Untitled meeting"}</p> : null}
+    {calendarEnabled && selectedEvent ? <p className="text-sm text-muted-foreground"><CalendarDays size={14} className="inline" aria-hidden="true" /> Linked event: {selectedEvent.title || "Untitled meeting"}</p> : null}
   </div>;
 }
 

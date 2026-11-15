@@ -54,6 +54,6 @@ Do not restart, replace, or deploy the live `:8092` service without Ja's approva
 - One dependency-ready board task per branch and PR. Work from the current reviewed base. Run `pnpm check` on M1, add the PR link to the board, and move the task to review. The orchestrator reviews milestone gates. Never write directly to `main` or merge without Ja's GO.
 - Supabase project `abnfffkmxqixrwzackjf` is the live data project. Inspect schema and RLS before migrations. Tracker imports remain read-only; Ja's edits must survive imports.
 - Never write to Loxo. Queue actions as `waiting_for_loxo`. Email stays draft-only; send nothing. Do not invent candidate, job, client, metric, or activity data.
-- Google and Calendar may be intentionally unlinked. Follow the Google project lock in `AGENTS.md` before any Google operation. Do not add a paid AI key, Notion, or Neo4j.
+- Google features are switched off for now. Follow the Google project lock in `AGENTS.md` before any Google operation. Do not add a paid AI key, Notion, or Neo4j.
 - The app must work with AI off. Recording has no additional consent step per Ja's D7 decision. Retention: delete audio after the transcript is saved; retain native capture files for 7 days and transcripts for 1 year. Verify implementation before marking that behavior done.
 - Copy code only from MIT, Apache-2.0, or BSD JavaScript/TypeScript sources; record each source in `docs/THIRD-PARTY-NOTICES.md`. Keep UI free of purple and default Canada-only filters on everywhere.

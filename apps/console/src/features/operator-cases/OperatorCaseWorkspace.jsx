@@ -16,7 +16,7 @@ const labels = {
   presentation_email: "Presentation email", loxo_update: "Loxo update bullets",
   candidate_positioning: "Candidate positioning", target_companies: "Target companies",
   contacts: "Contacts", hiring_signals: "Hiring signals", outreach_draft: "Outreach draft",
-  gmail_draft: "Create Gmail draft", loxo_queue: "Manual Loxo update", tracker_write: "Tracker write",
+  gmail_draft: "Create email draft", loxo_queue: "Manual Loxo update", tracker_write: "Tracker write",
   external_submission: "External submission", review: "Review",
 };
 

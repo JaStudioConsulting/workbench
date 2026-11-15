@@ -64,7 +64,7 @@ test("verified Google identity requires the expected audience and only first-sta
   assert.equal(result.email, "review@example.invalid");
   assert.equal(result.subject, "synthetic-subject");
 
-  oauth2Client.getTokenInfo = async () => ({ scopes: [...GOOGLE_WORKSPACE_SCOPES.calendar, ...GOOGLE_WORKSPACE_SCOPES.gmail] });
+  oauth2Client.getTokenInfo = async () => ({ scopes: [...GOOGLE_WORKSPACE_SCOPES.calendar, "https://www.googleapis.com/auth/gmail.readonly"] });
   await assert.rejects(() => verifyGoogleWorkspaceGrant({ env: oauthEnv, oauth2Client, credentials: { id_token: "synthetic-id", access_token: "synthetic-access" } }), { code: "GOOGLE_WORKSPACE_SCOPE_INVALID" });
   oauth2Client.verifyIdToken = async () => ({ getPayload: () => ({ sub: "synthetic-subject", email: "review@example.invalid", email_verified: false }) });
   await assert.rejects(() => verifyGoogleWorkspaceGrant({ env: oauthEnv, oauth2Client, credentials: { id_token: "synthetic-id", access_token: "synthetic-access" } }), { code: "GOOGLE_WORKSPACE_IDENTITY_INVALID" });
@@ -93,8 +93,8 @@ test("revocation uses the durable token and treats only invalid_token as already
   });
 });
 
-test("OAuth scopes are staged, read-only, and never grant send authority", () => {
-  assert.deepEqual(scopesForGoogleWorkspaceStages(["gmail"]), [...GOOGLE_WORKSPACE_SCOPES.identity, ...GOOGLE_WORKSPACE_SCOPES.gmail]);
+test("OAuth scopes are staged, read-only, and exclude Gmail", () => {
+  assert.throws(() => scopesForGoogleWorkspaceStages(["gmail"]), { code: "GOOGLE_WORKSPACE_OAUTH_INPUT_INVALID" });
   assert.deepEqual(scopesForGoogleWorkspaceStages(["calendar", "drive"]), [
     ...GOOGLE_WORKSPACE_SCOPES.identity,
     ...GOOGLE_WORKSPACE_SCOPES.calendar,
@@ -102,14 +102,14 @@ test("OAuth scopes are staged, read-only, and never grant send authority", () =>
   ]);
   assert.throws(() => scopesForGoogleWorkspaceStages(["send"]), { code: "GOOGLE_WORKSPACE_OAUTH_INPUT_INVALID" });
 
-  const allScopes = scopesForGoogleWorkspaceStages(["gmail", "calendar", "drive"]);
-  assert.equal(allScopes.some((scope) => /gmail\.(?:send|compose|modify)$/.test(scope)), false);
+  const allScopes = scopesForGoogleWorkspaceStages(["calendar", "drive"]);
+  assert.equal(allScopes.some((scope) => /gmail\./.test(scope)), false);
   assert.equal(allScopes.some((scope) => /calendar\.events$/.test(scope)), false);
   assert.equal(allScopes.includes("https://www.googleapis.com/auth/drive"), false);
 });
 
 test("authorization URL requests offline incremental consent for only selected stages", () => {
-  const value = generateGoogleWorkspaceAuthorizationUrl({ env: oauthEnv, stages: ["gmail"], state, loginHint: "review@example.invalid" });
+  const value = generateGoogleWorkspaceAuthorizationUrl({ env: oauthEnv, stages: ["calendar"], state, loginHint: "review@example.invalid" });
   const url = new URL(value);
   assert.equal(url.origin, "https://accounts.google.com");
   assert.equal(url.searchParams.get("access_type"), "offline");
@@ -117,9 +117,9 @@ test("authorization URL requests offline incremental consent for only selected s
   assert.equal(url.searchParams.get("include_granted_scopes"), "true");
   assert.equal(url.searchParams.get("state"), state);
   assert.equal(url.searchParams.get("login_hint"), "review@example.invalid");
-  assert.deepEqual(url.searchParams.get("scope").split(" "), [...GOOGLE_WORKSPACE_SCOPES.identity, ...GOOGLE_WORKSPACE_SCOPES.gmail]);
-  assert.doesNotMatch(url.searchParams.get("scope"), /gmail\.(?:send|compose|modify)/);
-  assert.throws(() => generateGoogleWorkspaceAuthorizationUrl({ env: oauthEnv, stages: ["gmail"], state: "weak" }), { code: "GOOGLE_WORKSPACE_OAUTH_INPUT_INVALID" });
+  assert.deepEqual(url.searchParams.get("scope").split(" "), [...GOOGLE_WORKSPACE_SCOPES.identity, ...GOOGLE_WORKSPACE_SCOPES.calendar]);
+  assert.doesNotMatch(url.searchParams.get("scope"), /gmail\./);
+  assert.throws(() => generateGoogleWorkspaceAuthorizationUrl({ env: oauthEnv, stages: ["gmail"], state }), { code: "GOOGLE_WORKSPACE_OAUTH_INPUT_INVALID" });
 });
 
 test("code exchange sets credentials in memory without making a real network call", async () => {
@@ -149,12 +149,12 @@ test("code exchange sets credentials in memory without making a real network cal
   assert.equal("persist" in result, false);
 });
 
-test("API clients are created for Gmail, Calendar, and Drive without API calls", () => {
+test("API clients are created for Calendar and Drive without API calls", () => {
   const observed = [];
   class FakeOAuth2Client {
     setCredentials(credentials) { this.credentials = credentials; }
   }
-  const googleApis = Object.fromEntries(["gmail", "calendar", "drive"].map((service) => [
+  const googleApis = Object.fromEntries(["calendar", "drive"].map((service) => [
     service,
     (options) => { observed.push({ service, options }); return { service, options }; },
   ]));
@@ -164,7 +164,6 @@ test("API clients are created for Gmail, Calendar, and Drive without API calls",
     { OAuth2ClientClass: FakeOAuth2Client, googleApis },
   );
   assert.deepEqual(observed.map(({ service, options }) => [service, options.version]), [
-    ["gmail", "v1"],
     ["calendar", "v3"],
     ["drive", "v3"],
   ]);

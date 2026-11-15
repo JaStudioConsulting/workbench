@@ -131,7 +131,7 @@ async function currentUser(client) {
     if (error) throw error;
     return data?.user || null;
   } catch {
-    throw new Error("Sign-in status could not be checked. Check your connection and try again.");
+    throw new Error("Workbench could not reach your workspace. Reload the page, then try again.");
   }
 }
 
@@ -218,7 +218,7 @@ export async function saveLead(value, { client = supabase, storage = browserStor
   const id = value.id ? String(value.id) : globalThis.crypto?.randomUUID?.() || `lead-${Date.now()}`;
   const localRecord = { id, ...lead, persistence: "local", createdAt: value.createdAt || now, updatedAt: now };
   const saveLocally = () => {
-    if (!storage) throw new Error("This browser cannot save leads on this device. Sign in and try cloud saving again.");
+    if (!storage) throw new Error("This browser cannot save leads on this device. Reload the page, then try cloud saving again.");
     const records = readLocal(storage);
     const index = records.findIndex((item) => item.id === id);
     if (index >= 0) records[index] = localRecord;

@@ -9,7 +9,6 @@ const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
 
 export const GOOGLE_WORKSPACE_SCOPES = Object.freeze({
   identity: Object.freeze(["openid", "email", "profile"]),
-  gmail: Object.freeze(["https://www.googleapis.com/auth/gmail.readonly"]),
   calendar: Object.freeze(["https://www.googleapis.com/auth/calendar.readonly"]),
   drive: Object.freeze(["https://www.googleapis.com/auth/drive.metadata.readonly"]),
   sheets: Object.freeze(["https://www.googleapis.com/auth/spreadsheets"]),
@@ -197,7 +196,6 @@ export function createGoogleWorkspaceApiClients({ env = process.env, credentials
   oauth2Client.setCredentials(validatedCredentials(credentials));
   return Object.freeze({
     oauth2Client,
-    gmail: googleApis.gmail({ version: "v1", auth: oauth2Client }),
     calendar: googleApis.calendar({ version: "v3", auth: oauth2Client }),
     drive: googleApis.drive({ version: "v3", auth: oauth2Client }),
   });

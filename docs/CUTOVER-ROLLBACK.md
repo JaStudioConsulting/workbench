@@ -1,3 +1,5 @@
+Historical: describes the earlier sign-in based setup. Not current.
+
 # Cutover and rollback runbook
 
 This runbook records the M1 cutover and the acceptance still open. It does not authorize any further migration, service restart, deployment, or live-data write. Migration `030` was explicitly deferred and is not applied; it requires separate authorization.

@@ -1,5 +1,6 @@
 import { parseCandidateSourceKey } from "@ja/shared-types";
 import { supabase } from "../../supabase-client.js";
+import { readThroughCache, scopedReadKey } from "../../lib/readCache.js";
 import { buildCandidatePresentationSummary } from "../candidate-review/candidateReviewService.js";
 import { matchCandidateToOpenJobs } from "./jobMatcher.js";
 
@@ -79,7 +80,7 @@ export function buildCandidateSearchEvidence(
   });
 }
 
-export async function loadSearchEvidence(searchState, { client = supabase } = {}) {
+export async function loadSearchEvidence(searchState, { client = supabase, force = false } = {}) {
   const items = validCandidateItems(searchState);
   if (items.length === 0) return Object.freeze({});
   const ids = [...new Set(items.map((item) => parseCandidateSourceKey(item.entityId).id))];
@@ -90,7 +91,7 @@ export async function loadSearchEvidence(searchState, { client = supabase } = {}
   const [candidatesResult, presentationsResult, jobsResult] = await Promise.allSettled([
     readPage(client.from("candidates_all").select(CANDIDATE_COLUMNS).in("id", ids).limit(ids.length)),
     numericIds.length > 0
-      ? readAllPages(() => client.from("presentations").select(PRESENTATION_COLUMNS).in("candidate_source_id", numericIds).order("id", { ascending: true }))
+      ? readThroughCache(scopedReadKey(`search:presentations:${numericIds.slice().sort((a, b) => a - b).join(",")}`, client), () => readAllPages(() => client.from("presentations").select(PRESENTATION_COLUMNS).in("candidate_source_id", numericIds).order("id", { ascending: true })), { force })
       : readPage(client.from("presentations").select("id").limit(1)).then(() => []),
     readAllPages(() => client.from("tracker_jobs").select(JOB_COLUMNS).order("job_id", { ascending: true })),
   ]);

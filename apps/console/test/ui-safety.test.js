@@ -48,7 +48,7 @@ test("Better Auth and Workspace clients use gateway or same-origin without local
   assert.match(vite, /"\/mcp"/);
 });
 
-test("Settings uses one Better Auth Google connection for Workspace services", async () => {
+test("Google Workspace surfaces are gated while the integration is benched", async () => {
   const [panel, calendar, settings] = await Promise.all([
     readFile(new URL("../src/components/GoogleWorkspacePanel.jsx", import.meta.url), "utf8"),
     readFile(new URL("../src/components/UpcomingCalendar.jsx", import.meta.url), "utf8"),
@@ -56,25 +56,25 @@ test("Settings uses one Better Auth Google connection for Workspace services", a
   ]);
   const source = `${panel}\n${calendar}\n${settings}`;
 
-  assert.match(panel, /authClient\.useSession\(\)/);
-  assert.match(panel, /getGoogleWorkspaceStatus/);
-  assert.match(panel, /calendarStatus === "connected" \? <UpcomingCalendar/);
+  assert.match(settings, /googleWorkspaceEnabled \? <GoogleWorkspacePanel \/> : null/);
   assert.match(panel, /<LoginButton \/>/);
-  assert.match(panel, /Calendar, Gmail, Drive, and Sheets/);
+  assert.doesNotMatch(panel, /Gmail/);
+  assert.match(panel, /if \(!calendarEnabled\) return undefined/);
+  assert.match(panel, /calendarEnabled && calendarStatus === "connected" \? <UpcomingCalendar/);
   assert.match(panel, /private Workbench data session is active/);
   assert.match(panel, /authAvailability\.googleSignIn === "configured"/);
   assert.match(calendar, /googleConnectionGuidance/);
-  assert.match(settings, /Google sign-in unavailable/);
+  assert.doesNotMatch(settings, /Gmail|Calendar status/);
   assert.doesNotMatch(panel, /startGoogleWorkspaceConnection|disconnectGoogleWorkspace|validateGoogleAuthorizationUrl/);
   assert.doesNotMatch(source, /service-grid|dangerouslySetInnerHTML/);
   assert.doesNotMatch(source, /Team sync|Candidate interview|Client meeting/i);
 });
 
-test("Settings navigation can reach the Google Workspace panel", async () => {
+test("Settings keeps the Google Workspace panel behind its default-off feature flag", async () => {
   const app = await readFile(new URL("../src/App.jsx", import.meta.url), "utf8");
   const oneView = await readFile(new URL("../src/features/workbench/WorkbenchOneView.jsx", import.meta.url), "utf8");
   const settings = await readFile(new URL("../src/features/settings/SettingsPage.jsx", import.meta.url), "utf8");
   assert.match(app, /<WorkbenchOneView/);
   assert.match(oneView, /<SettingsPage meetingsStatusLoader=\{meetingsStatusLoader\} \/>/);
-  assert.match(settings, /<GoogleWorkspacePanel/);
+  assert.match(settings, /googleWorkspaceEnabled \? <GoogleWorkspacePanel \/> : null/);
 });

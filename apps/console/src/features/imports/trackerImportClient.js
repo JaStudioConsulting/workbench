@@ -21,7 +21,7 @@ const TRACKER_FIELD_LABELS = Object.freeze({
   candidate_name: "Candidate name", current_title: "Current title", location: "Location", industry: "Industry", shift: "Shift", email: "Email", phone: "Phone", compensation_target: "Compensation target", current_compensation: "Current compensation", current_company: "Current company", submitted_on: "Submitted on", submitted_to: "Submitted to", notes: "Notes",
   job_id: "Loxo job ID", job_title: "Job title", company: "Company", client_contact: "Client contact", compensation: "Compensation", date_opened: "Date opened", owners: "Owners", status: "Status", job_description: "Job description", loxo_link: "Loxo link",
   role: "Role", profile_url: "Profile link", evidence_url: "Evidence link", found_at: "Found on", review_status: "Review status", fit_evidence: "Fit evidence", gaps: "Gaps", candidate_key: "Candidate key", business_email: "Business email", personal_email: "Personal email", mobile_number: "Mobile number", work_number: "Work number", other_phone: "Other phone", source_tab_range: "Source tab and range", source_group: "Source group", source_notes: "Source notes", next_check: "Next check",
-  submission_date: "Submission date", recruiter: "Recruiter", licenses_certifications: "Licences and certifications", target_current_compensation: "Target and current compensation", reason_for_leaving: "Reason for leaving", profile_summary: "Profile summary", additional_notes: "Additional notes", submission_type: "Submission type", role_submitted_for: "Role submitted for", client_submitted_to: "Client submitted to", activity_status: "Activity status", submission_link: "Submission link", gmail_message_id: "Gmail message ID", gmail_thread_id: "Gmail thread ID", source_verified_date: "Source verified date",
+  submission_date: "Submission date", recruiter: "Recruiter", licenses_certifications: "Licences and certifications", target_current_compensation: "Target and current compensation", reason_for_leaving: "Reason for leaving", profile_summary: "Profile summary", additional_notes: "Additional notes", submission_type: "Submission type", role_submitted_for: "Role submitted for", client_submitted_to: "Client submitted to", activity_status: "Activity status", submission_link: "Submission link", gmail_message_id: "Email message ID", gmail_thread_id: "Email thread ID", source_verified_date: "Source verified date",
   person_id: "Loxo person ID", fit_job_id: "Loxo job ID", fit_label: "Fit label", tracker_sheet: "Source sheet", tracker_row: "Source row", date_added: "Date added", added_by: "Added by", matched_resume_lines: "Matched résumé lines",
 });
 
@@ -229,7 +229,7 @@ function errorForResponse(response, payload) {
   const code = payload?.error?.code || "IMPORT_UNAVAILABLE";
   const messages = {
     INVALID_INPUT: "Some import values aren't valid. Review the preview and correct the source file.",
-    UNAUTHORIZED: "Sign in again before importing data.",
+    UNAUTHORIZED: "Your workspace session ended. Reload the page and try again.",
     FORBIDDEN: "This account can't import data.",
     IMPORT_CONFLICT: "The source changed since the preview. Refresh it and review the rows again.",
     IMPORT_FAILED: "The import couldn't be completed. Retry after reviewing the preview.",
@@ -252,11 +252,11 @@ async function callerHeaders(client, { includeApiKey = true } = {}) {
   try {
     sessionResult = await client.auth.getSession();
   } catch {
-    throw new TrackerImportError("Sign in again before importing data.", { status: 401, code: "UNAUTHORIZED" });
+    throw new TrackerImportError("Workbench could not reach your workspace. Reload the page, then import again.", { status: 401, code: "UNAUTHORIZED" });
   }
   const token = sessionResult?.data?.session?.access_token;
   if (sessionResult?.error || !token) {
-    throw new TrackerImportError("Sign in again before importing data.", { status: 401, code: "UNAUTHORIZED" });
+    throw new TrackerImportError("Workbench could not reach your workspace. Reload the page, then import again.", { status: 401, code: "UNAUTHORIZED" });
   }
   const headers = {
     Accept: "application/json",

@@ -52,49 +52,33 @@ test("Google API service reads bounded Sheets values through the injected client
   assert.equal(result.rows[1][0].length, 2000);
 });
 
-test("Google API service reads only Gmail thread IDs and enforces the required scope", async () => {
-  const service = createGoogleApiService({
-    auth: { getGoogleProviderAccessToken: async () => ({ accessToken: "user-token", scopes: ["https://www.googleapis.com/auth/gmail.readonly"] }) },
-    apiClientsFactory: async () => ({
-      gmail: { users: { threads: { list: async () => ({ data: { threads: [{ id: "thread-1", snippet: "private" }] } }) } } },
-    }),
-  });
-  assert.deepEqual(await service.sync(fakeRequest({ service: "gmail", query: "is:unread", maxResults: 1 })), { service: "gmail", threads: [{ id: "thread-1" }] });
-
-  const denied = createGoogleApiService({
-    auth: { getGoogleProviderAccessToken: async () => ({ accessToken: "user-token", scopes: [] }) },
-    apiClientsFactory: async () => ({}),
-  });
-  await assert.rejects(() => denied.sync(fakeRequest({ service: "gmail" })), { code: "GOOGLE_SCOPE_REQUIRED" });
-});
-
 test("Google API service rejects malformed or disconnected requests", async () => {
   const disconnected = createGoogleApiService({ auth: { getGoogleProviderAccessToken: async () => null } });
-  await assert.rejects(() => disconnected.sync(fakeRequest({ service: "gmail", unexpected: true })), { name: "ZodError" });
-  await assert.rejects(() => disconnected.sync(fakeRequest({ service: "gmail" })), { code: "GOOGLE_ACCOUNT_NOT_CONNECTED" });
+  await assert.rejects(() => disconnected.sync(fakeRequest({ service: "sheets", unexpected: true })), { name: "ZodError" });
+  await assert.rejects(() => disconnected.sync(fakeRequest({ service: "sheets", spreadsheetId: "s", range: "A1" })), { code: "GOOGLE_ACCOUNT_NOT_CONNECTED" });
 });
 
 test("/api/gws/sync enforces authoritative sessions and rejects browser token/account fields", async () => {
   const base = { env: { APP_TRUSTED_ORIGINS: browserOrigin }, authConfig: routeAuth, recruitmentContextLoader: async () => ({ authority: { id: "recruiter", capabilities: [] }, pkg: { readSkillText: async () => "# Recruiter", assertSkillFile: async () => {} } }) };
-  const noSession = await routeRequest(await createApp(base), "POST", "/api/gws/sync", { service: "gmail" });
+  const noSession = await routeRequest(await createApp(base), "POST", "/api/gws/sync", { service: "sheets", spreadsheetId: "s", range: "A1" });
   assert.equal(noSession.status, 401);
-  const unapproved = await routeRequest(await createApp(base), "POST", "/api/gws/sync", { service: "gmail" }, "Bearer unapproved");
+  const unapproved = await routeRequest(await createApp(base), "POST", "/api/gws/sync", { service: "sheets", spreadsheetId: "s", range: "A1" }, "Bearer unapproved");
   assert.equal(unapproved.status, 403);
-  const malformedHandlers = createGoogleApiHandlers({ auth: { getGoogleProviderAccessToken: async () => ({ accessToken: "server-token", scopes: ["https://www.googleapis.com/auth/gmail.readonly"] }) }, apiClientsFactory: async () => ({ gmail: { users: { threads: { list: async () => ({ data: { threads: [] } }) } } } }) });
+  const malformedHandlers = createGoogleApiHandlers({ auth: { getGoogleProviderAccessToken: async () => ({ accessToken: "server-token", scopes: ["https://www.googleapis.com/auth/spreadsheets"] }) }, apiClientsFactory: async () => ({ sheets: {} }) });
   const forbiddenAccountKey = "account" + "Id";
   const forbiddenTokenKey = "access" + "Token";
-  const malformed = await routeRequest(await createApp({ ...base, googleApiHandlers: malformedHandlers }), "POST", "/api/gws/sync", { service: "gmail", [forbiddenTokenKey]: "browser-token", [forbiddenAccountKey]: "other-user" }, "Bearer approved");
+  const malformed = await routeRequest(await createApp({ ...base, googleApiHandlers: malformedHandlers }), "POST", "/api/gws/sync", { service: "sheets", spreadsheetId: "s", range: "A1", [forbiddenTokenKey]: "browser-token", [forbiddenAccountKey]: "other-user" }, "Bearer approved");
   assert.equal(malformed.status, 400);
 });
 
 test("/api/gws/sync fails closed without provider helper and accepts approved injected handler", async () => {
   const context = async () => ({ authority: { id: "recruiter", capabilities: [] }, pkg: { readSkillText: async () => "# Recruiter", assertSkillFile: async () => {} } });
   const noHelper = await createApp({ env: { APP_TRUSTED_ORIGINS: browserOrigin }, authConfig: { ...routeAuth }, recruitmentContextLoader: context });
-  assert.equal((await routeRequest(noHelper, "POST", "/api/gws/sync", { service: "gmail" }, "Bearer approved")).status, 503);
-  const injected = await createApp({ env: { APP_TRUSTED_ORIGINS: browserOrigin }, authConfig: routeAuth, recruitmentContextLoader: context, googleApiHandlers: { sync: (_req, res) => res.status(200).json({ service: "gmail", threads: [{ id: "thread-1" }] }) } });
-  const success = await routeRequest(injected, "POST", "/api/gws/sync", { service: "gmail" }, "Bearer approved");
+  assert.equal((await routeRequest(noHelper, "POST", "/api/gws/sync", { service: "sheets", spreadsheetId: "s", range: "A1" }, "Bearer approved")).status, 503);
+  const injected = await createApp({ env: { APP_TRUSTED_ORIGINS: browserOrigin }, authConfig: routeAuth, recruitmentContextLoader: context, googleApiHandlers: { sync: (_req, res) => res.status(200).json({ service: "sheets", spreadsheetId: "s", range: "A1", rows: [] }) } });
+  const success = await routeRequest(injected, "POST", "/api/gws/sync", { service: "sheets", spreadsheetId: "s", range: "A1" }, "Bearer approved");
   assert.equal(success.status, 200);
-  assert.deepEqual(success.body, { service: "gmail", threads: [{ id: "thread-1" }] });
+  assert.deepEqual(success.body, { service: "sheets", spreadsheetId: "s", range: "A1", rows: [] });
 });
 
 test("Calendar status and upcoming reads prefer the current Better Auth provider grant", async () => {

@@ -5,7 +5,7 @@ import { GOOGLE_WORKSPACE_SCOPES } from "./google-workspace-oauth.js";
 const MAX_CELL_LENGTH = 2000;
 
 function requiredScope(service) {
-  return service === "sheets" ? GOOGLE_WORKSPACE_SCOPES.sheets[0] : GOOGLE_WORKSPACE_SCOPES.gmail[0];
+  return GOOGLE_WORKSPACE_SCOPES.sheets[0];
 }
 
 function sanitizeCell(value) {
@@ -25,7 +25,6 @@ export function createGoogleApiService({ auth, apiClientsFactory } = {}) {
     oauth2Client.setCredentials({ access_token: accessToken });
     return {
       oauth2Client,
-      gmail: google.gmail({ version: "v1", auth: oauth2Client }),
       sheets: google.sheets({ version: "v4", auth: oauth2Client }),
     };
   });
@@ -44,12 +43,6 @@ export function createGoogleApiService({ auth, apiClientsFactory } = {}) {
         const response = await clients.sheets.spreadsheets.values.get({ spreadsheetId: input.spreadsheetId, range: input.range });
         return GoogleWorkspaceSyncResponseSchema.parse({ service: "sheets", spreadsheetId: input.spreadsheetId, range: input.range, rows: sanitizeRows(response?.data?.values) });
       }
-      const response = await clients.gmail.users.threads.list({ userId: "me", q: input.query || undefined, maxResults: input.maxResults });
-      const threads = (Array.isArray(response?.data?.threads) ? response.data.threads : [])
-        .slice(0, input.maxResults)
-        .filter((thread) => typeof thread?.id === "string")
-        .map((thread) => ({ id: thread.id.slice(0, 200) }));
-      return GoogleWorkspaceSyncResponseSchema.parse({ service: "gmail", threads });
     },
   });
 }

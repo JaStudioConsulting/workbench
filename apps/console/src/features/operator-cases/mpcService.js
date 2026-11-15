@@ -56,7 +56,7 @@ async function saveMpcDraftVersion(client, caseId, artifactType, content, { expe
 export async function loadMpcCaseForCandidate(candidateId, { client = supabase } = {}) {
   const refs = buildMpcCaseReferences(candidateId);
   const auth = await client.auth.getUser();
-  if (auth.error || !auth.data?.user?.id) throw new Error("Sign in with an authorized Workbench account to open MPC history.");
+  if (auth.error || !auth.data?.user?.id) throw new Error("Workbench could not reach your workspace. Reload the page, then open MPC history again.");
   const liveCandidate = await checked(client.from("candidates_all").select("id,candidate_name,current_title,current_company")
     .eq("id", refs.candidateId).maybeSingle(), "The selected candidate could not be checked.");
   if (!liveCandidate) throw new Error("The selected candidate is not available in the current Tracker data.");
@@ -105,7 +105,7 @@ export async function openMpcCase({ candidateId, candidate = {}, positioning = {
   }
   const refs = buildMpcCaseReferences(candidateId || candidate.id);
   const auth = await client.auth.getUser();
-  if (auth.error || !auth.data?.user?.id) throw new Error("Sign in with an authorized Workbench account before saving MPC research.");
+  if (auth.error || !auth.data?.user?.id) throw new Error("Workbench could not reach your workspace. Reload the page, then save MPC research again.");
   const ownerId = auth.data.user.id;
   const liveCandidate = await checked(client.from("candidates_all").select("id,candidate_name,current_title,current_company")
     .eq("id", refs.candidateId).maybeSingle(), "The selected candidate could not be checked.");

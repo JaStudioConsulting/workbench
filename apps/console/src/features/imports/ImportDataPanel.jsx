@@ -7,6 +7,8 @@ import { Input } from "../../components/ui/input.tsx";
 import { Label } from "../../components/ui/label.tsx";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../components/ui/select.tsx";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../../components/ui/table.tsx";
+import { googleWorkspaceEnabled } from "../../featureFlags.js";
+import { invalidateReadCache } from "../../lib/readCache.js";
 import {
   TRACKER_IMPORT_FIELDS,
   TRACKER_IMPORT_TYPES,
@@ -113,7 +115,7 @@ function historyStatus(status) {
 
 export function ImportDataPanel() {
   const [type, setType] = useState("candidates");
-  const [sourceKind, setSourceKind] = useState("sheet");
+  const [sourceKind, setSourceKind] = useState(googleWorkspaceEnabled ? "sheet" : "file");
   const [sheetLink, setSheetLink] = useState("");
   const [sheetMetadata, setSheetMetadata] = useState(null);
   const [sheetId, setSheetId] = useState("");
@@ -353,6 +355,12 @@ export function ImportDataPanel() {
     setSuccess("");
     try {
       const result = await confirmTrackerImport(preview.importId, rows);
+      invalidateReadCache("candidate-directory:");
+      invalidateReadCache("candidate-review:");
+      invalidateReadCache("search:presentations:");
+      invalidateReadCache("process:stage-counts:");
+      invalidateReadCache("process:candidate-evidence:");
+      invalidateReadCache("home:");
       const imported = Number(result.importedCount) || 0;
       const updated = Number(result.updatedCount) || 0;
       const unchanged = Number(result.unchangedCount) || 0;
@@ -459,13 +467,14 @@ export function ImportDataPanel() {
           <fieldset className="grid gap-2">
             <legend className="text-sm font-medium">Source</legend>
             <div className="flex flex-wrap gap-4">
-              <label className="flex min-h-10 items-center gap-2 text-sm"><input type="radio" name="tracker-import-source" value="sheet" checked={sourceKind === "sheet"} onChange={() => { setSourceKind("sheet"); clearPreview(); setError(""); }} />Google Sheets</label>
+              {googleWorkspaceEnabled ? <label className="flex min-h-10 items-center gap-2 text-sm"><input type="radio" name="tracker-import-source" value="sheet" checked={sourceKind === "sheet"} onChange={() => { setSourceKind("sheet"); clearPreview(); setError(""); }} />Google Sheets</label> : null}
               <label className="flex min-h-10 items-center gap-2 text-sm"><input type="radio" name="tracker-import-source" value="file" checked={sourceKind === "file"} onChange={() => { setSourceKind("file"); clearPreview(); setError(""); }} />CSV or XLSX file</label>
             </div>
+            {!googleWorkspaceEnabled ? <p className="text-xs text-muted-foreground">Google Sheets import is switched off for now. Import a CSV or XLSX file instead.</p> : null}
           </fieldset>
         </div>
 
-        {sourceKind === "sheet" ? <div className="flex flex-col gap-3 rounded-lg border p-4">
+        {sourceKind === "sheet" && googleWorkspaceEnabled ? <div className="flex flex-col gap-3 rounded-lg border p-4">
           <div className="grid gap-2">
             <Label htmlFor="tracker-sheet-link">Google Sheets link</Label>
             <div className="flex flex-col gap-2 sm:flex-row"><Input id="tracker-sheet-link" value={sheetLink} onChange={(event) => { setSheetLink(event.target.value); setSheetMetadata(null); setSheetId(""); setMapping([]); setIdentityField(""); clearPreview(); setError(""); }} placeholder="Paste your Google Sheets link" autoComplete="url" /><Button type="button" variant="outline" disabled={busy !== "" || !sheetLink.trim()} onClick={loadSheetTabs}><CloudDownload data-icon="inline-start" />{busy === "sheets" ? "Loading tabs…" : "Load tabs"}</Button></div>

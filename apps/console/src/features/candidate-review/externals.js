@@ -17,5 +17,5 @@ export {
 export { personalizeOutreach } from "../pipeline/aiClient.js";
 export { default as FitBadge } from "../pipeline/FitBadge.jsx";
 export { getResumeSource } from "./brandResume.js";
-export { logOutreach, saveGmailDraft, getMailStatus } from "../mail/mailClient.js";
+export { logOutreach } from "../mail/mailClient.js";
 export { getProfile } from "../profile/profileService.js";
