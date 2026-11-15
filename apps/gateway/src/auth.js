@@ -29,6 +29,10 @@ export function parseAllowedGoogleEmails(value) {
   return [...new Set(emails)];
 }
 
+export function getBetterAuthAvailability(auth) {
+  return auth?.enabled === true ? "configured" : "unavailable";
+}
+
 export async function createConfiguredAuth(env = process.env) {
   const trustedOrigins = parseExactHttpsOrigins(env.AUTH_TRUSTED_ORIGINS);
   const allowedGoogleEmails = parseAllowedGoogleEmails(env.AUTH_ALLOWED_GOOGLE_EMAILS);

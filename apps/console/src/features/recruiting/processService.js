@@ -21,7 +21,7 @@ export function hasCandidateProfileData(candidate) {
   );
 }
 
-export function buildProcessSummary({ jobs = [], candidates = [], actions = [] }, now = new Date()) {
+export function buildProcessSummary({ jobs = [], candidates = [], actions = [], candidateDataAvailable = true }, now = new Date()) {
   const activeJobs = jobs.filter((job) => text(job.status).toLowerCase() === "active");
   const jobIds = new Set(activeJobs.map((job) => String(job.job_id)));
   const activeCandidates = candidates.filter((candidate) => jobIds.has(String(candidate.job_id)));
@@ -40,8 +40,8 @@ export function buildProcessSummary({ jobs = [], candidates = [], actions = [] }
       id: String(job.job_id),
       title: text(job.job_title) || "Job title not on file",
       company: text(job.company) || "Company not on file",
-      candidateCount: rows.length,
-      stageCounts,
+      candidateCount: candidateDataAvailable ? rows.length : null,
+      stageCounts: candidateDataAvailable ? stageCounts : {},
     };
   });
 
@@ -64,7 +64,7 @@ export function buildProcessSummary({ jobs = [], candidates = [], actions = [] }
       };
     });
 
-  const missingSources = activeCandidates
+  const missingSources = candidateDataAvailable ? activeCandidates
     .filter((candidate) => !text(candidate.resume_text) && !hasCandidateProfileData(candidate))
     .map((candidate) => ({
       type: "missing_source",
@@ -72,9 +72,9 @@ export function buildProcessSummary({ jobs = [], candidates = [], actions = [] }
       jobId: String(candidate.job_id),
       label: text(candidate.candidate_name) || "Candidate name not on file",
       detail: "No resume or profile data",
-    }));
+    })) : [];
 
-  const emptyJobs = jobSummaries
+  const emptyJobs = candidateDataAvailable ? jobSummaries
     .filter((job) => job.candidateCount === 0)
     .map((job) => ({
       type: "empty_job",
@@ -82,11 +82,12 @@ export function buildProcessSummary({ jobs = [], candidates = [], actions = [] }
       jobId: job.id,
       label: `${job.title} at ${job.company}`,
       detail: "No candidates",
-    }));
+    })) : [];
 
   return {
     jobs: jobSummaries,
     blocked: [...staleActions, ...missingSources, ...emptyJobs],
+    candidateDataAvailable,
   };
 }
 
@@ -109,12 +110,12 @@ export async function loadProcessData(client = supabase, now = new Date()) {
   ]);
 
   if (jobsResult.error) throw new Error("Could not load active Tracker jobs");
-  if (candidatesResult.error) throw new Error("Could not load candidate stages");
   if (actionsResult.error) throw new Error("Could not load queued Loxo actions");
 
   return buildProcessSummary({
     jobs: jobsResult.data || [],
-    candidates: candidatesResult.data || [],
+    candidates: candidatesResult.error ? [] : (candidatesResult.data || []),
     actions: actionsResult.data || [],
+    candidateDataAvailable: !candidatesResult.error,
   }, now);
 }

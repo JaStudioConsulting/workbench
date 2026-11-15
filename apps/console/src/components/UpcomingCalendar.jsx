@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { CalendarDays, RefreshCw } from "lucide-react";
-import { getUpcomingGoogleCalendar } from "../google-workspace-client.js";
+import { getUpcomingGoogleCalendar, googleConnectionGuidance } from "../google-workspace-client.js";
 
 function formatDateOnly(value) {
   const [year, month, day] = value.split("-").map(Number);
@@ -40,11 +40,13 @@ export function UpcomingCalendar() {
         setState({ phase: result.events.length === 0 ? "empty" : "success", events: result.events.slice(0, 10) });
       })
       .catch((error) => {
-        if (error?.name !== "AbortError") setState({ phase: "error", events: [] });
+        if (error?.name !== "AbortError") setState({ phase: "error", events: [], code: error?.code || "GOOGLE_WORKSPACE_REQUEST_FAILED" });
       });
 
     return () => controller.abort();
   }, [requestId]);
+
+  const recovery = state.phase === "error" ? googleConnectionGuidance(state.code) : null;
 
   return (
     <section className="google-calendar-preview" aria-labelledby="upcoming-calendar-title">
@@ -53,7 +55,7 @@ export function UpcomingCalendar() {
           <span className="eyebrow">READ-ONLY CALENDAR</span>
           <h3 id="upcoming-calendar-title">Upcoming events</h3>
         </div>
-        {state.phase === "error" ? (
+        {state.phase === "error" && recovery.retryable ? (
           <button type="button" className="calendar-retry" onClick={loadEvents}>
             <RefreshCw size={15} aria-hidden="true" /> Retry
           </button>
@@ -63,7 +65,7 @@ export function UpcomingCalendar() {
       <div aria-live="polite">
         {state.phase === "loading" ? <p className="calendar-state">Loading upcoming events…</p> : null}
         {state.phase === "empty" ? <p className="calendar-state">No upcoming events.</p> : null}
-        {state.phase === "error" ? <p className="calendar-state">Calendar events could not be loaded.</p> : null}
+        {state.phase === "error" ? <p className="calendar-state">{recovery.message}</p> : null}
         {state.phase === "success" ? (
           <ol className="calendar-event-list">
             {state.events.map((event, index) => (

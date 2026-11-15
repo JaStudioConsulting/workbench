@@ -79,15 +79,23 @@ export async function getMailStatus({ request = globalThis.fetch } = {}) {
       credentials: "include",
       headers: { accept: "application/json" },
     });
-    if (!response.ok) throw new Error("status unavailable");
-    const status = await response.json();
+    const status = await response.json().catch(() => null);
+    if (!response.ok) {
+      return {
+        connected: false,
+        canDraft: false,
+        canRead: false,
+        error: true,
+        code: status?.error?.code || "MAIL_STATUS_UNAVAILABLE",
+      };
+    }
     return {
       connected: Boolean(status.connected),
       canDraft: Boolean(status.canDraft),
       canRead: Boolean(status.canRead),
     };
   } catch {
-    return { connected: false, canDraft: false, canRead: false, error: true };
+    return { connected: false, canDraft: false, canRead: false, error: true, code: "NETWORK_UNAVAILABLE" };
   }
 }
 

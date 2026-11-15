@@ -60,6 +60,19 @@ test("process summary reports each specified blocked condition", () => {
   assert.ok(summary.blocked.every((item) => !item.label.includes("undefined")));
 });
 
+test("process summary keeps active jobs honest when candidate stages are unavailable", () => {
+  const summary = buildProcessSummary({
+    jobs: [{ job_id: 10, job_title: "Plant Manager", company: "Example Industries", status: "Active" }],
+    candidates: [],
+    actions: [],
+    candidateDataAvailable: false,
+  });
+  assert.equal(summary.candidateDataAvailable, false);
+  assert.equal(summary.jobs[0].candidateCount, null);
+  assert.deepEqual(summary.jobs[0].stageCounts, {});
+  assert.deepEqual(summary.blocked, []);
+});
+
 test("profile evidence prevents a false missing-source block", () => {
   assert.equal(hasCandidateProfileData({ profile_url: "https://example.invalid/profile" }), true);
   assert.equal(hasCandidateProfileData({ current_title: "Controller" }), true);

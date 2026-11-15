@@ -43,6 +43,20 @@ function localSessionConfig(env) {
   };
 }
 
+export function getLocalSessionAvailability(env = process.env) {
+  const config = localSessionConfig(env);
+  const configured = Boolean(
+    config.enabled
+    && config.supabaseUrl
+    && config.publishableKey
+    && config.ownerId
+    && config.loginHash
+    && config.secretPath
+    && config.origins.length
+  );
+  return configured ? "configured" : "unavailable";
+}
+
 export function isTrustedLocalSessionRequest(req, { origins, loginHash }) {
   if (!isLoopbackAddress(req.socket?.remoteAddress)) return false;
   const origin = typeof req.get === "function" ? req.get("origin") || "" : req.headers?.origin || "";

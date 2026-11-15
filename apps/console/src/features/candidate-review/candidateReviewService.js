@@ -13,6 +13,8 @@ let supabaseClient = supabase;
 let runtimeJobs = [];
 let runtimePresentations = [];
 const runtimeCandidatesByJob = new Map();
+let liveReviewJobsLoaded = false;
+const liveCandidateJobIds = new Set();
 
 function sourceIdentity(candidateId) {
   const [source, rawId] = String(candidateId || "").split(":");
@@ -368,9 +370,11 @@ export async function loadLiveReviewJobs() {
     fetchPresentationRows(),
   ]);
   if (error) throw new Error("Supabase could not load Tracker jobs");
-  if (linkedError) throw new Error("Supabase could not load candidate job links");
+  // Candidate links only influence sort order. Keep active jobs usable when
+  // that optional view is unavailable; candidate loading still reports its
+  // own failure when a job is opened.
 
-  const linkedJobIds = new Set((linkedRows || []).map((row) => String(row.job_id)));
+  const linkedJobIds = new Set((linkedError ? [] : (linkedRows || [])).map((row) => String(row.job_id)));
 
   runtimeJobs = (data || []).map((job) => ({
     id: String(job.job_id),
@@ -384,6 +388,7 @@ export async function loadLiveReviewJobs() {
     owners: job.owners || "",
     loxoLink: job.loxo_link || "",
   })).sort((a, b) => Number(linkedJobIds.has(b.id)) - Number(linkedJobIds.has(a.id)));
+  liveReviewJobsLoaded = true;
   runtimePresentations = (presentations || []).map((row) => mapLivePresentation(row));
   return runtimeJobs;
 }
@@ -426,6 +431,7 @@ export async function loadLiveCandidatesForJob(jobId) {
     enrichCandidateWithPresentations(cand, runtimePresentations, { jobId })
   );
   runtimeCandidatesByJob.set(String(jobId), candidates);
+  liveCandidateJobIds.add(String(jobId));
   return candidates;
 }
 
@@ -673,6 +679,28 @@ export function getCandidatesForJob(jobId) {
     const orderB = PIPELINE_STAGE_ORDER[b.stage] ?? 999;
     return orderA - orderB;
   });
+}
+
+// These readers expose only successful in-memory live loads. They let pages
+// paint the last result immediately on revisit while a fresh request runs.
+export function getCachedLiveReviewJobs() {
+  return liveReviewJobsLoaded ? runtimeJobs : null;
+}
+
+export function getCachedLiveCandidatesForJob(jobId) {
+  if (!jobId || !liveCandidateJobIds.has(String(jobId))) return null;
+  return getCandidatesForJob(jobId);
+}
+
+export function clearLiveReviewCache() {
+  candidateDecisions.clear();
+  loggedActivities.clear();
+  activityOutbox.clear();
+  runtimeJobs = [];
+  runtimePresentations = [];
+  runtimeCandidatesByJob.clear();
+  liveReviewJobsLoaded = false;
+  liveCandidateJobIds.clear();
 }
 
 export function getSubmissionHistory() {
@@ -943,12 +971,8 @@ export function _setSupabaseClientForTesting(client) {
 
 export function _resetStoreForTesting({ jobs = [], candidates = [] } = {}) {
   supabaseClient = supabase;
-  candidateDecisions.clear();
-  loggedActivities.clear();
-  activityOutbox.clear();
+  clearLiveReviewCache();
   runtimeJobs = jobs.map((job) => ({ ...job }));
-  runtimePresentations = [];
-  runtimeCandidatesByJob.clear();
   for (const candidate of candidates) {
     const key = String(candidate.jobId);
     const group = runtimeCandidatesByJob.get(key) || [];

@@ -5,7 +5,7 @@ import { transformWithEsbuild } from "vite";
 import { evaluateFit, personalizeOutreach } from "../src/features/pipeline/aiClient.js";
 import { scoreFit } from "../src/features/pipeline/fitScore.js";
 import { isInCanada, province } from "../src/features/pipeline/location.js";
-import { resolvePendingStage } from "../src/features/pipeline/pendingStage.js";
+import { groupPipelineCandidates, resolvePendingStage } from "../src/features/pipeline/pendingStage.js";
 
 test("Canada location matching uses province, territory, city, and country tokens", () => {
   assert.equal(isInCanada("Toronto, ON"), true);
@@ -87,19 +87,35 @@ test("pending stage moves are rebuilt from the persisted activity trail", () => 
   assert.equal(resolvePendingStage({ id: "a", activityTrail: [] }, { a: "Interview" }), "Interview");
   assert.equal(resolvePendingStage({ id: "b", activityTrail: [{ status: "Waiting for Loxo", targetStage: "Unsupported" }] }), null);
   assert.equal(resolvePendingStage({ id: "c" }), null);
+
+  const original = { id: "d", name: "Unsupported candidate", stage: "Needs checking", activityTrail: [] };
+  const grouped = groupPipelineCandidates([original], { d: "Applied" });
+  assert.deepEqual(grouped.boardCandidates, []);
+  assert.equal(grouped.unsupported[0].stage, "Needs checking");
 });
 
 test("Pipeline page loads live data, queues exact stage notes, and compiles", async () => {
   const source = await readFile(new URL("../src/features/pipeline/PipelinePage.jsx", import.meta.url), "utf8");
   assert.match(source, /loadLiveReviewJobs/);
   assert.match(source, /loadLiveCandidatesForJob/);
-  assert.doesNotMatch(source, /getReviewJobs|getCandidatesForJob|SAMPLE_/);
+  assert.match(source, /getCachedLiveReviewJobs/);
+  assert.match(source, /getCachedLiveCandidatesForJob/);
+  assert.doesNotMatch(source, /SAMPLE_/);
   assert.match(source, /type: "\*Note"/);
   assert.match(source, /Stage move: \$\{from\} to \$\{to\}/);
   assert.match(source, /Waiting for Loxo/);
-  assert.match(source, /resolvePendingStage/);
+  assert.match(source, /groupPipelineCandidates/);
   assert.match(source, /DragDropProvider/);
   assert.match(source, /onOpenCandidate\?\.\(job\.id, candidate\.id\)/);
+  assert.match(source, /items=\{jobSelectItems\}/);
+  assert.match(source, /selectedJob: controlledJob = null/);
+  assert.match(source, /controlledJob\?\.loxoJobId \|\| controlledJob\?\.originalJobId \|\| controlledJob\?\.id/);
+  assert.match(source, /jobsState\.jobs\.some\(\(job\) => String\(job\.id\) === controlledJobId\)/);
+  assert.match(source, /onValueChange=\{handleJobChange\}/);
+  assert.match(source, /onSelectJob\?\.\(nextJob\)/);
+  assert.match(source, /Current stage:/);
+  assert.match(source, />Open<\/Button>/);
+  assert.match(source, /onOpenCandidate\?\.\(candidate\.jobId \|\| selectedJobId, candidate\.id\)/);
   assert.match(source, /Move \$\{candidate\.name\} to stage/);
   assert.match(source, /<CandidatePresentationBadges/);
   assert.match(source, /<CandidatePresentationSummary/);

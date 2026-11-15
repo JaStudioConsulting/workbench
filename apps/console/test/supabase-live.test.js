@@ -18,17 +18,21 @@ test("Jobs and candidates use authenticated live data instead of browser fixture
   const jobsMap = read("src/features/jobs-map/JobsMapView.jsx");
   const review = read("src/features/candidate-review/CandidateReview.jsx");
   const service = read("src/features/candidate-review/candidateReviewService.js");
-  const app = read("src/App.jsx");
+  const oneView = read("src/features/workbench/WorkbenchOneView.jsx");
 
   assert.match(jobsMap, /from\("tracker_jobs"\)/);
   assert.doesNotMatch(jobsMap, /INITIAL_JOBS_DATA/);
   assert.match(review, /loadLiveReviewJobs/);
   assert.match(review, /loadLiveCandidatesForJob/);
   assert.match(review, /dataError\s*\?\s*"Live data unavailable"/);
-  assert.match(review, /"Connected to Supabase"/);
+  assert.match(review, />Candidates<\/h2>/);
+  assert.match(review, /`Loaded \$\{loadProgress\.loaded\} of \$\{loadProgress\.total\}`/);
+  assert.match(review, /"Live data loaded"/);
+  assert.match(review, /data-testid="live-data-progress"/);
   assert.doesNotMatch(review, /dataLoading\s*\?\s*"Loading Supabase"\s*:\s*"Saved to Supabase"/);
   assert.match(service, /from\("candidate_review_feed"\)/);
-  assert.match(app, /initialView=\{page === "Candidates" \? "people" : "swipe"\}/);
+  assert.match(oneView, /initialView="people"/);
+  assert.match(oneView, /initialView="swipe"/);
 });
 
 test("review actions and candidate artifacts persist in Supabase", () => {

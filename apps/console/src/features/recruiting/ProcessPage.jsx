@@ -48,17 +48,18 @@ export default function ProcessPage() {
   if (state.status === "loading") return <LoadingState />;
   if (state.status === "error") return <ErrorState message={state.error} onRetry={load} />;
 
-  const { jobs, blocked } = state.data;
+  const { jobs, blocked, candidateDataAvailable } = state.data;
   return <div className="flex flex-col gap-4" data-testid="live-process-view">
+    {!candidateDataAvailable ? <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950" role="status">Active jobs loaded. Candidate stage counts are currently unavailable.</div> : null}
     {jobs.length ? <>
       <Card>
-        <CardHeader><CardTitle>Stage counts by job</CardTitle><CardDescription>Live candidate counts from the review feed.</CardDescription></CardHeader>
+        <CardHeader><CardTitle>Stage counts by job</CardTitle><CardDescription>{candidateDataAvailable ? "Live candidate counts from the review feed." : "Active Tracker jobs are available; candidate counts could not be loaded."}</CardDescription></CardHeader>
         <CardContent className="grid gap-3 xl:grid-cols-2">
           {jobs.map((job) => <article key={job.id} className="rounded-lg border bg-background p-4">
-            <div className="flex items-start justify-between gap-3"><div><h3 className="font-semibold">{job.title}</h3><p className="text-sm text-muted-foreground">{job.company}</p></div><Badge variant="outline">{job.candidateCount} candidates</Badge></div>
-            <dl className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3">
+            <div className="flex items-start justify-between gap-3"><div><h3 className="font-semibold">{job.title}</h3><p className="text-sm text-muted-foreground">{job.company}</p></div>{candidateDataAvailable ? <Badge variant="outline">{job.candidateCount} candidates</Badge> : <Badge variant="outline">Counts unavailable</Badge>}</div>
+            {candidateDataAvailable ? <dl className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3">
               {LOXO_PIPELINE_STAGES.map((stage) => <div key={stage} className="flex items-center justify-between gap-2 rounded-md bg-muted/40 px-2.5 py-2"><dt className="text-xs text-muted-foreground">{stage}</dt><dd className="text-sm font-semibold tabular-nums">{job.stageCounts[stage]}</dd></div>)}
-            </dl>
+            </dl> : null}
           </article>)}
         </CardContent>
       </Card>

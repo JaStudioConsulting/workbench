@@ -29,6 +29,10 @@ const LOXO_PEOPLE_BASE_URL = "https://app.loxo.co/people/";
 const NotesPanel = lazy(() => import("../notes/NotesPanel.jsx"));
 const BoardPanel = lazy(() => import("../board/BoardPanel.jsx"));
 const VIEW_TABS = [["all", "All"], ["unreviewed", "Unreviewed"], ["wanted", "Wanted"], ["passed", "Passed"], ["submitted", "Submitted"]];
+const STAGE_FILTER_ITEMS = [
+  { value: "ALL", label: "All Stages" },
+  ...LOXO_PIPELINE_STAGES.map((stage) => ({ value: stage, label: stage })),
+];
 
 function withinDateRange(value, start, end) {
   if (!value) return !start && !end;
@@ -58,6 +62,7 @@ export default function PeopleView({ candidates = [], currentJob, jobs = [], sub
   const [ownershipOverrides, setOwnershipOverrides] = useState(() => new Set());
   const [actionError, setActionError] = useState("");
   const [submittingId, setSubmittingId] = useState("");
+  const [visibleLimit, setVisibleLimit] = useState(100);
   const focusedRowRef = useRef(null);
   const focusKey = parseCandidateSourceKey(focusCandidateId)?.id ?? null;
 
@@ -105,6 +110,13 @@ export default function PeopleView({ candidates = [], currentJob, jobs = [], sub
     passed: mergedCandidates.filter((candidate) => candidate.decision === "pass").length,
     submitted: submissionHistory.length,
   }), [mergedCandidates, submissionHistory]);
+  const submissionJobItems = useMemo(
+    () => [
+      { value: "ALL", label: "All jobs" },
+      ...jobs.map((job) => ({ value: String(job.id), label: job.title })),
+    ],
+    [jobs],
+  );
 
   const filteredCandidates = useMemo(() => {
     const source = viewFilter === "submitted"
@@ -162,6 +174,11 @@ export default function PeopleView({ candidates = [], currentJob, jobs = [], sub
       ].filter(Boolean).join(" ").toLowerCase().includes(query);
     });
   }, [currentJob?.id, mergedCandidates, onlyOthersReachedOut, searchTerm, stageFilter, submissionClient, submissionFrom, submissionHistory, submissionJobId, submissionLocation, submissionTo, viewFilter]);
+  const visibleCandidates = useMemo(() => filteredCandidates.slice(0, visibleLimit), [filteredCandidates, visibleLimit]);
+
+  useEffect(() => {
+    setVisibleLimit(100);
+  }, [currentJob?.id, viewFilter, searchTerm, stageFilter, onlyOthersReachedOut, submissionJobId, submissionLocation, submissionClient, submissionFrom, submissionTo]);
 
   useEffect(() => {
     if (!focusKey) return;
@@ -172,10 +189,16 @@ export default function PeopleView({ candidates = [], currentJob, jobs = [], sub
   }, [focusKey]);
 
   useEffect(() => {
-    if (!focusKey || !filteredCandidates.some((candidate) => candidate.id === focusKey)) return;
+    if (!focusKey) return;
+    const focusedIndex = filteredCandidates.findIndex((candidate) => candidate.id === focusKey);
+    if (focusedIndex < 0) return;
+    if (focusedIndex >= visibleLimit) {
+      setVisibleLimit(focusedIndex + 1);
+      return;
+    }
     focusedRowRef.current?.scrollIntoView?.({ block: "center" });
     focusedRowRef.current?.focus?.({ preventScroll: true });
-  }, [focusKey, filteredCandidates]);
+  }, [focusKey, filteredCandidates, visibleLimit]);
 
   const markSubmitted = async (candidate) => {
     setActionError("");
@@ -238,7 +261,7 @@ export default function PeopleView({ candidates = [], currentJob, jobs = [], sub
             <input value={searchTerm} onChange={(event) => setSearchTerm(event.target.value)} placeholder="Search name, title, company, location" className="h-9 w-full rounded-md border bg-background pl-8 pr-3 text-xs outline-none focus:ring-2 focus:ring-ring" aria-label="Search candidates" data-testid="people-search" />
           </div>
           <div className="w-44">
-            <Select value={stageFilter} onValueChange={setStageFilter}>
+            <Select value={stageFilter} onValueChange={setStageFilter} items={STAGE_FILTER_ITEMS}>
               <SelectTrigger className="w-full text-xs h-9"><SelectValue placeholder="All Stages" /></SelectTrigger>
               <SelectContent><SelectGroup>
                 <SelectItem value="ALL" className="text-xs">All Stages</SelectItem>
@@ -253,7 +276,7 @@ export default function PeopleView({ candidates = [], currentJob, jobs = [], sub
 
         {viewFilter === "submitted" ? (
           <div className="grid gap-2 md:grid-cols-5" data-testid="submission-filters">
-            <Select value={submissionJobId} onValueChange={setSubmissionJobId}>
+            <Select value={submissionJobId} onValueChange={setSubmissionJobId} items={submissionJobItems}>
               <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="All jobs" /></SelectTrigger>
               <SelectContent><SelectGroup>
                 <SelectItem value="ALL" className="text-xs">All jobs</SelectItem>
@@ -287,7 +310,7 @@ export default function PeopleView({ candidates = [], currentJob, jobs = [], sub
           <div className="flex flex-col items-center justify-center p-8 text-center text-muted-foreground"><Users size={28} className="mb-2 opacity-50" /><p className="text-xs font-semibold text-foreground">Nothing in this view</p><p className="text-[11px] mt-0.5">Change the tab, search, or filters.</p></div>
         ) : (
           <div className="divide-y divide-border">
-            {filteredCandidates.map((candidate) => {
+            {visibleCandidates.map((candidate) => {
               const resumeInfo = RESUME_INDICATOR_STATES[candidate.resumeStatus] || RESUME_INDICATOR_STATES.resume_on_file;
               const lastActivity = candidate.activityTrail?.[0] || null;
               const ownership = getOwnershipStatus(candidate.activityTrail);
@@ -433,6 +456,7 @@ export default function PeopleView({ candidates = [], currentJob, jobs = [], sub
                 </div>
               );
             })}
+            {visibleCandidates.length < filteredCandidates.length ? <div className="p-3 text-center"><Button type="button" size="sm" variant="outline" onClick={() => setVisibleLimit((value) => value + 100)}>Show 100 more</Button></div> : null}
           </div>
         )}
       </div>

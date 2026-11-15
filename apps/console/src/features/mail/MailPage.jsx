@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Check, Clipboard, ExternalLink, FilePlus2, Mail, RefreshCw } from "lucide-react";
 import { Button } from "../../components/ui/button.tsx";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../components/ui/card.tsx";
@@ -6,6 +6,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Label } from "../../components/ui/label.tsx";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../../components/ui/table.tsx";
 import { Textarea } from "../../components/ui/textarea.tsx";
+import { googleConnectionGuidance } from "../../google-workspace-client.js";
 import { followUpsDue } from "../home/homeService.js";
 import { getProfile } from "../profile/profileService.js";
 import { getMailStatus, listMailReplies, listOutreach, logOutreach, saveGmailDraft } from "./mailClient.js";
@@ -19,7 +20,7 @@ function formatDate(value) {
 }
 
 function statusCopy(status) {
-  if (status.error) return "Gmail status could not be checked. Retry to see which actions are available.";
+  if (status.error) return googleConnectionGuidance(status.code).message;
   if (!status.connected) return "Gmail is not connected. Copy and Open in Mail are available.";
   if (!status.canDraft) return status.canRead
     ? "Gmail reply checking is connected. Gmail draft access is not approved."
@@ -113,11 +114,12 @@ function FollowUpDialog({ outreach, profile, canDraft, onClose, onLogged }) {
   );
 }
 
-export default function MailPage() {
+export default function MailPage({ showFollowUps = true, showStatus = true, focusOutreach = null }) {
   const [requestId, setRequestId] = useState(0);
   const [state, setState] = useState({ phase: "loading", outreach: [], replies: { available: false, latestByEmail: {} }, status: { connected: false, canRead: false, canDraft: false }, profile: {}, error: "" });
   const [selected, setSelected] = useState(null);
   const retry = useCallback(() => setRequestId((value) => value + 1), []);
+  const handledFocus = useRef(0);
 
   useEffect(() => {
     let active = true;
@@ -132,8 +134,17 @@ export default function MailPage() {
     return () => { active = false; };
   }, [requestId]);
 
+  useEffect(() => {
+    if (state.phase !== "ready" || !focusOutreach || handledFocus.current === focusOutreach.requestId) return;
+    handledFocus.current = focusOutreach.requestId;
+    const requested = focusOutreach.item;
+    const match = state.outreach.find((entry) => String(entry.id) === String(requested?.id));
+    setSelected(match || requested || null);
+  }, [focusOutreach, state.phase, state.outreach]);
+
   const due = state.phase === "ready" ? followUpsDue(state.outreach, state.replies) : [];
   const dueIds = new Set(due.map((entry) => entry.id));
+  const mailRecovery = state.status.error ? googleConnectionGuidance(state.status.code) : null;
   const addLogged = (logged) => setState((current) => ({ ...current, outreach: [logged, ...current.outreach] }));
 
   if (state.phase === "loading") return <section className="rounded-xl border p-6" role="status">Loading mail activity...</section>;
@@ -141,11 +152,11 @@ export default function MailPage() {
 
   return (
     <div className="flex flex-col gap-5" data-testid="mail-page">
-      <Card><CardHeader><div className="flex flex-wrap items-center justify-between gap-2"><CardTitle className="flex items-center gap-2 text-base"><Mail size={17} aria-hidden="true" />Mail status</CardTitle>{state.status.error ? <Button size="sm" variant="outline" onClick={retry}><RefreshCw />Retry</Button> : null}</div><CardDescription>{statusCopy(state.status)}</CardDescription></CardHeader></Card>
-      <section aria-labelledby="follow-ups-title">
+      {showStatus ? <Card><CardHeader><div className="flex flex-wrap items-center justify-between gap-2"><CardTitle className="flex items-center gap-2 text-base"><Mail size={17} aria-hidden="true" />Mail status</CardTitle>{mailRecovery?.retryable ? <Button size="sm" variant="outline" onClick={retry}><RefreshCw />Retry</Button> : null}</div><CardDescription>{statusCopy(state.status)}</CardDescription></CardHeader></Card> : null}
+      {showFollowUps ? <section aria-labelledby="follow-ups-title">
         <div className="mb-3"><h2 id="follow-ups-title" className="text-lg font-semibold">Follow-ups due</h2><p className="text-sm text-muted-foreground">{state.replies.available ? "Outreach older than three business days without a detected reply." : "Gmail reply status is unavailable."}</p></div>
         {due.length ? <div className="grid gap-3 md:grid-cols-2">{due.map((entry) => <Card key={entry.id}><CardHeader><CardTitle className="text-base">{entry.subject || "Outreach"}</CardTitle><CardDescription>{entry.candidateEmail || "Email not on file"}</CardDescription></CardHeader><CardContent><Button size="sm" onClick={() => setSelected(entry)}>Draft follow-up</Button></CardContent></Card>)}</div> : <div className="rounded-xl border border-dashed p-6 text-sm text-muted-foreground">{state.replies.available ? "No follow-ups are due." : "Reply checking is not available."}</div>}
-      </section>
+      </section> : null}
       <section aria-labelledby="outreach-log-title">
         <div className="mb-3"><h2 id="outreach-log-title" className="text-lg font-semibold">Outreach log</h2><p className="text-sm text-muted-foreground">Copied, mailto and Gmail draft activity.</p></div>
         {state.outreach.length === 0 ? <div className="rounded-xl border border-dashed p-8 text-center"><p className="font-medium">No outreach logged</p><p className="mt-1 text-sm text-muted-foreground">Outreach appears here after you copy or save a draft.</p></div> : (

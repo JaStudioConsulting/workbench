@@ -62,7 +62,13 @@ test("mail status is expressed as plain booleans", async () => {
 
 test("mail status failures remain distinguishable from a disconnected account", async () => {
   const status = await getMailStatus({ request: async () => { throw new Error("offline"); } });
-  assert.deepEqual(status, { connected: false, canDraft: false, canRead: false, error: true });
+  assert.deepEqual(status, { connected: false, canDraft: false, canRead: false, error: true, code: "NETWORK_UNAVAILABLE" });
+
+  const unconfigured = await getMailStatus({ request: async () => ({
+    ok: false,
+    async json() { return { error: { code: "AUTH_UNAVAILABLE" } }; },
+  }) });
+  assert.deepEqual(unconfigured, { connected: false, canDraft: false, canRead: false, error: true, code: "AUTH_UNAVAILABLE" });
 });
 
 test("reply lookup normalizes candidate emails", async () => {

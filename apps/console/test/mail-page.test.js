@@ -37,5 +37,7 @@ test("Mail page has complete states, reply status and draft-only actions", async
   assert.match(source, /Draft follow-up/);
   assert.match(source, /Save Gmail draft/);
   assert.match(source, /logOutreach/);
+  assert.match(source, /googleConnectionGuidance\(status\.code\)/);
+  assert.match(source, /mailRecovery\?\.retryable/);
   assert.doesNotMatch(source, /\u2014/);
 });

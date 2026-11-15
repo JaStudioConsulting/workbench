@@ -9,3 +9,16 @@ export function resolvePendingStage(candidate = {}, sessionPending = {}) {
   );
   return sessionPending[candidate.id] || persisted?.targetStage || null;
 }
+
+export function groupPipelineCandidates(candidates = [], sessionPending = {}) {
+  const unsupported = candidates.filter((candidate) => !LOXO_PIPELINE_STAGES.includes(candidate.stage));
+  const boardCandidates = candidates
+    .filter((candidate) => LOXO_PIPELINE_STAGES.includes(candidate.stage))
+    .map((candidate) => {
+      const pendingStage = resolvePendingStage(candidate, sessionPending);
+      return pendingStage
+        ? { ...candidate, stage: pendingStage, pendingStage }
+        : { ...candidate, pendingStage: null };
+    });
+  return { boardCandidates, unsupported };
+}

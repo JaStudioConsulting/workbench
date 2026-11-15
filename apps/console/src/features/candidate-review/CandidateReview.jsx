@@ -22,6 +22,7 @@ export default function CandidateReview({ selectedJob, onSelectJob, onNavigateJo
   const [jobs, setJobs] = useState([]);
   const [dataLoading, setDataLoading] = useState(true);
   const [dataError, setDataError] = useState("");
+  const [loadProgress, setLoadProgress] = useState({ loaded: 0, total: 2, done: false });
 
   // Match selected jobs ONLY by immutable job ID.
   // Zero title matching. Zero jobs[0] fallback.
@@ -31,6 +32,8 @@ export default function CandidateReview({ selectedJob, onSelectJob, onNavigateJo
   const [refreshKey, setRefreshKey] = useState(0);
   const [canadaPrefs, setCanadaPrefs] = useState(() => loadCanadaPrefs());
   const [rejectStatus, setRejectStatus] = useState(null); // { ok, text }
+  const selectedJobRef = useRef(selectedJob);
+  selectedJobRef.current = selectedJob;
 
   const updateCanadaPrefs = (patch) => {
     setCanadaPrefs((current) => {
@@ -53,13 +56,17 @@ export default function CandidateReview({ selectedJob, onSelectJob, onNavigateJo
       .then((loadedJobs) => {
         if (!active) return;
         setJobs(loadedJobs);
-        const targetId = selectedJob?.loxoJobId || selectedJob?.originalJobId || selectedJob?.id;
+        const latestSelectedJob = selectedJobRef.current;
+        const targetId = latestSelectedJob?.loxoJobId || latestSelectedJob?.originalJobId || latestSelectedJob?.id;
         const matched = targetId
           ? loadedJobs.find((job) => String(job.id) === String(targetId))
           : null;
-        const nextJob = matched || loadedJobs[0] || null;
+        const nextJob = targetId ? (matched || null) : (loadedJobs[0] || null);
         setActiveJobId(nextJob ? String(nextJob.id) : "");
         if (nextJob && onSelectJob) onSelectJob(nextJob);
+        setLoadProgress(nextJob
+          ? { loaded: 1, total: 2, done: false }
+          : { loaded: 2, total: 2, done: true });
         setDataError("");
         setRefreshKey((key) => key + 1);
       })
@@ -92,6 +99,7 @@ export default function CandidateReview({ selectedJob, onSelectJob, onNavigateJo
     if (!activeJobId) return;
     let active = true;
     setDataLoading(true);
+    setLoadProgress({ loaded: 1, total: 2, done: false });
     loadLiveCandidatesForJob(activeJobId)
       .then(() => {
         if (!active) return;
@@ -103,7 +111,10 @@ export default function CandidateReview({ selectedJob, onSelectJob, onNavigateJo
         setDataError(error.message || "Could not load candidates for this job");
       })
       .finally(() => {
-        if (active) setDataLoading(false);
+        if (active) {
+          setLoadProgress({ loaded: 2, total: 2, done: true });
+          setDataLoading(false);
+        }
       });
     return () => { active = false; };
   }, [activeJobId]);
@@ -152,13 +163,15 @@ export default function CandidateReview({ selectedJob, onSelectJob, onNavigateJo
 
   const submissionHistory = useMemo(() => getSubmissionHistory(), [refreshKey]);
 
-  const supabaseStatus = dataLoading
-    ? "Loading live data"
-    : dataError
-      ? "Live data unavailable"
+  const supabaseStatus = dataError
+    ? "Live data unavailable"
+    : dataLoading
+      ? `Loaded ${loadProgress.loaded} of ${loadProgress.total}`
       : jobs.length === 0
         ? "No live review jobs available"
-        : "Connected to Supabase";
+        : loadProgress.done
+          ? "Live data loaded"
+          : `Loaded ${loadProgress.loaded} of ${loadProgress.total}`;
 
   const handleJobChange = (newJobId) => {
     setActiveJobId(newJobId);
@@ -257,8 +270,14 @@ export default function CandidateReview({ selectedJob, onSelectJob, onNavigateJo
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h2 className="text-base font-bold leading-tight">Candidate Review</h2>
-              <Badge variant="outline" className="text-[11px] py-0 px-2">
+              <h2 className="text-base font-bold leading-tight">Candidates</h2>
+              <Badge
+                variant="outline"
+                className="text-[11px] py-0 px-2"
+                role="status"
+                aria-live="polite"
+                data-testid="live-data-progress"
+              >
                 {supabaseStatus}
               </Badge>
             </div>

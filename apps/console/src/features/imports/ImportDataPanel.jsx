@@ -413,6 +413,32 @@ export function ImportDataPanel() {
   const currentPage = page.page;
   const pageStart = page.start;
   const visibleRows = page.rows;
+  const sheetTabItems = (sheetMetadata?.sheets || []).map((item) => ({ value: String(item.sheetId), label: item.title }));
+  const fileSourceItems = [
+    { value: "new", label: "Start a new import" },
+    ...previousFileSources.map((item) => ({
+      value: item.sourceKey,
+      label: `${item.sourceLabel || "Previous file import"} · ${formatDate(item.confirmedAt || item.createdAt)}`,
+    })),
+    ...(fileSourceKey && !previousFileSources.some((item) => item.sourceKey === fileSourceKey)
+      ? [{ value: fileSourceKey, label: file?.name || "Current file import" }]
+      : []),
+  ];
+  const mappingItems = [
+    { value: SKIP_FIELD, label: "Don't import this column" },
+    ...TRACKER_IMPORT_FIELDS[type].map((field) => ({ value: field, label: trackerImportFieldLabel(field) })),
+  ];
+  const identityItems = [
+    { value: SKIP_FIELD, label: "Source row number" },
+    ...eligibleIdentityFields.map((field) => ({ value: field, label: trackerImportFieldLabel(field) })),
+  ];
+  const previewFilterItems = [
+    { value: "all", label: `All rows (${rowCount})` },
+    { value: "ready", label: `Ready to import (${bulkEligibleRows.length})` },
+    { value: "issues", label: `Needs review (${blockedCount})` },
+    { value: "selected", label: `Selected (${selectedCount})` },
+    { value: "saved", label: `Already saved (${completedRows.size})` },
+  ];
   const selectAllReady = () => setSelectedRows(new Set(bulkEligibleRows.map((row) => row.sourceRowKey)));
 
   return (
@@ -425,7 +451,7 @@ export function ImportDataPanel() {
         <div className="grid gap-4 md:grid-cols-2">
           <div className="grid gap-2">
             <Label htmlFor="tracker-import-type">Data type</Label>
-            <Select value={type} onValueChange={(value) => changeType(String(value))}>
+            <Select items={TRACKER_IMPORT_TYPES} value={type} onValueChange={(value) => changeType(String(value))}>
               <SelectTrigger id="tracker-import-type" className="w-full"><SelectValue placeholder="Choose data type" /></SelectTrigger>
               <SelectContent>{TRACKER_IMPORT_TYPES.map((item) => <SelectItem key={item.value} value={item.value}>{item.label}</SelectItem>)}</SelectContent>
             </Select>
@@ -444,11 +470,11 @@ export function ImportDataPanel() {
             <Label htmlFor="tracker-sheet-link">Google Sheets link</Label>
             <div className="flex flex-col gap-2 sm:flex-row"><Input id="tracker-sheet-link" value={sheetLink} onChange={(event) => { setSheetLink(event.target.value); setSheetMetadata(null); setSheetId(""); setMapping([]); setIdentityField(""); clearPreview(); setError(""); }} placeholder="Paste your Google Sheets link" autoComplete="url" /><Button type="button" variant="outline" disabled={busy !== "" || !sheetLink.trim()} onClick={loadSheetTabs}><CloudDownload data-icon="inline-start" />{busy === "sheets" ? "Loading tabs…" : "Load tabs"}</Button></div>
           </div>
-          {sheetMetadata ? <div className="grid gap-2 sm:max-w-md"><Label htmlFor="tracker-sheet-tab">Sheet tab</Label><Select value={sheetId} onValueChange={(value) => { setSheetId(String(value)); setMapping([]); setIdentityField(""); clearPreview(); }}><SelectTrigger id="tracker-sheet-tab" className="w-full"><SelectValue placeholder="Choose a tab" /></SelectTrigger><SelectContent>{sheetMetadata.sheets.map((item) => <SelectItem key={item.sheetId} value={String(item.sheetId)}>{item.title}</SelectItem>)}</SelectContent></Select><p className="text-xs text-muted-foreground">Reads this tab only. Workbench never writes back to Google Sheets.</p></div> : null}
+          {sheetMetadata ? <div className="grid gap-2 sm:max-w-md"><Label htmlFor="tracker-sheet-tab">Sheet tab</Label><Select items={sheetTabItems} value={sheetId} onValueChange={(value) => { setSheetId(String(value)); setMapping([]); setIdentityField(""); clearPreview(); }}><SelectTrigger id="tracker-sheet-tab" className="w-full"><SelectValue placeholder="Choose a tab" /></SelectTrigger><SelectContent>{sheetMetadata.sheets.map((item) => <SelectItem key={item.sheetId} value={String(item.sheetId)}>{item.title}</SelectItem>)}</SelectContent></Select><p className="text-xs text-muted-foreground">Reads this tab only. Workbench never writes back to Google Sheets.</p></div> : null}
         </div> : <div className="flex flex-col gap-3 rounded-lg border p-4">
-          <div className="grid gap-2 sm:max-w-md"><Label htmlFor="tracker-import-file-source">File import series</Label><Select value={fileSourceKey || "new"} onValueChange={(value) => { setFileSourceKey(value === "new" ? "" : String(value)); clearPreview(); setError(""); }}><SelectTrigger id="tracker-import-file-source" className="w-full"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="new">Start a new import</SelectItem>{previousFileSources.map((item) => <SelectItem key={item.sourceKey} value={item.sourceKey}>{item.sourceLabel || "Previous file import"} · {formatDate(item.confirmedAt || item.createdAt)}</SelectItem>)}{fileSourceKey && !previousFileSources.some((item) => item.sourceKey === fileSourceKey) ? <SelectItem value={fileSourceKey}>{file?.name || "Current file import"}</SelectItem> : null}</SelectContent></Select><p className="text-xs text-muted-foreground">Choose a prior import to update the same records. File names alone never match records.</p></div>
+          <div className="grid gap-2 sm:max-w-md"><Label htmlFor="tracker-import-file-source">File import series</Label><Select items={fileSourceItems} value={fileSourceKey || "new"} onValueChange={(value) => { setFileSourceKey(value === "new" ? "" : String(value)); clearPreview(); setError(""); }}><SelectTrigger id="tracker-import-file-source" className="w-full"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="new">Start a new import</SelectItem>{previousFileSources.map((item) => <SelectItem key={item.sourceKey} value={item.sourceKey}>{item.sourceLabel || "Previous file import"} · {formatDate(item.confirmedAt || item.createdAt)}</SelectItem>)}{fileSourceKey && !previousFileSources.some((item) => item.sourceKey === fileSourceKey) ? <SelectItem value={fileSourceKey}>{file?.name || "Current file import"}</SelectItem> : null}</SelectContent></Select><p className="text-xs text-muted-foreground">Choose a prior import to update the same records. File names alone never match records.</p></div>
           <div className="grid gap-2"><Label htmlFor="tracker-import-file">CSV or XLSX file</Label><Input id="tracker-import-file" type="file" accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onChange={(event) => chooseFile(event.target.files?.[0])} aria-describedby="tracker-import-file-help" /><p id="tracker-import-file-help" className="text-xs text-muted-foreground">Up to 10 MB, 10,000 records, and 100 columns. Older .xls files aren't supported.</p></div>
-          {file && fileSheets.length > 1 ? <div className="grid gap-2 sm:max-w-md"><Label htmlFor="tracker-file-tab">Workbook sheet</Label><Select value={fileSheet} onValueChange={(value) => chooseFileSheet(String(value))}><SelectTrigger id="tracker-file-tab" className="w-full"><SelectValue placeholder="Choose a sheet" /></SelectTrigger><SelectContent>{fileSheets.map((name) => <SelectItem key={name} value={name}>{name}</SelectItem>)}</SelectContent></Select></div> : null}
+          {file && fileSheets.length > 1 ? <div className="grid gap-2 sm:max-w-md"><Label htmlFor="tracker-file-tab">Workbook sheet</Label><Select items={fileSheets.map((name) => ({ value: name, label: name }))} value={fileSheet} onValueChange={(value) => chooseFileSheet(String(value))}><SelectTrigger id="tracker-file-tab" className="w-full"><SelectValue placeholder="Choose a sheet" /></SelectTrigger><SelectContent>{fileSheets.map((name) => <SelectItem key={name} value={name}>{name}</SelectItem>)}</SelectContent></Select></div> : null}
           {fileGrid ? <p className="text-sm text-muted-foreground">{file.name}: {fileGrid.rows.length.toLocaleString()} records and {fileGrid.headers.length} columns ready to preview.</p> : null}
         </div>}
 
@@ -459,13 +485,13 @@ export function ImportDataPanel() {
           <div className="flex flex-wrap items-end justify-between gap-2"><div><h3 id="tracker-import-mapping-title" className="text-sm font-semibold">Match source columns</h3><p className="text-sm text-muted-foreground">Choose where each column goes. Skipped columns won't be imported.</p></div><Badge variant="outline">{mappedColumnCount} mapped fields</Badge></div>
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{(sourceKind === "file" ? fileGrid.headers : preview.headers).map((header, index) => <div className="grid gap-1.5" key={`${index}:${header}`}>
             <Label htmlFor={`tracker-import-map-${index}`}>{header.trim() || `Column ${index + 1}`}</Label>
-            <Select value={mapping[index] || SKIP_FIELD} onValueChange={(value) => updateMapping(index, String(value))}>
+            <Select items={mappingItems} value={mapping[index] || SKIP_FIELD} onValueChange={(value) => updateMapping(index, String(value))}>
               <SelectTrigger id={`tracker-import-map-${index}`} className="w-full"><SelectValue /></SelectTrigger>
               <SelectContent><SelectItem value={SKIP_FIELD}>Don't import this column</SelectItem>{TRACKER_IMPORT_FIELDS[type].map((field) => <SelectItem key={field} value={field}>{trackerImportFieldLabel(field)}</SelectItem>)}</SelectContent>
             </Select>
           </div>)}</div>
           {mappingDuplicates.length ? <p className="text-sm text-destructive" role="alert">Map only one source column to each field: {mappingDuplicates.map(trackerImportFieldLabel).join(", ")}.</p> : null}
-          <div className="grid gap-2 sm:max-w-md"><Label htmlFor="tracker-import-identity">Match repeat imports using</Label><Select value={identityField || SKIP_FIELD} onValueChange={(value) => updateIdentityField(String(value))}><SelectTrigger id="tracker-import-identity" className="w-full"><SelectValue /></SelectTrigger><SelectContent><SelectItem value={SKIP_FIELD}>Source row number</SelectItem>{eligibleIdentityFields.map((field) => <SelectItem key={field} value={field}>{trackerImportFieldLabel(field)}</SelectItem>)}</SelectContent></Select><p className="text-xs text-muted-foreground">Names are never used to match records. Without a stable ID, repeat imports use source row numbers; keep rows in the same order.</p></div>
+          <div className="grid gap-2 sm:max-w-md"><Label htmlFor="tracker-import-identity">Match repeat imports using</Label><Select items={identityItems} value={identityField || SKIP_FIELD} onValueChange={(value) => updateIdentityField(String(value))}><SelectTrigger id="tracker-import-identity" className="w-full"><SelectValue /></SelectTrigger><SelectContent><SelectItem value={SKIP_FIELD}>Source row number</SelectItem>{eligibleIdentityFields.map((field) => <SelectItem key={field} value={field}>{trackerImportFieldLabel(field)}</SelectItem>)}</SelectContent></Select><p className="text-xs text-muted-foreground">Names are never used to match records. Without a stable ID, repeat imports use source row numbers; keep rows in the same order.</p></div>
           {previewDirty ? <Button type="button" variant="outline" className="self-start" disabled={busy !== "" || mappingDuplicates.length > 0} onClick={createPreview}>{busy === "preview" ? "Updating preview…" : "Update preview"}</Button> : null}
         </section> : null}
 
@@ -480,7 +506,7 @@ export function ImportDataPanel() {
           {previewDirty ? <p className="rounded-md border border-warning/40 bg-warning/5 p-3 text-sm" role="status">The mapping changed. Update the preview before confirming.</p> : null}
           {!columns.length ? <p className="rounded-md border p-3 text-sm">No recognized fields are mapped. Select the source columns above, then update the preview.</p> : null}
           <div className="flex flex-wrap items-end justify-between gap-3 rounded-md border bg-muted/20 p-3">
-            <div className="grid gap-2"><Label htmlFor="tracker-import-row-filter">Show rows</Label><Select value={previewFilter} onValueChange={(value) => { setPreviewFilter(String(value)); setPreviewPage(1); }}><SelectTrigger id="tracker-import-row-filter" className="w-full min-w-48"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">All rows ({rowCount})</SelectItem><SelectItem value="ready">Ready to import ({bulkEligibleRows.length})</SelectItem><SelectItem value="issues">Needs review ({blockedCount})</SelectItem><SelectItem value="selected">Selected ({selectedCount})</SelectItem><SelectItem value="saved">Already saved ({completedRows.size})</SelectItem></SelectContent></Select></div>
+            <div className="grid gap-2"><Label htmlFor="tracker-import-row-filter">Show rows</Label><Select items={previewFilterItems} value={previewFilter} onValueChange={(value) => { setPreviewFilter(String(value)); setPreviewPage(1); }}><SelectTrigger id="tracker-import-row-filter" className="w-full min-w-48"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">All rows ({rowCount})</SelectItem><SelectItem value="ready">Ready to import ({bulkEligibleRows.length})</SelectItem><SelectItem value="issues">Needs review ({blockedCount})</SelectItem><SelectItem value="selected">Selected ({selectedCount})</SelectItem><SelectItem value="saved">Already saved ({completedRows.size})</SelectItem></SelectContent></Select></div>
             <div className="flex flex-wrap gap-2"><Button type="button" variant="outline" size="sm" disabled={!bulkEligibleRows.length || selectedCount === bulkEligibleRows.length} onClick={selectAllReady}>Select all {bulkEligibleRows.length.toLocaleString()} ready rows</Button><Button type="button" variant="outline" size="sm" disabled={!selectedCount} onClick={() => setSelectedRows(new Set())}>Clear selection</Button></div>
             <p className="w-full text-xs text-muted-foreground">Bulk selection excludes rows with errors and rows that still need identity review. You can review every page before confirming the selected count.</p>
           </div>

@@ -31,6 +31,27 @@ test("Jobs Map location and filter controls have keyboard access and accessible 
   assert.match(source, /aria-pressed=\{unit === "km"\}/);
 });
 
+test("Jobs and People selects map stored filter values to readable labels", () => {
+  const jobsSource = fs.readFileSync(path.join(featureRoot, "JobsMapView.jsx"), "utf8");
+  const peopleSource = fs.readFileSync(
+    path.resolve(here, "../src/features/candidate-review/PeopleView.jsx"),
+    "utf8",
+  );
+
+  assert.match(jobsSource, /items=\{ownerFilterItems\}/);
+  assert.match(jobsSource, /items=\{radiusFilterItems\}/);
+  assert.match(jobsSource, /items=\{REGION_FILTER_ITEMS\}/);
+  assert.match(jobsSource, /value: "ALL", label: "All Owners"/);
+  assert.match(jobsSource, /value: "ALL", label: "Any Distance"/);
+  assert.match(jobsSource, /value: "ALL", label: "All Regions"/);
+  assert.match(jobsSource, /aria-label="Filter jobs by region" className="min-w-0 flex-1 text-xs"/);
+
+  assert.match(peopleSource, /items=\{STAGE_FILTER_ITEMS\}/);
+  assert.match(peopleSource, /items=\{submissionJobItems\}/);
+  assert.match(peopleSource, /value: "ALL", label: "All Stages"/);
+  assert.match(peopleSource, /value: "ALL", label: "All jobs"/);
+});
+
 test("CITY_COORDINATES resolves Ontario hubs and North American metropolitan areas", () => {
   assert.ok(CITY_COORDINATES["toronto, on"]);
   assert.ok(CITY_COORDINATES["windsor, on"]);

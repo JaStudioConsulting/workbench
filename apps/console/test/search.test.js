@@ -531,7 +531,8 @@ test("HeaderSearch and App wire Cmd+K, cmdk groups, accessible states, responsiv
 
   // App header mounts HeaderSearch and wires navigation
   assert.match(appSource, /<HeaderSearch onSelectResult=\{navigateFromSearch\} onNavigatePage=\{selectPage\} \/>/);
-  assert.match(appSource, /focusLeadId=\{focusLeadId\} focusClient=\{focusClient\}/);
+  assert.match(appSource, /focusLeadId=\{focusLeadId\}/);
+  assert.match(appSource, /focusClient=\{focusClient\}/);
 
   // Uses cmdk primitives with shouldFilter={false} and Cmd+K / Ctrl+K shortcut
   assert.match(headerSearchSource, /shouldFilter=\{false\}/);
@@ -551,7 +552,7 @@ test("HeaderSearch and App wire Cmd+K, cmdk groups, accessible states, responsiv
   assert.match(headerSearchSource, /role="search"/);
 
   // Small screen responsiveness
-  assert.match(headerSearchSource, /w-full min-w-0 sm:w-64/);
+  assert.match(headerSearchSource, /w-full min-w-0 sm:w-\[260px\] md:w-\[300px\] lg:w-\[340px\]/);
   assert.match(headerSearchSource, /max-w-\[calc\(100vw-2rem\)\]/);
 
   // Zero purple, zero forbidden punctuation, zero browser storage or fake fallback data

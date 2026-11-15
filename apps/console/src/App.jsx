@@ -1,6 +1,5 @@
 import { Component, lazy, Suspense, useEffect, useRef, useState } from "react";
-import { Briefcase, CalendarDays, Columns3, Contact, GitBranch, Home, Mail, Settings, StickyNote, UserCheck, UserRound, Users } from "lucide-react";
-import { SidebarProvider, Sidebar, SidebarHeader, SidebarContent, SidebarGroup, SidebarGroupLabel, SidebarGroupContent, SidebarMenu, SidebarMenuItem, SidebarMenuButton, SidebarInset, SidebarTrigger, useSidebar } from "./components/ui/sidebar.tsx";
+import { Settings } from "lucide-react";
 import { Skeleton } from "./components/ui/skeleton.tsx";
 import ExistingAccountAccess from "./ExistingAccountAccess.jsx";
 import { getWorkbenchSession, signOutWorkbench, subscribeToWorkbenchSession } from "./supabase-auth.js";
@@ -9,22 +8,10 @@ import { startCandidateCallSession } from "./features/meetings/candidateCallSess
 import { getMeetingStatus } from "./features/meetings/meetingGatewayClient.js";
 import HeaderSearch from "./features/search/HeaderSearch.jsx";
 import { candidateReviewIdFromHomeItem } from "./features/home/homeNavigation.js";
+import { clearLiveReviewCache } from "./features/candidate-review/candidateReviewService.js";
 
 const ContextPicker = lazy(() => import("./ContextPicker.jsx"));
-const EmptyWorkspace = lazy(() => import("./EmptyWorkspace.jsx"));
-const RecruitingWorkspace = lazy(() => import("./features/recruiting/RecruitingWorkspace.jsx"));
-const CandidateReview = lazy(() => import("./features/candidate-review/CandidateReview.jsx"));
-const MeetingsWorkspace = lazy(() => import("./features/meetings/MeetingsWorkspace.jsx"));
-const PipelinePage = lazy(() => import("./features/pipeline/PipelinePage.jsx"));
-const HomePage = lazy(() => import("./features/home/HomePage.jsx"));
-const LeadsPage = lazy(() => import("./features/leads/LeadsPage.jsx"));
-const MailPage = lazy(() => import("./features/mail/MailPage.jsx"));
-const SettingsPage = lazy(() => import("./features/settings/SettingsPage.jsx"));
-const ProfilePage = lazy(() => import("./features/profile/ProfilePage.jsx"));
-const NotesDirectory = lazy(() => import("./features/notes/NotesDirectory.jsx"));
-
-const workAreas = [["Home", Home], ["Candidates", Users], ["Candidate Review", UserCheck], ["Pipeline", Columns3], ["Leads", Contact], ["Jobs", Briefcase], ["Meetings", CalendarDays], ["Notes", StickyNote], ["Mail", Mail]];
-const supporting = [["Process", GitBranch], ["Settings", Settings], ["Profile", UserRound]];
+const WorkbenchOneView = lazy(() => import("./features/workbench/WorkbenchOneView.jsx"));
 
 const loadRecentMeetings = () => import("./features/meetings/meetingStore.js").then((module) => module.listRecentMeetings());
 
@@ -48,28 +35,6 @@ class PageErrorBoundary extends Component {
       </section>
     );
   }
-}
-
-function NavGroup({ label, items, page, onSelect, recordingLocked = false }) {
-  const { isMobile, setOpenMobile } = useSidebar();
-  const selectItem = (name) => {
-    onSelect(name);
-    if (isMobile && !(recordingLocked && name !== "Meetings")) setOpenMobile(false);
-  };
-  return (
-    <SidebarGroup>
-      <SidebarGroupLabel>{label}</SidebarGroupLabel>
-      <SidebarGroupContent>
-        <SidebarMenu>
-          {items.map(([name, Icon]) => (
-            <SidebarMenuItem key={name}>
-              <SidebarMenuButton isActive={page === name} size="lg" disabled={recordingLocked && name !== "Meetings"} title={recordingLocked && name !== "Meetings" ? "Stop the active recording before leaving Meetings" : undefined} onClick={() => selectItem(name)}><Icon /><span>{name}</span></SidebarMenuButton>
-            </SidebarMenuItem>
-          ))}
-        </SidebarMenu>
-      </SidebarGroupContent>
-    </SidebarGroup>
-  );
 }
 
 export default function App() {
@@ -103,6 +68,7 @@ export default function App() {
       const acceptedSession = Boolean(session) && (!localSessionMode
         || (initialized && localSessionOwnerId && nextUserId === localSessionOwnerId && sessionUserIdRef.current === localSessionOwnerId));
       if (sessionUserIdRef.current && sessionUserIdRef.current !== nextUserId) {
+        clearLiveReviewCache();
         setPage("Home"); setContext("Independent recruiting"); setRecruiting(null);
         setFocusCandidateId(""); setFocusLeadId(""); setFocusClient(null); setFocusNote(null); setMeetingLaunch(null);
       }
@@ -145,9 +111,8 @@ export default function App() {
   }, [localSessionMode, localSessionRetry]);
 
   useEffect(() => {
-    document.title = `${page} — JA Workbench`;
-    if (page !== "Home") pageHeadingRef.current?.focus();
-  }, [page]);
+    document.title = "Workbench — JA Workbench";
+  }, []);
 
   const selectPage = (next) => {
     if (recordingLocked && next !== "Meetings") return;
@@ -290,6 +255,7 @@ export default function App() {
     setAuthError("");
     try {
       await signOutWorkbench();
+      clearLiveReviewCache();
       setHasSession(false);
     } catch (error) {
       setAuthError(error.message || "Unable to sign out of Workbench");
@@ -323,26 +289,6 @@ export default function App() {
     selectPage(next);
   };
 
-  const renderPage = () => {
-    switch (page) {
-      case "Home": return <HomePage onNavigate={navigateFromHome} recentMeetingsLoader={loadRecentMeetings} />;
-      case "Candidates":
-      case "Candidate Review":
-        return <CandidateReview key={page} initialView={page === "Candidates" ? "people" : "swipe"} selectedJob={recruiting?.job} focusCandidateId={focusCandidateId} onSelectJob={(job) => setRecruiting((prev) => ({ ...(prev || {}), job }))} onNavigateJobsMap={() => selectPage("Jobs")} onStartCandidateCall={startCandidateCall} />;
-      case "Pipeline": return <PipelinePage onOpenCandidate={openCandidate} />;
-      case "Leads": return <LeadsPage focusLeadId={focusLeadId} focusClient={focusClient} />;
-      case "Jobs":
-      case "Process":
-        return <RecruitingWorkspace page={page} value={recruiting} onChange={setRecruiting} onOpenJobReview={openJobReview} />;
-      case "Meetings": return <MeetingsWorkspace launchContext={meetingLaunch} onLaunchChange={updateMeetingLaunch} />;
-      case "Notes": return <NotesDirectory focusRequest={focusNote} onOpenSubject={openNoteSubject} />;
-      case "Mail": return <MailPage />;
-      case "Settings": return <SettingsPage meetingsStatusLoader={getMeetingStatus} />;
-      case "Profile": return <ProfilePage />;
-      default: return <EmptyWorkspace page={page} />;
-    }
-  };
-
   if (authLoading) {
     return <main className="flex min-h-screen items-center justify-center" role="status">{localSessionMode ? "Opening your workspace…" : "Checking Workbench session…"}</main>;
   }
@@ -362,35 +308,45 @@ export default function App() {
     return <ExistingAccountAccess sessionError={authError} />;
   }
 
-  return (
-    <SidebarProvider>
-      <a href="#workbench-main" className="sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-50 focus:rounded-md focus:bg-background focus:px-4 focus:py-2 focus:text-foreground focus:shadow-lg focus:outline focus:outline-2 focus:outline-offset-2 focus:outline-ring">Skip to content</a>
-      <Sidebar data-print-hide>
-        <SidebarHeader><div className="px-2 py-3 text-lg font-semibold">JA <span className="text-muted-foreground">Workbench</span></div></SidebarHeader>
-        <SidebarContent>
-          <NavGroup label="Work areas" items={workAreas} page={page} onSelect={selectPage} recordingLocked={recordingLocked} />
-          <NavGroup label="Supporting" items={supporting} page={page} onSelect={selectPage} recordingLocked={recordingLocked} />
-        </SidebarContent>
-      </Sidebar>
-      <SidebarInset className="min-w-0">
-        <header data-print-hide className="flex min-h-16 flex-wrap items-center gap-3 border-b px-4 py-3 pt-[max(0.75rem,env(safe-area-inset-top))]">
-          <SidebarTrigger />
-          <div className="min-w-0 flex-1"><h1 ref={pageHeadingRef} tabIndex={-1} className="truncate text-xl font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">{page}</h1></div>
-          <HeaderSearch onSelectResult={navigateFromSearch} onNavigatePage={selectPage} />
-          <Suspense fallback={null}><ContextPicker value={context} onChange={setContext} /></Suspense>
-          <button type="button" onClick={() => window.print()} className="min-h-10 rounded-md border px-3 text-sm font-medium" aria-label={`Print current view: ${page}`}>Print current view</button>
-          {!localSessionMode ? <button type="button" onClick={handleSignOut} disabled={signingOut || recordingLocked} title={recordingLocked ? "Stop the active recording before signing out" : undefined} className="min-h-10 rounded-md border px-3 text-sm font-medium disabled:opacity-60">
-            {signingOut ? "Signing out…" : "Sign out"}
-          </button> : null}
-        </header>
-        {authError ? <p className="px-4 pt-2 text-sm text-destructive" role="alert">{authError}</p> : null}
-        <div className="workbench-print-label" aria-hidden="true"><strong>JA Workbench</strong><span>Current view: {page}</span></div>
-        <main id="workbench-main" tabIndex={-1} className="workbench-main flex min-w-0 flex-1 flex-col gap-4 overflow-x-clip p-4 pb-[max(1rem,env(safe-area-inset-bottom))] md:p-6">
-          <PageErrorBoundary key={`${sessionUserId}:${page}`} onHome={() => selectPage("Home")}>
-            <Suspense fallback={<PanelFallback />}>{renderPage()}</Suspense>
-          </PageErrorBoundary>
-        </main>
-      </SidebarInset>
-    </SidebarProvider>
-  );
+  return <div className="min-h-screen bg-background text-foreground">
+    <a href="#workbench-main" className="sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-50 focus:rounded-md focus:bg-background focus:px-4 focus:py-2 focus:text-foreground focus:shadow-lg focus:outline focus:outline-2 focus:outline-offset-2 focus:outline-ring">Skip to content</a>
+    <header data-print-hide className="sticky top-0 z-40 flex min-h-16 flex-wrap items-center gap-3 border-b bg-background/95 px-4 py-3 pt-[max(0.75rem,env(safe-area-inset-top))] backdrop-blur md:px-6">
+      <h1 ref={pageHeadingRef} tabIndex={-1} className="shrink-0 text-lg font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">JA <span className="text-muted-foreground">Workbench</span></h1>
+      <div className="min-w-56 flex-1"><HeaderSearch onSelectResult={navigateFromSearch} onNavigatePage={selectPage} /></div>
+      <Suspense fallback={null}><ContextPicker value={context} onChange={setContext} /></Suspense>
+      <button type="button" onClick={() => selectPage("Settings")} disabled={recordingLocked} title={recordingLocked ? "Stop the active recording before opening Settings" : undefined} className="inline-flex min-h-10 items-center gap-2 rounded-md border px-3 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-50" aria-label="Open Settings and Profile"><Settings size={16} />Settings</button>
+      <button type="button" onClick={() => window.print()} className="min-h-10 rounded-md border px-3 text-sm font-medium" aria-label="Print current Workbench view">Print</button>
+      {!localSessionMode ? <button type="button" onClick={handleSignOut} disabled={signingOut || recordingLocked} title={recordingLocked ? "Stop the active recording before signing out" : undefined} className="min-h-10 rounded-md border px-3 text-sm font-medium disabled:opacity-60">
+        {signingOut ? "Signing out…" : "Sign out"}
+      </button> : null}
+    </header>
+    {authError ? <p className="px-4 pt-2 text-sm text-destructive md:px-6" role="alert">{authError}</p> : null}
+    <div className="workbench-print-label" aria-hidden="true"><strong>JA Workbench</strong><span>Current view: Workbench</span></div>
+    <main id="workbench-main" tabIndex={-1} className="workbench-main min-w-0 overflow-x-clip p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] md:p-4">
+      <PageErrorBoundary key={`${sessionUserId}:${page}`} onHome={() => selectPage("Home")}>
+        <Suspense fallback={<PanelFallback />}>
+          <WorkbenchOneView
+            destination={page}
+            selectedJob={recruiting?.job || null}
+            focusCandidateId={focusCandidateId}
+            focusLeadId={focusLeadId}
+            focusClient={focusClient}
+            focusNote={focusNote}
+            meetingLaunch={meetingLaunch}
+            recordingLocked={recordingLocked}
+            onNavigate={selectPage}
+            onHomeNavigate={navigateFromHome}
+            onSelectJob={(job) => setRecruiting((current) => ({ ...(current || {}), job }))}
+            onOpenCandidate={openCandidate}
+            onOpenJobReview={openJobReview}
+            onStartCandidateCall={startCandidateCall}
+            onMeetingLaunchChange={updateMeetingLaunch}
+            onOpenNoteSubject={openNoteSubject}
+            recentMeetingsLoader={loadRecentMeetings}
+            meetingsStatusLoader={getMeetingStatus}
+          />
+        </Suspense>
+      </PageErrorBoundary>
+    </main>
+  </div>;
 }

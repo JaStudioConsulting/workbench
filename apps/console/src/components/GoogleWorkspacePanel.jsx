@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Cloud } from "lucide-react";
 import { authClient } from "../auth-client.js";
-import { getGoogleWorkspaceStatus } from "../google-workspace-client.js";
+import { getGoogleWorkspaceStatus, getWorkbenchAuthStatus, googleConnectionGuidance } from "../google-workspace-client.js";
 import LoginButton from "./LoginButton.tsx";
 import { UpcomingCalendar } from "./UpcomingCalendar.jsx";
 
@@ -11,8 +11,18 @@ export function GoogleWorkspacePanel() {
   const session = authClient.useSession();
   const pending = session.isPending;
   const account = session.data?.user?.email;
-  const sessionError = session.error ? "The Google account connection could not be checked." : "";
+  const [authAvailability, setAuthAvailability] = useState({ phase: "checking", googleSignIn: "unavailable", localDataSession: "unavailable" });
   const [calendarStatus, setCalendarStatus] = useState("checking");
+
+  useEffect(() => {
+    const controller = new AbortController();
+    getWorkbenchAuthStatus({ signal: controller.signal })
+      .then((status) => setAuthAvailability({ phase: "ready", ...status }))
+      .catch((error) => {
+        if (error?.name !== "AbortError") setAuthAvailability({ phase: "error", googleSignIn: "unavailable", localDataSession: "unavailable" });
+      });
+    return () => controller.abort();
+  }, []);
 
   useEffect(() => {
     if (!account) {
@@ -27,6 +37,27 @@ export function GoogleWorkspacePanel() {
       });
     return () => controller.abort();
   }, [account]);
+
+  const googleUnavailable = authAvailability.phase === "ready" && authAvailability.googleSignIn === "unavailable";
+  const capabilityError = authAvailability.phase === "error";
+  const statusText = pending || authAvailability.phase === "checking"
+    ? "Checking Google sign-in"
+    : googleUnavailable
+      ? "Google sign-in unavailable"
+      : capabilityError || session.error
+        ? "Google status unavailable"
+        : account
+          ? calendarStatus === "connected" ? "Google account connected" : "Google sign-in active"
+          : "Google sign-in required";
+  const recoveryText = googleUnavailable
+    ? `${authAvailability.localDataSession === "configured" ? "Your private Workbench data session is active. " : ""}${googleConnectionGuidance("AUTH_UNAVAILABLE").message}`
+    : capabilityError || session.error
+      ? "Google sign-in status could not be checked. Check your connection and reload Settings."
+      : account && calendarStatus === "disconnected"
+        ? "Calendar access is not connected. Sign out, then sign in with Google again and approve the requested access."
+        : account && calendarStatus === "unavailable"
+          ? "Google Workspace status could not be checked. Check your connection and reload Settings."
+          : "";
 
   return (
     <section className="google-workspace-panel" aria-labelledby="google-workspace-title">
@@ -45,12 +76,13 @@ export function GoogleWorkspacePanel() {
       </div>
 
       <div className="google-workspace-action">
-        <span className={`connection-status is-${pending ? "neutral" : account ? "connected" : "error"}`} aria-live="polite">
-          <span aria-hidden="true" />{pending ? "Checking session" : account ? "Google account linked" : "Sign-in required"}
+        <span className={`connection-status is-${pending || authAvailability.phase === "checking" ? "neutral" : account && calendarStatus === "connected" ? "connected" : "error"}`} aria-live="polite">
+          <span aria-hidden="true" />{statusText}
         </span>
         {account ? <strong className="connected-account">{account}</strong> : null}
-        {pending ? <small>Confirming the current Better Auth session.</small> : <LoginButton />}
-        {sessionError ? <small role="alert">{sessionError}</small> : null}
+        {pending || authAvailability.phase === "checking" ? <small>Confirming the Better Auth Google session.</small> : null}
+        {!pending && authAvailability.phase === "ready" && authAvailability.googleSignIn === "configured" ? <LoginButton /> : null}
+        {recoveryText ? <small role="alert">{recoveryText}</small> : null}
       </div>
 
       <div aria-label="Google Workspace services">

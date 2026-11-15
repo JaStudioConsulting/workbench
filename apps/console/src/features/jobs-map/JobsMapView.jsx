@@ -14,6 +14,10 @@ import { supabase } from "../../supabase-client.js";
 
 const DEFAULT_CENTER = [43.6532, -79.3832]; // Toronto, ON
 const DEFAULT_ZOOM = 10;
+const REGION_FILTER_ITEMS = [
+  { value: "ALL", label: "All Regions" },
+  { value: "ONTARIO", label: "Ontario Only" },
+];
 const NotesPanel = lazy(() => import("../notes/NotesPanel.jsx"));
 const BoardPanel = lazy(() => import("../board/BoardPanel.jsx"));
 
@@ -164,6 +168,23 @@ export default function JobsMapView({ onSelectJobForWorkflow, onOpenJobReview, f
     });
     return Array.from(set).sort();
   }, [jobs]);
+  const ownerFilterItems = useMemo(
+    () => [
+      { value: "ALL", label: "All Owners" },
+      ...uniqueOwners.map((owner) => ({ value: owner, label: owner })),
+    ],
+    [uniqueOwners],
+  );
+  const radiusFilterItems = useMemo(
+    () => [
+      { value: "ALL", label: "Any Distance" },
+      { value: "25", label: `Within 25 ${unit}` },
+      { value: "50", label: `Within 50 ${unit}` },
+      { value: "100", label: `Within 100 ${unit}` },
+      { value: "250", label: `Within 250 ${unit}` },
+    ],
+    [unit],
+  );
 
   // 4. Proximity & Filtering Calculation
   const filteredJobs = useMemo(() => {
@@ -477,7 +498,7 @@ export default function JobsMapView({ onSelectJobForWorkflow, onOpenJobReview, f
 
         {/* Recruiter Owner Filter */}
         <div>
-          <Select value={selectedOwner} onValueChange={setSelectedOwner}>
+          <Select value={selectedOwner} onValueChange={setSelectedOwner} items={ownerFilterItems}>
             <SelectTrigger aria-label="Filter jobs by recruiter owner" className="w-full text-xs">
               <SelectValue placeholder="All Owners" />
             </SelectTrigger>
@@ -496,9 +517,9 @@ export default function JobsMapView({ onSelectJobForWorkflow, onOpenJobReview, f
 
         {/* Radius Filter */}
         <div>
-          <Select value={maxRadius} onValueChange={setMaxRadius} disabled={!searchCoords}>
+          <Select value={maxRadius} onValueChange={setMaxRadius} disabled={!searchCoords} items={radiusFilterItems}>
             <SelectTrigger aria-label="Filter jobs by distance" className="w-full text-xs">
-              <SelectValue placeholder="Any Radius" />
+              <SelectValue placeholder="Any Distance" />
             </SelectTrigger>
             <SelectContent>
               <SelectGroup>
@@ -533,9 +554,9 @@ export default function JobsMapView({ onSelectJobForWorkflow, onOpenJobReview, f
             </button>
           </div>
 
-          <Select value={regionFilter} onValueChange={setRegionFilter}>
-            <SelectTrigger aria-label="Filter jobs by region" className="w-full text-xs">
-              <SelectValue placeholder="Region" />
+          <Select value={regionFilter} onValueChange={setRegionFilter} items={REGION_FILTER_ITEMS}>
+            <SelectTrigger aria-label="Filter jobs by region" className="min-w-0 flex-1 text-xs">
+              <SelectValue placeholder="All Regions" className="min-w-0" />
             </SelectTrigger>
             <SelectContent>
               <SelectGroup>

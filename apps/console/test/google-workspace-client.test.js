@@ -3,8 +3,10 @@ import test from "node:test";
 import {
   GoogleWorkspaceClientError,
   disconnectGoogleWorkspace,
+  getWorkbenchAuthStatus,
   getGoogleWorkspaceStatus,
   getUpcomingGoogleCalendar,
+  googleConnectionGuidance,
   startGoogleWorkspaceConnection,
   validateGoogleAuthorizationUrl,
 } from "../src/google-workspace-client.js";
@@ -33,6 +35,32 @@ test("status uses the authenticated same-origin route and validates disconnected
   assert.equal(request.options.method, "GET");
   assert.equal(request.options.credentials, "include");
   assert.equal(request.options.cache, "no-store");
+});
+
+test("Workbench auth status keeps the private data session separate from Google sign-in", async () => {
+  let request;
+  const status = await getWorkbenchAuthStatus({
+    baseURL,
+    fetchImpl: async (url, options) => {
+      request = { url: String(url), options };
+      return jsonResponse({ googleSignIn: "unavailable", localDataSession: "configured" });
+    },
+  });
+  assert.deepEqual(status, { googleSignIn: "unavailable", localDataSession: "configured" });
+  assert.equal(request.url, `${baseURL}/api/auth/workbench-status`);
+  assert.equal(request.options.credentials, "include");
+  await assert.rejects(
+    getWorkbenchAuthStatus({ baseURL, fetchImpl: async () => jsonResponse({ googleSignIn: true, localDataSession: "configured" }) }),
+    (error) => error.code === "AUTH_STATUS_UNAVAILABLE",
+  );
+});
+
+test("Google recovery guidance distinguishes configuration, sign-in, scope and retry states", () => {
+  assert.equal(googleConnectionGuidance("AUTH_UNAVAILABLE").retryable, false);
+  assert.match(googleConnectionGuidance("AUTH_UNAVAILABLE").message, /Configure Better Auth/);
+  assert.match(googleConnectionGuidance("UNAUTHORIZED").message, /Sign in with Google in Settings/);
+  assert.match(googleConnectionGuidance("GOOGLE_CALENDAR_SCOPE_REQUIRED").message, /approve Calendar read-only access/);
+  assert.equal(googleConnectionGuidance("NETWORK_UNAVAILABLE").retryable, true);
 });
 
 test("start and disconnect use POST without accepting an injected live connection claim", async () => {

@@ -398,11 +398,12 @@ test("a search hit on any note opens the Notes page with that note focused, whil
   assert.ok(clientHit.client);
 });
 
-test("App mounts the Notes directory in the sidebar, routes note hits to it, and keeps browser storage out of the page", () => {
+test("App mounts the Notes directory in one view, routes note hits to it, and keeps browser storage out of the page", () => {
   const app = fs.readFileSync(path.join(consoleRoot, "src/App.jsx"), "utf8");
-  assert.match(app, /\["Notes", StickyNote\]/);
-  assert.match(app, /const NotesDirectory = lazy\(\(\) => import\("\.\/features\/notes\/NotesDirectory\.jsx"\)\);/);
-  assert.match(app, /case "Notes": return <NotesDirectory focusRequest=\{focusNote\} onOpenSubject=\{openNoteSubject\} \/>;/);
+  const oneView = fs.readFileSync(path.join(consoleRoot, "src/features/workbench/WorkbenchOneView.jsx"), "utf8");
+  assert.match(oneView, /const NotesDirectory = lazy\(\(\) => import\("\.\.\/notes\/NotesDirectory\.jsx"\)\);/);
+  assert.match(oneView, /destination === "Notes"\) content = <NotesDirectory focusRequest=\{focusNote\} onOpenSubject=\{onOpenNoteSubject\} \/>;/);
+  assert.match(oneView, /destination === "Notes"\) setMobileTab\("work"\)/);
   assert.match(app, /if \(target\.entityType === "note"\) \{[\s\S]*?setPage\("Notes"\);/);
   assert.match(app, /const selectPage = \(next\) => \{[\s\S]*?setFocusNote\(null\);/);
 

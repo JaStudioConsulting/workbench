@@ -61,6 +61,10 @@ test("Settings uses one Better Auth Google connection for Workspace services", a
   assert.match(panel, /calendarStatus === "connected" \? <UpcomingCalendar/);
   assert.match(panel, /<LoginButton \/>/);
   assert.match(panel, /Calendar, Gmail, Drive, and Sheets/);
+  assert.match(panel, /private Workbench data session is active/);
+  assert.match(panel, /authAvailability\.googleSignIn === "configured"/);
+  assert.match(calendar, /googleConnectionGuidance/);
+  assert.match(settings, /Google sign-in unavailable/);
   assert.doesNotMatch(panel, /startGoogleWorkspaceConnection|disconnectGoogleWorkspace|validateGoogleAuthorizationUrl/);
   assert.doesNotMatch(source, /service-grid|dangerouslySetInnerHTML/);
   assert.doesNotMatch(source, /Team sync|Candidate interview|Client meeting/i);
@@ -68,7 +72,9 @@ test("Settings uses one Better Auth Google connection for Workspace services", a
 
 test("Settings navigation can reach the Google Workspace panel", async () => {
   const app = await readFile(new URL("../src/App.jsx", import.meta.url), "utf8");
+  const oneView = await readFile(new URL("../src/features/workbench/WorkbenchOneView.jsx", import.meta.url), "utf8");
   const settings = await readFile(new URL("../src/features/settings/SettingsPage.jsx", import.meta.url), "utf8");
-  assert.match(app, /case "Settings": return <SettingsPage meetingsStatusLoader=\{getMeetingStatus\} \/>/);
+  assert.match(app, /<WorkbenchOneView/);
+  assert.match(oneView, /<SettingsPage meetingsStatusLoader=\{meetingsStatusLoader\} \/>/);
   assert.match(settings, /<GoogleWorkspacePanel/);
 });

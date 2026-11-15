@@ -1,6 +1,6 @@
 import express from "express";
 import { CandidateIdSchema, errorEnvelope, McpDiscoverySchema, SafetyStateSchema } from "@ja/shared-types";
-import { createConfiguredAuth, parseExactHttpsOrigins } from "./src/auth.js";
+import { createConfiguredAuth, getBetterAuthAvailability, parseExactHttpsOrigins } from "./src/auth.js";
 import { createGoogleWorkspaceHandlers } from "./src/google-workspace-routes.js";
 import { createGoogleApiHandlers } from "./src/google-api.js";
 import { prepareAfterCallWorkflow } from "./src/after-call.js";
@@ -16,7 +16,7 @@ import { registerSearchRoutes } from "./src/search-routes.js";
 import { registerTrackerImportRoutes } from "./src/tracker-import-routes.js";
 import { createSupabaseRecruiterAccess } from "./src/supabase-recruiter-auth.js";
 import { registerBrandedResumeEditRoutes } from "./src/branded-resume-edit-routes.js";
-import { registerLocalSessionRoute } from "./src/local-session.js";
+import { getLocalSessionAvailability, registerLocalSessionRoute } from "./src/local-session.js";
 
 function respondError(res, code, message, status = 503) {
   return res.status(status).json(errorEnvelope(code, message));
@@ -99,6 +99,13 @@ export async function createApp({
 
   // Better Auth must receive raw requests. JSON parsing is intentionally mounted after it.
   registerLocalSessionRoute(app, { env, fetchImpl: localSessionFetch });
+  app.get("/api/auth/workbench-status", (_req, res) => {
+    res.set("Cache-Control", "private, no-store");
+    return res.json({
+      googleSignIn: getBetterAuthAvailability(configuredAuth),
+      localDataSession: getLocalSessionAvailability(env),
+    });
+  });
   if (configuredAuth.enabled) app.all("/api/auth/*", configuredAuth.handler);
   else app.all("/api/auth/*", (_req, res) => respondError(res, "AUTH_UNAVAILABLE", configuredAuth.reason));
 

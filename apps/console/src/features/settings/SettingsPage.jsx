@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Bot, CheckCircle2, Cloud, Database, Mic2, RefreshCw, Workflow } from "lucide-react";
 import { GoogleWorkspacePanel } from "../../components/GoogleWorkspacePanel.jsx";
+import { googleConnectionGuidance } from "../../google-workspace-client.js";
 import { ImportDataPanel } from "../imports/ImportDataPanel.jsx";
 import { Button } from "../../components/ui/button.tsx";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../components/ui/card.tsx";
@@ -10,6 +11,26 @@ import { CANADA_FILTER_KEY, RECRUITING_TEMPLATES, loadSettingsStatus, readCanada
 
 function StatusCard({ icon: Icon, title, status, children }) {
   return <Card><CardHeader className="pb-2"><CardTitle className="flex items-center gap-2 text-sm"><Icon size={16} />{title}</CardTitle></CardHeader><CardContent><p className="text-sm font-medium">{status}</p><CardDescription>{children}</CardDescription></CardContent></Card>;
+}
+
+function googleStatusSummary(google) {
+  if (google.signIn === "unavailable") {
+    return { status: "Google sign-in unavailable", copy: googleConnectionGuidance("AUTH_UNAVAILABLE").message };
+  }
+  if (google.signIn === "unknown") {
+    return { status: "Status unknown", copy: "Google sign-in configuration could not be checked. Check your connection and reload Settings." };
+  }
+  if (google.error) {
+    const guidance = googleConnectionGuidance(google.code);
+    return { status: google.code === "UNAUTHORIZED" ? "Google sign-in required" : "Status unavailable", copy: guidance.message };
+  }
+  if (!google.connected) {
+    return { status: "Google sign-in required", copy: "Sign in with Google once in the Google Workspace section below." };
+  }
+  return {
+    status: "Connected",
+    copy: `${google.canRead ? "Email reading is allowed. " : "Email reading isn't allowed. "}${google.canDraft ? "Draft creation is allowed." : "Draft creation isn't allowed."}`,
+  };
 }
 
 export default function SettingsPage({ meetingsStatusLoader }) {
@@ -24,6 +45,7 @@ export default function SettingsPage({ meetingsStatusLoader }) {
       .catch(() => { if (active) setState({ phase: "error", status: null }); });
     return () => { active = false; };
   }, [requestId, meetingsStatusLoader]);
+  const googleSummary = state.status ? googleStatusSummary(state.status.google) : null;
 
   return (
     <div className="flex flex-col gap-4" data-testid="settings-page">
@@ -32,7 +54,7 @@ export default function SettingsPage({ meetingsStatusLoader }) {
       {state.phase === "error" ? <div className="rounded-lg border p-5" role="alert"><span>Settings status could not be loaded. Check your connection and try again.</span><Button className="ml-3" variant="outline" size="sm" onClick={() => setRequestId((value) => value + 1)}><RefreshCw size={14} />Retry</Button></div> : null}
       {state.status ? <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
         <StatusCard icon={Database} title="Your saved work" status={state.status.supabase.error ? "Status unknown" : state.status.supabase.connected ? "Signed in" : "Not signed in"}>{state.status.supabase.error ? "We couldn't check your sign-in. Refresh this page to retry." : state.status.supabase.connected ? "Your account session is active." : "No account is signed in."}</StatusCard>
-        <StatusCard icon={Cloud} title="Gmail" status={state.status.google.connected ? "Connected" : "Not confirmed"}>{state.status.google.connected ? `${state.status.google.canRead ? "Email reading is allowed. " : "Email reading isn't allowed. "}${state.status.google.canDraft ? "Draft creation is allowed." : "Draft creation isn't allowed."}` : "Gmail access hasn't been confirmed. Check the Google Workspace section below."}</StatusCard>
+        <StatusCard icon={Cloud} title="Gmail" status={googleSummary.status}>{googleSummary.copy}</StatusCard>
         <StatusCard icon={Bot} title="AI fit check" status={state.status.ai.available === null ? "Status unknown" : state.status.ai.available ? "Ready" : "Not set up"}>{state.status.ai.available === null ? "Fit-check status couldn't be confirmed." : state.status.ai.available ? "Candidate fit checks are ready." : "Candidate fit checks aren't set up."}</StatusCard>
         <StatusCard icon={Workflow} title="Loxo update notes" status="Notes only">Updates are prepared as notes for review. This page doesn't send changes to Loxo.</StatusCard>
         <StatusCard icon={Mic2} title="Meeting transcription" status={state.status.meetings.available ? "Ready" : "Not confirmed"}>{state.status.meetings.available ? "Meeting transcription is ready. Recording uses this device's microphone." : "Meeting transcription isn't ready or its status couldn't be checked."}</StatusCard>

@@ -197,7 +197,7 @@ export default function HeaderSearch({
       role="search"
       aria-label="Search Workbench"
       data-testid="header-search"
-      className="relative w-full min-w-0 sm:w-64 md:w-80 lg:w-96"
+      className="relative w-full min-w-0 sm:w-[260px] md:w-[300px] lg:w-[340px]"
     >
       <Command
         shouldFilter={false}

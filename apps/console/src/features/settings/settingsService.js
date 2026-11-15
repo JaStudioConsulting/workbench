@@ -1,4 +1,5 @@
 import { gatewayBaseURL } from "../../auth-client.js";
+import { getWorkbenchAuthStatus } from "../../google-workspace-client.js";
 import { supabase } from "../../supabase-client.js";
 import { getMailStatus } from "../mail/mailClient.js";
 
@@ -34,8 +35,9 @@ async function readAiStatus(request) {
 }
 
 export async function loadSettingsStatus({ client = supabase, request = globalThis.fetch, meetingsStatusLoader } = {}) {
-  const [sessionResult, mail, ai, meetings] = await Promise.all([
+  const [sessionResult, authStatus, mail, ai, meetings] = await Promise.all([
     client.auth.getSession().catch(() => ({ data: { session: null }, error: new Error("unavailable") })),
+    getWorkbenchAuthStatus({ fetchImpl: request }).catch(() => ({ googleSignIn: "unknown", localDataSession: "unknown" })),
     getMailStatus({ request }),
     readAiStatus(request),
     typeof meetingsStatusLoader === "function"
@@ -44,7 +46,7 @@ export async function loadSettingsStatus({ client = supabase, request = globalTh
   ]);
   return {
     supabase: { connected: Boolean(sessionResult?.data?.session), error: Boolean(sessionResult?.error) },
-    google: mail,
+    google: { ...mail, signIn: authStatus.googleSignIn, localDataSession: authStatus.localDataSession },
     ai,
     loxo: { queued: true, label: "Queued mode: changes wait for you or $recruiter" },
     meetings: {

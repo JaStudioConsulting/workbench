@@ -6,13 +6,24 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import express from "express";
 import test from "node:test";
-import { isLoopbackAddress, isTrustedLocalSessionRequest, registerLocalSessionRoute } from "../src/local-session.js";
+import { getLocalSessionAvailability, isLoopbackAddress, isTrustedLocalSessionRequest, registerLocalSessionRoute } from "../src/local-session.js";
 
 const ORIGIN = "https://jcs-macbook-air.tail8a223f.ts.net";
 const OWNER = "5f00e2f9-fef4-4213-a54f-fc79dd8d7752";
 const LOGIN = "ja@example.invalid";
 const LOGIN_HASH = createHash("sha256").update(LOGIN).digest("hex");
 const MACHINE_SECRET = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+
+test("local session availability reports configuration without exposing its values", () => {
+  assert.equal(getLocalSessionAvailability({}), "unavailable");
+  assert.equal(getLocalSessionAvailability({
+    WORKBENCH_LOCAL_SESSION_ENABLED: "1",
+    WORKBENCH_LOCAL_SESSION_OWNER_ID: OWNER,
+    WORKBENCH_TAILSCALE_LOGIN_SHA256: LOGIN_HASH,
+    WORKBENCH_LOCAL_SESSION_SECRET_FILE: "/private/session-secret",
+    APP_TRUSTED_ORIGINS: ORIGIN,
+  }), "configured");
+});
 
 async function request(app, { origin = ORIGIN, host = "jcs-macbook-air.tail8a223f.ts.net", login = LOGIN } = {}) {
   const server = await new Promise((resolve) => {

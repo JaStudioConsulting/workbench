@@ -104,6 +104,8 @@ function RecruitingContext({ launchContext, recruiting, selectedJob, selectedJob
   const attached = launchContext?.job?.id && launchContext?.candidate?.id;
   const lockedCall = isMeetingContextLocked({ launchContext, recording, transcribing });
   const attachmentLabel = launchContext?.source === "candidate_call" ? "attached from the Call button" : "restored from Recent meetings";
+  const jobItems = recruiting.jobs.map((job) => ({ value: String(job.id), label: `${job.title} · ${job.company}` }));
+  const candidateItems = recruiting.candidates.map((candidate) => ({ value: String(candidate.id), label: `${candidate.name} · ${candidate.title}` }));
   useEffect(() => { if (lockedCall) setEditing(false); }, [lockedCall]);
 
   if (attached && !editing) {
@@ -114,8 +116,8 @@ function RecruitingContext({ launchContext, recruiting, selectedJob, selectedJob
   }
 
   return <div className="grid gap-3 sm:grid-cols-2">
-    <label className="text-sm font-medium">Job<Select value={selectedJobId} onValueChange={(value) => setSelectedJobId(String(value))} disabled={lockedCall}><SelectTrigger aria-label="Select meeting job" className="mt-1 w-full"><SelectValue placeholder="Select job" /></SelectTrigger><SelectContent>{recruiting.jobs.map((job) => <SelectItem key={job.id} value={String(job.id)}>{job.title} · {job.company}</SelectItem>)}</SelectContent></Select></label>
-    <label className="text-sm font-medium">Candidate<Select value={selectedCandidateId} onValueChange={(value) => setSelectedCandidateId(String(value))} disabled={lockedCall || !selectedJobId || recruiting.phase === "loading_candidates"}><SelectTrigger aria-label="Select meeting candidate" className="mt-1 w-full"><SelectValue placeholder={recruiting.phase === "loading_candidates" ? "Loading candidates" : "Select candidate"} /></SelectTrigger><SelectContent>{recruiting.candidates.map((candidate) => <SelectItem key={candidate.id} value={String(candidate.id)}>{candidate.name} · {candidate.title}</SelectItem>)}</SelectContent></Select></label>
+    <label className="text-sm font-medium">Job<Select items={jobItems} value={selectedJobId} onValueChange={(value) => setSelectedJobId(String(value))} disabled={lockedCall}><SelectTrigger aria-label="Select meeting job" className="mt-1 w-full"><SelectValue placeholder="Select job" /></SelectTrigger><SelectContent>{recruiting.jobs.map((job) => <SelectItem key={job.id} value={String(job.id)}>{job.title} · {job.company}</SelectItem>)}</SelectContent></Select></label>
+    <label className="text-sm font-medium">Candidate<Select items={candidateItems} value={selectedCandidateId} onValueChange={(value) => setSelectedCandidateId(String(value))} disabled={lockedCall || !selectedJobId || recruiting.phase === "loading_candidates"}><SelectTrigger aria-label="Select meeting candidate" className="mt-1 w-full"><SelectValue placeholder={recruiting.phase === "loading_candidates" ? "Loading candidates" : "Select candidate"} /></SelectTrigger><SelectContent>{recruiting.candidates.map((candidate) => <SelectItem key={candidate.id} value={String(candidate.id)}>{candidate.name} · {candidate.title}</SelectItem>)}</SelectContent></Select></label>
   </div>;
 }
 

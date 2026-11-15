@@ -6,6 +6,11 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectVa
 import { Badge } from "../../components/ui/badge.tsx";
 import { ArrowRight, Clock, PlusCircle, AlertCircle } from "lucide-react";
 
+const ACTIVITY_TYPE_ITEMS = LOXO_LOGGABLE_ACTIVITIES.map((activity) => ({
+  value: activity.name,
+  label: activity.name,
+}));
+
 export default function LogActivityForm({ candidateId, onLogActivity }) {
   const [selectedType, setSelectedType] = useState(LOXO_LOGGABLE_ACTIVITIES[0].name);
   const [note, setNote] = useState("");
@@ -99,7 +104,7 @@ export default function LogActivityForm({ candidateId, onLogActivity }) {
           <label className="text-[11px] font-semibold text-muted-foreground block mb-1">
             Activity Type (Exact Loxo Names)
           </label>
-          <Select value={selectedType} onValueChange={setSelectedType} disabled={isSubmitting}>
+          <Select items={ACTIVITY_TYPE_ITEMS} value={selectedType} onValueChange={setSelectedType} disabled={isSubmitting}>
             <SelectTrigger className="w-full text-xs">
               <SelectValue />
             </SelectTrigger>

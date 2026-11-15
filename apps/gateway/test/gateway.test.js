@@ -64,11 +64,33 @@ async function request(app, method, path, { body, rawBody, headers = {} } = {}) 
 test("public routes work server-to-server while browser CORS is strict", async () => {
   const app = await createApp({ env: testEnv, recruitmentContextLoader: testRecruitmentContext });
   assert.equal((await request(app, "GET", "/healthz")).status, 200);
+  const authStatus = await request(app, "GET", "/api/auth/workbench-status");
+  assert.equal(authStatus.status, 200);
+  assert.deepEqual(authStatus.body, { googleSignIn: "unavailable", localDataSession: "unavailable" });
+  assert.equal(authStatus.headers["cache-control"], "private, no-store");
   const allowed = await request(app, "OPTIONS", "/mcp", { headers: { origin: browserOrigin } });
   assert.equal(allowed.status, 204);
   assert.equal(allowed.headers["access-control-allow-origin"], browserOrigin);
   assert.equal(allowed.headers["access-control-allow-credentials"], "true");
   assert.equal((await request(app, "GET", "/healthz", { headers: { origin: "https://untrusted.test" } })).status, 403);
+});
+
+test("private Supabase bootstrap and Better Auth Google sign-in report separate capabilities", async () => {
+  const app = await createApp({
+    env: {
+      ...testEnv,
+      WORKBENCH_LOCAL_SESSION_ENABLED: "1",
+      WORKBENCH_LOCAL_SESSION_OWNER_ID: supabaseUserId,
+      WORKBENCH_TAILSCALE_LOGIN_SHA256: "a".repeat(64),
+      WORKBENCH_LOCAL_SESSION_SECRET_FILE: "/private/session-secret",
+    },
+    authConfig: authenticated,
+    recruitmentContextLoader: testRecruitmentContext,
+  });
+  const response = await request(app, "GET", "/api/auth/workbench-status");
+  assert.equal(response.status, 200);
+  assert.deepEqual(response.body, { googleSignIn: "configured", localDataSession: "configured" });
+  assert.doesNotMatch(JSON.stringify(response.body), /secret|token|email|owner/i);
 });
 
 test("auth malformed environment fails closed without throwing", async () => {

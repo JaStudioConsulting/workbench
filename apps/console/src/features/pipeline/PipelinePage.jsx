@@ -7,6 +7,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/ca
 import { Checkbox } from "../../components/ui/checkbox.tsx";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../components/ui/select.tsx";
 import {
+  getCachedLiveCandidatesForJob,
+  getCachedLiveReviewJobs,
   loadLiveCandidatesForJob,
   loadLiveReviewJobs,
   logCandidateActivity,
@@ -17,7 +19,7 @@ import CandidatePresentationSummary, {
 import { LOXO_PIPELINE_STAGES } from "../candidate-review/constants.js";
 import FitBadge from "./FitBadge.jsx";
 import { isInCanada } from "./location.js";
-import { resolvePendingStage } from "./pendingStage.js";
+import { groupPipelineCandidates } from "./pendingStage.js";
 import { readCanadaFilter, saveCanadaFilter } from "../settings/settingsService.js";
 
 function CandidateCard({ job, candidate, waiting, onMove, onOpenCandidate }) {
@@ -99,58 +101,98 @@ function StageColumn({ stage, job, candidates, waitingIds, onMove, onOpenCandida
   </section>;
 }
 
-export default function PipelinePage({ onOpenCandidate }) {
-  const [jobsState, setJobsState] = useState({ phase: "loading", jobs: [], error: "" });
-  const [selectedJobId, setSelectedJobId] = useState("");
-  const [candidatesState, setCandidatesState] = useState({ phase: "idle", candidates: [], error: "" });
+export default function PipelinePage({ onOpenCandidate, selectedJob: controlledJob = null, onSelectJob }) {
+  const initialJobs = getCachedLiveReviewJobs();
+  const controlledJobId = String(controlledJob?.loxoJobId || controlledJob?.originalJobId || controlledJob?.id || "");
+  const [jobsState, setJobsState] = useState(() => initialJobs
+    ? { phase: "ready", jobs: initialJobs, error: "" }
+    : { phase: "loading", jobs: [], error: "" });
+  const [selectedJobId, setSelectedJobId] = useState(() => initialJobs?.some((job) => String(job.id) === controlledJobId)
+    ? controlledJobId
+    : String(initialJobs?.[0]?.id || ""));
+  const [candidatesState, setCandidatesState] = useState(() => {
+    const cached = selectedJobId ? getCachedLiveCandidatesForJob(selectedJobId) : null;
+    return cached
+      ? { phase: "ready", candidates: cached, error: "" }
+      : { phase: "idle", candidates: [], error: "" };
+  });
   const [canadaOnly, setCanadaOnly] = useState(() => readCanadaFilter());
   const [sessionPending, setSessionPending] = useState({});
   const [moveError, setMoveError] = useState("");
 
   const loadJobs = async () => {
-    setJobsState({ phase: "loading", jobs: [], error: "" });
+    const cached = getCachedLiveReviewJobs();
+    setJobsState(cached
+      ? { phase: "ready", jobs: cached, error: "" }
+      : { phase: "loading", jobs: [], error: "" });
     try {
       const jobs = await loadLiveReviewJobs();
       setJobsState({ phase: "ready", jobs, error: "" });
-      setSelectedJobId((current) => jobs.some((job) => String(job.id) === current) ? current : String(jobs[0]?.id || ""));
+      setSelectedJobId((current) => {
+        if (controlledJobId && jobs.some((job) => String(job.id) === controlledJobId)) return controlledJobId;
+        return jobs.some((job) => String(job.id) === current) ? current : String(jobs[0]?.id || "");
+      });
     } catch (error) {
-      setJobsState({ phase: "error", jobs: [], error: error.message || "Pipeline jobs could not be loaded." });
+      const message = error.message || "Pipeline jobs could not be loaded.";
+      setJobsState(cached
+        ? { phase: "ready", jobs: cached, error: message }
+        : { phase: "error", jobs: [], error: message });
     }
   };
 
   useEffect(() => { loadJobs(); }, []);
+  useEffect(() => {
+    if (controlledJobId && jobsState.jobs.some((job) => String(job.id) === controlledJobId)) {
+      setSelectedJobId(controlledJobId);
+    }
+  }, [controlledJobId, jobsState.jobs]);
   useEffect(() => {
     if (!selectedJobId) {
       setCandidatesState({ phase: "idle", candidates: [], error: "" });
       return undefined;
     }
     let active = true;
-    setCandidatesState({ phase: "loading", candidates: [], error: "" });
+    const cached = getCachedLiveCandidatesForJob(selectedJobId);
+    setCandidatesState(cached
+      ? { phase: "ready", candidates: cached, error: "" }
+      : { phase: "loading", candidates: [], error: "" });
     loadLiveCandidatesForJob(selectedJobId)
       .then((candidates) => { if (active) setCandidatesState({ phase: "ready", candidates, error: "" }); })
-      .catch((error) => { if (active) setCandidatesState({ phase: "error", candidates: [], error: error.message || "Candidates could not be loaded." }); });
+      .catch((error) => {
+        if (!active) return;
+        const message = error.message || "Candidates could not be loaded.";
+        setCandidatesState(cached
+          ? { phase: "ready", candidates: cached, error: message }
+          : { phase: "error", candidates: [], error: message });
+      });
     return () => { active = false; };
   }, [selectedJobId]);
 
-  const selectedJob = jobsState.jobs.find((job) => String(job.id) === selectedJobId) || null;
+  const resolvedSelectedJob = jobsState.jobs.find((job) => String(job.id) === selectedJobId) || null;
+  const handleJobChange = (value) => {
+    const nextJobId = String(value);
+    setSelectedJobId(nextJobId);
+    const nextJob = jobsState.jobs.find((job) => String(job.id) === nextJobId);
+    if (nextJob) onSelectJob?.(nextJob);
+  };
+  const jobSelectItems = useMemo(() => jobsState.jobs.map((job) => ({
+    value: String(job.id),
+    label: `${job.title} · ${job.company}`,
+  })), [jobsState.jobs]);
   const visibleCandidates = useMemo(() => candidatesState.candidates
     .filter((candidate) => !canadaOnly || isInCanada(candidate.location)), [candidatesState.candidates, canadaOnly]);
 
   // A stage move is only a queued request until Loxo applies it. Rebuild that
   // state from the persisted activity trail so the badge survives a reload.
-  const boardCandidates = useMemo(() => visibleCandidates.map((candidate) => {
-    const pendingStage = resolvePendingStage(candidate, sessionPending);
-    return pendingStage
-      ? { ...candidate, stage: pendingStage, pendingStage }
-      : { ...candidate, pendingStage: null };
-  }), [visibleCandidates, sessionPending]);
+  const { boardCandidates, unsupported } = useMemo(
+    () => groupPipelineCandidates(visibleCandidates, sessionPending),
+    [visibleCandidates, sessionPending]
+  );
 
   const waitingIds = useMemo(
     () => new Set(boardCandidates.filter((candidate) => candidate.pendingStage).map((candidate) => candidate.id)),
     [boardCandidates]
   );
-
-  const unsupported = boardCandidates.filter((candidate) => !LOXO_PIPELINE_STAGES.includes(candidate.stage));
 
   const moveCandidate = async (candidateId, from, to) => {
     if (!to || from === to) return;
@@ -192,8 +234,9 @@ export default function PipelinePage({ onOpenCandidate }) {
       <CardContent>
         {jobsState.phase === "loading" ? <p className="text-sm text-muted-foreground">Loading active jobs...</p> : null}
         {jobsState.phase === "error" ? <div role="alert" className="flex flex-wrap items-center gap-3 text-sm text-destructive"><span>{jobsState.error}</span><Button size="sm" variant="outline" onClick={loadJobs}><RefreshCw size={14} /> Retry</Button></div> : null}
+        {jobsState.phase === "ready" && jobsState.error ? <div role="alert" className="mb-3 flex flex-wrap items-center gap-3 text-sm text-amber-900"><span>Showing the last loaded jobs. {jobsState.error}</span><Button size="sm" variant="outline" onClick={loadJobs}><RefreshCw size={14} /> Retry</Button></div> : null}
         {jobsState.phase === "ready" && !jobsState.jobs.length ? <p className="text-sm text-muted-foreground">No active Tracker jobs with pipeline data.</p> : null}
-        {jobsState.jobs.length ? <Select value={selectedJobId} onValueChange={(value) => setSelectedJobId(String(value))}>
+        {jobsState.jobs.length ? <Select items={jobSelectItems} value={selectedJobId} onValueChange={handleJobChange}>
           <SelectTrigger aria-label="Select pipeline job" className="w-full sm:max-w-md"><SelectValue /></SelectTrigger>
           <SelectContent>{jobsState.jobs.map((job) => <SelectItem key={job.id} value={String(job.id)}>{job.title} · {job.company}</SelectItem>)}</SelectContent>
         </Select> : null}
@@ -203,16 +246,25 @@ export default function PipelinePage({ onOpenCandidate }) {
     {moveError ? <div role="alert" className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">{moveError}</div> : null}
     {candidatesState.phase === "loading" ? <p className="text-sm text-muted-foreground">Loading pipeline candidates...</p> : null}
     {candidatesState.phase === "error" ? <div role="alert" className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">{candidatesState.error}</div> : null}
+    {candidatesState.phase === "ready" && candidatesState.error ? <div role="alert" className="rounded-md border border-amber-700/30 bg-amber-50 p-3 text-sm text-amber-950">Showing the last loaded candidates. {candidatesState.error}</div> : null}
     {candidatesState.phase === "ready" && !candidatesState.candidates.length ? <p className="rounded-md border border-dashed p-6 text-sm text-muted-foreground">No candidates are linked to this job.</p> : null}
     {candidatesState.phase === "ready" && candidatesState.candidates.length && !visibleCandidates.length ? <p className="rounded-md border border-dashed p-6 text-sm text-muted-foreground">No candidates match the Canada filter.</p> : null}
-    {unsupported.length ? <p role="status" className="rounded-md border border-amber-700/30 bg-amber-50 p-3 text-sm text-amber-950">{unsupported.length} candidate{unsupported.length === 1 ? " has" : "s have"} a stage not supported by this board.</p> : null}
+    {unsupported.length ? <div role="status" className="rounded-md border border-amber-700/30 bg-amber-50 p-3 text-sm text-amber-950">
+      <p className="font-medium">{unsupported.length} candidate{unsupported.length === 1 ? " has" : "s have"} a stage not supported by this board.</p>
+      <ul className="mt-2 grid gap-2">
+        {unsupported.map((candidate) => <li key={candidate.id} className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-amber-900/15 bg-white/60 px-2.5 py-2">
+          <span><span className="font-medium">{candidate.name || "Unnamed candidate"}</span> · Current stage: {candidate.stage || "Not recorded"}</span>
+          <Button size="sm" variant="outline" onClick={() => onOpenCandidate?.(candidate.jobId || selectedJobId, candidate.id)}>Open</Button>
+        </li>)}
+      </ul>
+    </div> : null}
 
-    {selectedJob && visibleCandidates.length ? <DragDropProvider onDragEnd={handleDragEnd}>
-      <div className="flex min-w-0 gap-3 overflow-x-auto pb-4" aria-label={`${selectedJob.title} pipeline board`}>
+    {resolvedSelectedJob && visibleCandidates.length ? <DragDropProvider onDragEnd={handleDragEnd}>
+      <div className="flex min-w-0 gap-3 overflow-x-auto pb-4" aria-label={`${resolvedSelectedJob.title} pipeline board`}>
         {LOXO_PIPELINE_STAGES.map((stage) => <StageColumn
           key={stage}
           stage={stage}
-          job={selectedJob}
+          job={resolvedSelectedJob}
           candidates={boardCandidates.filter((candidate) => candidate.stage === stage)}
           waitingIds={waitingIds}
           onMove={moveCandidate}

@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import {
   buildTrackerImportChoices,
   createFileSourceKey,
@@ -14,6 +15,17 @@ import {
   suggestHeaderMapping,
   validateImportGrid,
 } from "../src/features/imports/trackerImportClient.js";
+
+test("Import selectors map stored values to readable labels", async () => {
+  const source = await readFile(new URL("../src/features/imports/ImportDataPanel.jsx", import.meta.url), "utf8");
+  assert.match(source, /items=\{TRACKER_IMPORT_TYPES\}/);
+  assert.match(source, /items=\{sheetTabItems\}/);
+  assert.match(source, /items=\{fileSourceItems\}/);
+  assert.match(source, /items=\{fileSheets\.map/);
+  assert.match(source, /items=\{mappingItems\}/);
+  assert.match(source, /items=\{identityItems\}/);
+  assert.match(source, /items=\{previewFilterItems\}/);
+});
 
 test("CSV parser preserves quoted commas and rejects malformed or oversized grids", () => {
   assert.deepEqual(parseCsvText('Candidate Name,Notes\r\nAda Lovelace,"text, with comma"\r\n'), {

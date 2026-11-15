@@ -29,6 +29,9 @@ import {
   enrichCandidatesWithPresentations,
   loadLiveReviewJobs,
   loadLiveCandidatesForJob,
+  getCachedLiveReviewJobs,
+  getCachedLiveCandidatesForJob,
+  clearLiveReviewCache,
   loadLivePresentations,
   _setSupabaseClientForTesting,
   _resetStoreForTesting,
@@ -44,6 +47,22 @@ import {
 const here = path.dirname(fileURLToPath(import.meta.url));
 const featureDir = path.resolve(here, "../src/features/candidate-review");
 const appFile = path.resolve(here, "../src/App.jsx");
+
+test("candidate review resolves the latest external job after an async job load", () => {
+  const source = fs.readFileSync(path.join(featureDir, "CandidateReview.jsx"), "utf8");
+  assert.match(source, /const selectedJobRef = useRef\(selectedJob\)/);
+  assert.match(source, /selectedJobRef\.current = selectedJob/);
+  assert.match(source, /const latestSelectedJob = selectedJobRef\.current/);
+  assert.match(source, /const nextJob = targetId \? \(matched \|\| null\) : \(loadedJobs\[0\] \|\| null\)/);
+});
+
+test("people view bounds rendered rows and keeps focused records reachable", () => {
+  const source = fs.readFileSync(path.join(featureDir, "PeopleView.jsx"), "utf8");
+  assert.match(source, /filteredCandidates\.slice\(0, visibleLimit\)/);
+  assert.match(source, /Show 100 more/);
+  assert.match(source, /setVisibleLimit\(focusedIndex \+ 1\)/);
+  assert.match(source, /\[currentJob\?\.id, viewFilter, searchTerm/);
+});
 
 test.beforeEach(() => {
   _resetStoreForTesting({ jobs: SAMPLE_JOBS, candidates: SAMPLE_CANDIDATES });
@@ -449,6 +468,15 @@ test("persisted presentations survive reload, keep queued actions pending, and n
   }
 
   _setSupabaseClientForTesting(createMockSupabase());
+  assert.equal(getCachedLiveReviewJobs(), null);
+  assert.equal(getCachedLiveCandidatesForJob("10"), null);
+  await loadLiveReviewJobs();
+  await loadLiveCandidatesForJob("10");
+  assert.equal(getCachedLiveReviewJobs()?.[0]?.id, "10");
+  assert.equal(getCachedLiveCandidatesForJob("10")?.length, 2);
+  clearLiveReviewCache();
+  assert.equal(getCachedLiveReviewJobs(), null);
+  assert.equal(getCachedLiveCandidatesForJob("10"), null);
   await loadLiveReviewJobs();
   await loadLiveCandidatesForJob("10");
 
@@ -491,6 +519,8 @@ test("persisted presentations survive reload, keep queued actions pending, and n
 
   // Simulate full browser reload: reset all in-memory stores and reload from Supabase
   _resetStoreForTesting();
+  assert.equal(getCachedLiveReviewJobs(), null);
+  assert.equal(getCachedLiveCandidatesForJob("10"), null);
   _setSupabaseClientForTesting(createMockSupabase());
   await loadLiveReviewJobs();
   await loadLiveCandidatesForJob("10");
@@ -640,6 +670,7 @@ test("write failure preserves activity note and enforces outbox idempotency", as
   // Verify setNote("") is NOT in the catch or finally block
   assert.match(formSource, /setNote\(""\);\s*setJustLogged\(true\);/);
   assert.match(formSource, /pendingIdempotencyKey/);
+  assert.match(formSource, /items=\{ACTIVITY_TYPE_ITEMS\}/);
 });
 
 test("brand resume and write-up use only available candidate sources", () => {
@@ -727,17 +758,18 @@ test("people view exposes fast queues and wanted actions while swipe stays unrev
   assert.equal([...swipeSource.matchAll(/onNavigateIndex\(safeIndex \+ 1\)/g)].length, 1);
 });
 
-test("screenshot feedback: LoginButton removed from shell, navigation cleaned, eyebrow removed, buttons concise", () => {
+test("screenshot feedback: LoginButton removed from shell, one-view destinations kept, eyebrow removed, buttons concise", () => {
   const appSource = fs.readFileSync(appFile, "utf8");
+  const oneViewSource = fs.readFileSync(path.resolve(featureDir, "../workbench/WorkbenchOneView.jsx"), "utf8");
 
   // Removed from app shell header
   assert.doesNotMatch(appSource, /<LoginButton\s*\/>/);
   assert.doesNotMatch(appSource, /import LoginButton from/);
 
-  // Staff stays out of navigation; Mail and Profile are real pages now
+  // Staff stays out of the shell; Mail and Profile remain reachable in one view.
   assert.doesNotMatch(appSource, /\["Staff"/);
-  assert.match(appSource, /\["Mail"/);
-  assert.match(appSource, /\["Profile"/);
+  assert.match(oneViewSource, /mail\/MailPage/);
+  assert.match(oneViewSource, /profile\/ProfilePage/);
 
   // Eyebrow removed
   assert.doesNotMatch(appSource, /JA STUDIO CONSULTING/);

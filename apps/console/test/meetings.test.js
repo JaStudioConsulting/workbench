@@ -487,9 +487,9 @@ test("Meetings workspace uses browser microphone recording and the existing Cale
   assert.match(recorder, /getDisplayMedia/);
   assert.match(recorder, /MediaRecorderImpl/);
   assert.match(recorder, /indexedDB/);
-  assert.match(app, /\["Meetings", CalendarDays\]/);
+  assert.match(app, /meetingLaunch=\{meetingLaunch\}/);
   assert.match(app, /startCandidateCallSession/);
-  assert.match(app, /launchContext=\{meetingLaunch\}/);
+  assert.match(app, /onMeetingLaunchChange=\{updateMeetingLaunch\}/);
   assert.match(app, /recordingLocked/);
   assert.match(app, /key=\{`\$\{sessionUserId\}:\$\{page\}`\}/);
   assert.match(app, /const openCandidate = \(jobId, personId\) => \{\s*if \(recordingLocked\) return;/);
@@ -616,6 +616,8 @@ test("meetings workspace compiles and uses live selectors, templates, exports, a
   assert.match(workspace, /loadLiveReviewJobs/);
   assert.match(workspace, /loadLiveCandidatesForJob/);
   assert.match(variants, /Prepare after-call review/);
+  assert.match(variants, /items=\{jobItems\}/);
+  assert.match(variants, /items=\{candidateItems\}/);
   assert.match(variants, /__variant/);
   assert.match(variants, /transcript-first/);
   assert.match(workspace, /Download Markdown/);
