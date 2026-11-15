@@ -1,4 +1,3 @@
-import { gatewayBaseURL } from "../../auth-client.js";
 import { getWorkbenchAuthStatus } from "../../google-workspace-client.js";
 import { supabase } from "../../supabase-client.js";
 import { getMailStatus } from "../mail/mailClient.js";
@@ -23,37 +22,15 @@ export function saveCanadaFilter(enabled, storage = globalThis.localStorage) {
   return Boolean(enabled);
 }
 
-async function readAiStatus(request) {
-  try {
-    const response = await request(new URL("/api/ai/status", gatewayBaseURL), { credentials: "include", headers: { accept: "application/json" } });
-    if (!response.ok) return { available: null, label: "AI check not set up" };
-    const payload = await response.json();
-    return { available: Boolean(payload.available || payload.configured), label: payload.available || payload.configured ? "Fit check ready" : "Fit check not set up" };
-  } catch {
-    return { available: null, label: "AI check not set up" };
-  }
-}
-
-export async function loadSettingsStatus({ client = supabase, request = globalThis.fetch, meetingsStatusLoader } = {}) {
-  const [sessionResult, authStatus, mail, ai, meetings] = await Promise.all([
+export async function loadSettingsStatus({ client = supabase, request = globalThis.fetch } = {}) {
+  const [sessionResult, authStatus, mail] = await Promise.all([
     client.auth.getSession().catch(() => ({ data: { session: null }, error: new Error("unavailable") })),
     getWorkbenchAuthStatus({ fetchImpl: request }).catch(() => ({ googleSignIn: "unknown", localDataSession: "unknown" })),
     getMailStatus({ request }),
-    readAiStatus(request),
-    typeof meetingsStatusLoader === "function"
-      ? meetingsStatusLoader().catch(() => ({ available: null }))
-      : Promise.resolve({ available: false }),
   ]);
   return {
     supabase: { connected: Boolean(sessionResult?.data?.session), error: Boolean(sessionResult?.error) },
     google: { ...mail, signIn: authStatus.googleSignIn, localDataSession: authStatus.localDataSession },
-    ai,
     loxo: { queued: true, label: "Queued mode: changes wait for you or $recruiter" },
-    meetings: {
-      available: meetings?.available == null ? null : Boolean(meetings.available),
-      label: meetings?.available
-        ? "M1 transcription available; recording uses this device's microphone"
-        : "Meetings transcription helper unavailable",
-    },
   };
 }

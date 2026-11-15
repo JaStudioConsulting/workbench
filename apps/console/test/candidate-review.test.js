@@ -922,6 +922,17 @@ test("Quick One template fills from job data and never invents a blurb", async (
   assert.equal(canSaveGmailDraft({ scopes: { compose: false } }), false);
 });
 
+test("outreach composer keeps templates and manual actions without AI personalization", () => {
+  const source = fs.readFileSync(path.join(featureDir, "OutreachComposer.jsx"), "utf8");
+  assert.match(source, /renderOutreach\(\{ template, candidate, job: role, signature \}\)/);
+  assert.match(source, /setSubject\(event.target.value\)/);
+  assert.match(source, /setBody\(event.target.value\)/);
+  assert.match(source, /onClick=\{copy\}/);
+  assert.match(source, /onClick=\{openInMail\}/);
+  assert.match(source, /onClick=\{saveDraft\}/);
+  assert.doesNotMatch(source, /personalizeOutreach|Personalize with AI|aiClient|Sparkles|setBusy\("ai"\)/);
+});
+
 test("experience timeline parses dates, totals without double counting, flags short stints", async () => {
   const { parseDateRange, buildTimeline, formatDuration } = await import("../src/features/candidate-review/experienceTimeline.js");
   const now = new Date("2026-11-07T12:00:00Z");
@@ -995,7 +1006,7 @@ test("card wires the new pieces and drops the old no-resume message", () => {
   assert.match(card, /<FitBadge job=\{currentJob\} candidate=\{candidate\} \/>/);
   assert.match(card, /RejectMenu/);
   assert.match(card, /ContactReveal/);
-  assert.match(card, /ForYourAiBox/);
+  assert.doesNotMatch(card, /ForYourAiBox/);
   // All cross-builder imports stay in one file.
   const externals = fs.readFileSync(path.join(featureDir, "externals.js"), "utf8");
   assert.match(externals, /pipeline\/location\.js/);

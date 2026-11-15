@@ -197,16 +197,16 @@ export function createNativeCaptureManager({
         active.delete(entry.name);
       }
     }
-    await cleanupExpired();
-    if (!retentionTimer) {
+    // Retain original audio. Deletion is an explicit user operation.
+    if (process.env.WORKBENCH_CAPTURE_AUTO_RETENTION === "1" && !retentionTimer) {
       retentionTimer = setInterval(cleanupExpired, RETENTION_CHECK_INTERVAL_MS);
       retentionTimer.unref?.();
     }
   }
 
   async function start({ jobId, candidateId, ownerId }) {
-    const jobID = safeText(jobId, "Job ID");
-    const candidateID = safeText(candidateId, "Candidate ID");
+    const jobID = jobId ? safeText(jobId, "Job ID") : null;
+    const candidateID = candidateId ? safeText(candidateId, "Candidate ID") : null;
     const ownerID = safeText(ownerId, "Owner ID");
     if (!await manager.available()) throw new Error("Native meeting capture is unavailable");
     const id = randomUUID();

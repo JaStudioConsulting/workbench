@@ -25,7 +25,6 @@ import { createCandidateDraft } from "./candidateReviewService.js";
 import RejectMenu from "./RejectMenu.jsx";
 import ContactReveal from "./ContactReveal.jsx";
 import ExperienceTimeline from "./ExperienceTimeline.jsx";
-import ForYourAiBox from "./ForYourAiBox.jsx";
 import OutreachComposer from "./OutreachComposer.jsx";
 import { FitBadge, getResumeSource } from "./externals.js";
 
@@ -473,7 +472,6 @@ export default function CandidateCard({
             candidateId={candidate.id}
             onLogActivity={handleCardLogActivity}
           />
-          <ForYourAiBox candidate={candidate} job={currentJob} ticked={ticked} onToggle={toggleModule} />
         </div>
       </div>
 

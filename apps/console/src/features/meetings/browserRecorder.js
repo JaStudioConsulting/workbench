@@ -80,7 +80,7 @@ export function meetingRecordingFilename(blob) {
   if (["audio/mp4", "audio/m4a", "audio/x-m4a"].includes(type)) return "meeting-recording.m4a";
   if (type === "audio/mpeg") return "meeting-recording.mp3";
   if (type === "audio/wav" || type === "audio/x-wav") return "meeting-recording.wav";
-  throw new Error("Recording format is not supported by local transcription.");
+  throw new Error("Recording format is not supported.");
 }
 
 export function meetingRecordingErrorMessage(error) {
@@ -102,7 +102,7 @@ export function meetingRecordingErrorMessage(error) {
 }
 
 export function meetingCaptureState(recording) {
-  if (!recording) return "Recording uses this device's microphone. Audio is sent to the M1 for transcription.";
+  if (!recording) return "Recording uses this device's microphone. Audio stays on this device for playback and download.";
   if (recording.twoSided) return "Recording this device's microphone and shared call audio.";
   return "Recording this device's microphone only. The other party's audio is not captured.";
 }
@@ -236,7 +236,7 @@ export async function openRecordingArchive({
   if (!indexedDBImpl?.open) {
     return {
       archive: createMemoryArchive(meta),
-      warning: "This browser cannot keep the recording on disk while it runs. Keep this tab open until the transcript is ready.",
+      warning: "This browser cannot keep the recording on disk while it runs. Keep this tab open until you download the recording.",
     };
   }
   try {
@@ -246,7 +246,7 @@ export async function openRecordingArchive({
   } catch {
     return {
       archive: createMemoryArchive(meta),
-      warning: "This browser cannot keep the recording on disk while it runs. Keep this tab open until the transcript is ready.",
+      warning: "This browser cannot keep the recording on disk while it runs. Keep this tab open until you download the recording.",
     };
   }
 }
@@ -266,15 +266,19 @@ export async function listInterruptedRecordings({ ownerId, indexedDBImpl = globa
   }
 }
 
+function normalizeDraftIdentity(value) {
+  return String(value ?? "").trim();
+}
+
 function localMeetingDraftId(ownerId, jobId, candidateId) {
-  return `meeting-draft:${String(ownerId)}:${String(jobId)}:${String(candidateId)}`;
+  return `meeting-draft:${normalizeDraftIdentity(ownerId)}:${normalizeDraftIdentity(jobId)}:${normalizeDraftIdentity(candidateId)}`;
 }
 
 export async function saveLocalMeetingDraft(draft, { indexedDBImpl = globalThis.indexedDB } = {}) {
-  const ownerId = String(draft?.ownerId || "").trim();
-  const jobId = String(draft?.jobId || "").trim();
-  const candidateId = String(draft?.candidateId || "").trim();
-  if (!ownerId || !jobId || !candidateId) throw new Error("Sign in and choose a job and candidate to keep an unsaved draft on this device.");
+  const ownerId = normalizeDraftIdentity(draft?.ownerId);
+  const jobId = normalizeDraftIdentity(draft?.jobId);
+  const candidateId = normalizeDraftIdentity(draft?.candidateId);
+  if (!ownerId) throw new Error("A verified account is required to keep an unsaved draft on this device.");
   if (!indexedDBImpl?.open) throw new Error("This browser cannot keep an unsaved meeting draft after you close the page.");
   const saved = {
     id: localMeetingDraftId(ownerId, jobId, candidateId),
@@ -285,6 +289,7 @@ export async function saveLocalMeetingDraft(draft, { indexedDBImpl = globalThis.
     notes: String(draft.notes || ""),
     templateId: String(draft.templateId || ""),
     eventTitle: String(draft.eventTitle || ""),
+    idempotencyKey: draft.idempotencyKey || null,
     updatedAt: new Date().toISOString(),
   };
   await withRecordingDb(indexedDBImpl, async (db) => {
@@ -295,18 +300,22 @@ export async function saveLocalMeetingDraft(draft, { indexedDBImpl = globalThis.
   return { ...saved, persistence: "device" };
 }
 
-export async function loadLocalMeetingDraft({ ownerId, jobId, candidateId }, { indexedDBImpl = globalThis.indexedDB } = {}) {
-  if (!ownerId || !jobId || !candidateId || !indexedDBImpl?.open) return null;
+export async function loadLocalMeetingDraft({ ownerId, jobId, candidateId } = {}, { indexedDBImpl = globalThis.indexedDB } = {}) {
+  ownerId = normalizeDraftIdentity(ownerId);
+  jobId = normalizeDraftIdentity(jobId);
+  candidateId = normalizeDraftIdentity(candidateId);
+  if (!ownerId || !indexedDBImpl?.open) return null;
   const draft = await withRecordingDb(indexedDBImpl, async (db) => {
     const transaction = db.transaction(MEETING_DRAFT_STORE, "readonly");
     return requestAsPromise(transaction.objectStore(MEETING_DRAFT_STORE).get(localMeetingDraftId(ownerId, jobId, candidateId)));
   }).catch(() => { throw new Error("The unsaved meeting draft could not be checked on this device."); });
-  if (!draft || draft.ownerId !== String(ownerId) || draft.jobId !== String(jobId) || draft.candidateId !== String(candidateId)) return null;
+  if (!draft || draft.ownerId !== ownerId || normalizeDraftIdentity(draft.jobId) !== jobId || normalizeDraftIdentity(draft.candidateId) !== candidateId) return null;
   return { ...draft, persistence: "device" };
 }
 
-export async function deleteLocalMeetingDraft({ ownerId, jobId, candidateId }, { indexedDBImpl = globalThis.indexedDB } = {}) {
-  if (!ownerId || !jobId || !candidateId || !indexedDBImpl?.open) return;
+export async function deleteLocalMeetingDraft({ ownerId, jobId, candidateId } = {}, { indexedDBImpl = globalThis.indexedDB } = {}) {
+  ownerId = normalizeDraftIdentity(ownerId);
+  if (!ownerId || !indexedDBImpl?.open) return;
   await withRecordingDb(indexedDBImpl, async (db) => {
     const transaction = db.transaction(MEETING_DRAFT_STORE, "readwrite");
     transaction.objectStore(MEETING_DRAFT_STORE).delete(localMeetingDraftId(ownerId, jobId, candidateId));
@@ -466,7 +475,7 @@ export async function startBrowserRecording({
   const canRecordWav = typeof AudioContextImpl === "function"
     && typeof AudioContextImpl.prototype?.createScriptProcessor === "function";
   if ((!format || typeof MediaStreamImpl !== "function") && !canRecordWav) {
-    throw new Error("This browser cannot create MP4, MP3, or WAV audio for local transcription.");
+    throw new Error("This browser cannot create MP4, MP3, or WAV recordings.");
   }
 
   const startedAt = new Date().toISOString();
@@ -555,7 +564,7 @@ export async function startBrowserRecording({
       meta.mimeType = "audio/wav";
       meta.sampleRate = backend.sampleRate;
     } else {
-      throw new Error("This browser cannot create MP4, MP3, or WAV audio for local transcription.");
+      throw new Error("This browser cannot create MP4, MP3, or WAV recordings.");
     }
     meta.warning = warning;
     meta.twoSided = Boolean(shared);
@@ -579,6 +588,7 @@ export async function startBrowserRecording({
   let stopPromise = null;
   const active = {
     id: sessionId,
+    ownerId: meta.ownerId,
     jobId: meta.jobId,
     candidateId: meta.candidateId,
     jobTitle: meta.jobTitle,
