@@ -79,6 +79,7 @@ test('automation status forwards the authenticated owner token and filters the c
   assert.equal(calls[0].options.headers.Authorization, 'Bearer owner-token');
   assert.equal(calls[0].options.headers.apikey, 'sb_publishable_test');
   assert.equal(calls[0].url.pathname, '/rest/v1/automation_job_status');
+  assert.equal(calls[0].url.searchParams.get('order'), 'updated_at.desc');
   assert.equal(calls[0].url.searchParams.get('record_key'), `like.automation:${CANDIDATE}:job:*`);
 });
 
@@ -183,6 +184,7 @@ test('automation and document routes require the supplied owner authentication m
   for (const [method, path] of [
     ['GET', '/api/automation/jobs'],
     ['POST', '/api/automation/reconcile'],
+    ['POST', '/api/automation/prioritize'],
     ['POST', `/api/automation/jobs/${TASK}/retry`],
     ['GET', `/api/automation/candidates/${encodeURIComponent(CANDIDATE)}/inputs`],
     ['PUT', `/api/automation/candidates/${encodeURIComponent(CANDIDATE)}/inputs`],
@@ -196,4 +198,18 @@ test('automation and document routes require the supplied owner authentication m
   }
   assert.equal(storageCalls, 0);
   assert.deepEqual(await readdir(directory), []);
+});
+
+
+test('selecting a candidate prioritizes only the validated owner-scoped record', async t => {
+  const calls = [];
+  const { request } = await fixture(t, async (url, options) => {
+    calls.push({url, options}); return Response.json(1);
+  });
+  assert.equal((await request('/api/automation/prioritize', {method:'POST',body:{candidateId:CANDIDATE}})).body.prioritized, 1);
+  assert.equal(calls[0].options.headers.Authorization, 'Bearer owner-token');
+  assert.equal(new URL(calls[0].url).pathname, '/rest/v1/rpc/prioritize_workbench_automation');
+  assert.deepEqual(JSON.parse(calls[0].options.body), {candidate_id:CANDIDATE});
+  assert.equal((await request('/api/automation/prioritize', {method:'POST',body:{candidateId:'invalid'}})).status, 400);
+  assert.equal(calls.length, 1);
 });

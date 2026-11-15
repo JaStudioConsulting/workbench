@@ -24,7 +24,7 @@ async function createDatabase() {
       ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO authenticated, anon;
       CREATE TABLE public.candidates_all (
         id text PRIMARY KEY, candidate_source text NOT NULL, candidate_name text NOT NULL,
-        current_title text, owner_id uuid
+        current_title text, owner_id uuid, edited_at timestamptz
       );
       ALTER TABLE public.candidates_all ENABLE ROW LEVEL SECURITY;
       CREATE POLICY candidate_access ON public.candidates_all TO authenticated
@@ -60,6 +60,7 @@ async function createDatabase() {
       "023_operator_cases.sql", "027_operator_case_history_privileges.sql",
       "028_mpc_case_artifact_prerequisites.sql", "029_supersede_operator_artifact_approvals.sql",
       "031_save_operator_artifact_revision.sql", "032_no_ai_automation.sql",
+      "033_automation_interactive_priority.sql",
     ]) await db.exec(await readFile(new URL(`../migrations/${name}`, import.meta.url), "utf8"));
     await db.query("SELECT set_config('request.jwt.claim.sub',$1,false)", [first]);
     await db.exec("SET ROLE authenticated");
@@ -136,6 +137,78 @@ test("reconciliation deduplicates unchanged data and scopes input and queue owne
     assert.equal(secondJob.owner_id, second);
     assert.notEqual(secondJob.id, firstJob.id);
     assert.equal((await db.query("SELECT public.retry_workbench_automation($1) AS retried", [firstJob.id])).rows[0].retried, false);
+  } finally { await db.close(); }
+});
+
+test("saved input and candidate edits jump the older backlog using only the owner's input priority", async () => {
+  const db = await createDatabase();
+  try {
+    await asAdmin(db, `INSERT INTO public.candidates_all(id,candidate_source,candidate_name,edited_at) VALUES
+      ('sourcing:8','sourcing','Recently supplied fields',NULL),
+      ('sourcing:9','sourcing','Edited candidate',now()-interval '1 hour'),
+      ('sourcing:10','sourcing','Earlier supplied fields',NULL)`);
+    await addMeeting(db);
+    assert.equal(await reconcile(db), 5);
+    await asAdmin(db, "UPDATE public.automation_jobs SET created_at=now()-interval '1 day' WHERE owner_id=$1", [first]);
+    await db.query(`INSERT INTO public.automation_inputs(candidate_id,fields,updated_at) VALUES
+      ('sourcing:8','{"workStatus":"Recently recorded"}',now()-interval '1 hour'),
+      ('sourcing:10','{"workStatus":"Previously recorded"}',now()-interval '2 hours')`);
+    assert.equal(await reconcile(db), 2);
+
+    await db.query("SELECT set_config('request.jwt.claim.sub',$1,false)", [second]);
+    await db.query("INSERT INTO public.automation_inputs(candidate_id,fields,updated_at) VALUES ('sourcing:10','{}',now()+interval '1 day')");
+    assert.equal(await reconcile(db), 4);
+    const otherOwnerJob = await current(db, "automation:sourcing:10:job:none");
+    await db.query("SELECT set_config('request.jwt.claim.sub',$1,false)", [first]);
+    assert.deepEqual((await db.query("SELECT id FROM public.automation_jobs WHERE id=$1", [otherOwnerJob.id])).rows, []);
+
+    for (const key of ["automation:sourcing:8:job:none", "automation:sourcing:10:job:none", "automation:sourcing:9:job:none", "automation:sourcing:7:job:42", recordKey]) {
+      const next = await claim(db);
+      assert.equal(next.record_key, key);
+      assert.equal(next.owner_id, first);
+      assert.equal(next.attempts, 1);
+      assert.ok(next.lease_token);
+    }
+    assert.equal(await claim(db), undefined);
+    await db.query("SELECT set_config('request.jwt.claim.sub',$1,false)", [second]);
+    assert.equal((await current(db, otherOwnerJob.record_key)).state, "queued");
+    const next = await claim(db);
+    assert.equal(next.id, otherOwnerJob.id);
+    assert.equal(next.owner_id, second);
+  } finally { await db.close(); }
+});
+
+test("selecting an older candidate prioritizes only current queued jobs for the current owner", async () => {
+  const db = await createDatabase();
+  try {
+    await asAdmin(db, "INSERT INTO public.candidates_all(id,candidate_source,candidate_name) VALUES ('sourcing:8','sourcing','Recent input candidate')");
+    assert.equal(await reconcile(db), 2);
+    const obsolete = await current(db);
+    await setFields(db, { workStatus: "Updated candidate data" });
+    assert.equal(await reconcile(db), 1);
+    await db.query("INSERT INTO public.automation_inputs(candidate_id,fields,updated_at) VALUES ('sourcing:8','{}',now()+interval '1 day')");
+    const selected = await current(db);
+    await db.query("SELECT set_config('request.jwt.claim.sub',$1,false)", [second]);
+    assert.equal(await reconcile(db), 2);
+    const foreign = await current(db);
+    await db.query("SELECT set_config('request.jwt.claim.sub',$1,false)", [first]);
+
+    const prioritized = await db.query("SELECT public.prioritize_workbench_automation('sourcing:7') AS count");
+    assert.equal(prioritized.rows[0].count, 1);
+    const next = await claim(db);
+    assert.equal(next.id, selected.id);
+    assert.equal(next.owner_id, first);
+    assert.ok(next.priority_at);
+    assert.equal((await db.query("SELECT priority_at FROM public.automation_jobs WHERE id=$1", [obsolete.id])).rows[0].priority_at, null);
+    assert.equal((await db.query("SELECT public.prioritize_workbench_automation('sourcing:7') AS count")).rows[0].count, 0);
+    assert.equal((await db.query("SELECT public.prioritize_workbench_automation('sourcing:999') AS count")).rows[0].count, 0);
+    const untouched = (await asAdmin(db, "SELECT priority_at,state,attempts FROM public.automation_jobs WHERE id=$1", [foreign.id])).rows[0];
+    assert.deepEqual(untouched, { priority_at: null, state: "queued", attempts: 0 });
+
+    await db.query("SELECT set_config('request.jwt.claim.sub','',false)");
+    await assert.rejects(db.query("SELECT public.prioritize_workbench_automation('sourcing:7')"), /Authorized owner required/);
+    await db.exec("RESET ROLE; SET ROLE anon");
+    await assert.rejects(db.query("SELECT public.prioritize_workbench_automation('sourcing:7')"), /permission denied/);
   } finally { await db.close(); }
 });
 
