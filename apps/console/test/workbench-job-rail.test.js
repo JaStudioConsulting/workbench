@@ -5,7 +5,8 @@ import { transformWithEsbuild } from "vite";
 
 test("JobRail loads real process data and exposes job selection plus recruiting tools", async () => {
   const source = await readFile(new URL("../src/features/workbench/JobRail.jsx", import.meta.url), "utf8");
-  assert.match(source, /loadProcessData\(\)/);
+  assert.match(source, /loadJobRailData\(\)/);
+  assert.doesNotMatch(source, /loadProcessData\(\)/);
   assert.match(source, /onSelectJob\?\.\(\{ id: job\.id, loxoJobId: job\.id, title: job\.title, company: job\.company \}\)/);
   assert.match(source, /Object\.entries\(job\.stageCounts \|\| \{\}\)\.filter/);
   assert.match(source, /Number\(count\) > 0/);

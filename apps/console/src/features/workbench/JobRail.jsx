@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { GitBranch, Map, RefreshCw, UsersRound } from "lucide-react";
 import { Badge } from "../../components/ui/badge.tsx";
 import { Button } from "../../components/ui/button.tsx";
-import { loadProcessData } from "../recruiting/processService.js";
+import { loadJobRailData } from "../recruiting/processService.js";
 
 function JobList({ jobs, selectedJob, onSelectJob, disabled, candidateDataAvailable }) {
   const selectedId = String(selectedJob?.loxoJobId || selectedJob?.id || "");
@@ -42,7 +42,7 @@ export default function JobRail({ selectedJob, onSelectJob, onOpenMap, onOpenPro
   useEffect(() => {
     let active = true;
     setState((current) => ({ ...current, phase: "loading", error: "" }));
-    loadProcessData()
+    loadJobRailData()
       .then((data) => {
         if (active) setState({ phase: "ready", jobs: data.jobs || [], error: "", candidateDataAvailable: data.candidateDataAvailable !== false });
       })

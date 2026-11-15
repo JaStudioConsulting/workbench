@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { buildProcessSummary, hasCandidateProfileData } from "../src/features/recruiting/processService.js";
+import { buildProcessSummary, hasCandidateProfileData, loadJobRailData } from "../src/features/recruiting/processService.js";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -71,6 +71,32 @@ test("process summary keeps active jobs honest when candidate stages are unavail
   assert.equal(summary.jobs[0].candidateCount, null);
   assert.deepEqual(summary.jobs[0].stageCounts, {});
   assert.deepEqual(summary.blocked, []);
+});
+
+test("job rail loads active jobs without downloading candidate or action records", async () => {
+  const tables = [];
+  const client = {
+    from(table) {
+      tables.push(table);
+      const builder = {
+        select() { return builder; },
+        eq() { return builder; },
+        order() {
+          return Promise.resolve({
+            data: [{ job_id: 10, job_title: "Plant Manager", company: "Example Industries", status: "Active" }],
+            error: null,
+          });
+        },
+      };
+      return builder;
+    },
+  };
+
+  const summary = await loadJobRailData(client);
+  assert.deepEqual(tables, ["tracker_jobs"]);
+  assert.equal(summary.jobs.length, 1);
+  assert.equal(summary.candidateDataAvailable, false);
+  assert.deepEqual(summary.jobs[0].stageCounts, {});
 });
 
 test("profile evidence prevents a false missing-source block", () => {
