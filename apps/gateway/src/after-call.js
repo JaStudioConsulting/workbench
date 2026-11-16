@@ -1,6 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
-import { renderBrandedResume } from "./branded-resume-renderer.js";
 import {
   CandidateInputSchema,
   SourceBackedClaimSchema,
@@ -182,7 +181,7 @@ function jsonFromMessage(message) {
   return JSON.parse(clean);
 }
 
-async function auditAndOutput(draft, input, renderer) {
+async function auditAndOutput(draft, input) {
   const blockingFields = new Set(["identity", "compensation_target", "current_compensation", "availability", "start_date"]);
   const identity = bindCandidateIdentity(draft, input);
   const conflicts = identity.conflicts.map((conflict) => ({
@@ -196,21 +195,11 @@ async function auditAndOutput(draft, input, renderer) {
   const all = allClaims(draft);
   const supportedClaims = all.claims;
   for (const item of all.fields) if (item.value) supportedClaims.push({ text: item.value, evidence: item.evidence });
-  let pdf = null;
-  let exportMessage = null;
-  try {
-    pdf = await renderer(resume);
-  } catch {
-    exportMessage = "PDF export is unavailable. The text draft remains available for recruiter review.";
-  }
   return WorkflowOutputSchema.parse({
     authority: "recruiter",
     audit: { providedSources, missingSources, supportedClaims, conflicts, identityReviewRequired: identity.identityReviewRequired, finalizationBlocked: identity.identityReviewRequired || conflicts.some((item) => blockingFields.has(item.field)) },
     brandedResume: {
       status: "draft",
-      exportStatus: pdf ? "draft_rendered" : "not_rendered",
-      exportMessage,
-      pdf,
       content: renderResume(resume),
       sections: resume,
     },
@@ -238,7 +227,7 @@ function systemPrompt() {
   ].join("\n");
 }
 
-export async function prepareAfterCallWorkflow(rawInput, authority, { env = process.env, client, clientFactory = (apiKey) => new Anthropic({ apiKey }), renderer = renderBrandedResume, resolvedCandidate } = {}) {
+export async function prepareAfterCallWorkflow(rawInput, authority, { env = process.env, client, clientFactory = (apiKey) => new Anthropic({ apiKey }), resolvedCandidate } = {}) {
   if (authority?.id !== "recruiter") throw new Error("Recruiter authority is required");
   const request = CandidateInputSchema.parse(rawInput);
   if (!resolvedCandidate || resolvedCandidate.id !== request.candidateId || typeof resolvedCandidate.candidate_name !== "string" || !resolvedCandidate.candidate_name.trim()) {
@@ -267,5 +256,5 @@ export async function prepareAfterCallWorkflow(rawInput, authority, { env = proc
     if (error?.code === "AI_NOT_CONFIGURED") throw error;
     throw Object.assign(new Error("AI could not return a complete, source-validated after-call draft"), { code: "AI_INVALID_OUTPUT", status: 502 });
   }
-  return auditAndOutput(draft, input, renderer);
+  return auditAndOutput(draft, input);
 }

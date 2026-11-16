@@ -38,10 +38,8 @@ test("Jobs and candidates use authenticated live data instead of browser fixture
 test("review actions and candidate artifacts persist in Supabase", () => {
   const service = read("src/features/candidate-review/candidateReviewService.js");
   const writeUp = read("src/features/candidate-review/CandidateWriteUpDialog.jsx");
-  const card = read("src/features/candidate-review/CandidateCard.jsx");
 
   assert.match(service, /from\("candidate_review_actions"\)/);
   assert.match(service, /from\("review_drafts"\)/);
   assert.match(writeUp, /createCandidateDraft/);
-  assert.match(card, /createCandidateDraft/);
 });

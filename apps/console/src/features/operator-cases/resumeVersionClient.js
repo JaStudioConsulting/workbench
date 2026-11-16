@@ -1,7 +1,7 @@
 import { gatewayBaseURL } from "../../auth-client.js";
 import { supabase } from "../../supabase-client.js";
 
-export async function renderBrandedResumeVersion(caseId, { artifactId, expectedUpdatedAt, sections }, {
+export async function saveBrandedResumeVersion(caseId, { artifactId, expectedUpdatedAt, sections }, {
   fetchImpl = globalThis.fetch,
   baseURL = gatewayBaseURL,
   getAccessToken = async () => {
@@ -33,11 +33,10 @@ export async function renderBrandedResumeVersion(caseId, { artifactId, expectedU
       STALE_ARTIFACT: "A newer resume version exists. Reload the case before editing.",
       INVALID_EVIDENCE: "Use only source quotes already saved with this resume, then try again.",
       STRUCTURED_RESUME_UNAVAILABLE: "This older resume has no editable source sections. Reopen after-call preparation to create a new version.",
-      RESUME_RENDER_FAILED: "A new resume PDF could not be rendered. The saved version is unchanged.",
     };
     throw new Error(messages[payload?.error?.code] || payload?.error?.message || "Resume edits could not be saved. The saved version is unchanged.");
   }
-  if (!payload?.artifact?.id || payload.artifact.artifact_type !== "branded_resume" || !payload.artifact.content?.pdf) {
+  if (!payload?.artifact?.id || payload.artifact.artifact_type !== "branded_resume") {
     throw new Error("The resume service returned an incomplete version. The saved version is unchanged.");
   }
   return payload.artifact;

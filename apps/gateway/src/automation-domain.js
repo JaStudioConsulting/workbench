@@ -1,5 +1,4 @@
 import { WorkflowResumeSchema } from '@ja/shared-types';
-import { renderBrandedResume } from './branded-resume-renderer.js';
 import { renderResume } from './after-call.js';
 
 export const INPUT_FIELDS = ['vacation','workStatus','interviewAvailability','startDate','reasonForLeaving','profileSummary','specialty','niche'];
@@ -24,7 +23,7 @@ export function validateAutomationInputs(input, candidate) {
   return { fields, resume };
 }
 
-export async function assembleTemplates(payload, { renderer = renderBrandedResume } = {}) {
+export async function assembleTemplates(payload) {
   const candidate = payload.candidate;
   if (!candidate?.id || !clean(candidate.candidate_name)) throw new Error('Candidate identity is missing');
   const supplied = payload.fields || {};
@@ -55,10 +54,8 @@ export async function assembleTemplates(payload, { renderer = renderBrandedResum
   if (payload.resume && resumeIdentityMatches) {
     const sections=WorkflowResumeSchema.parse(payload.resume);
     const text=renderResume(sections);
-    let pdf=null, exportMessage=null;
-    try { pdf=await renderer(sections); resumeStatus='ready'; }
-    catch { resumeStatus='failed'; exportMessage='PDF export failed. Structured resume and text are saved; retry the export from this output.'; }
-    outputs.push({type:'branded_resume',content:{status:'ready',sections,text,pdf,provenance,audit:{providedSources:['candidate_record','resume'],missingSources:[],conflicts:[],supportedClaims:[],finalizationBlocked:false,identityReviewRequired:false},exportStatus:pdf?'ready':'not_rendered',exportMessage}});
+    resumeStatus='ready';
+    outputs.push({type:'branded_resume',content:{status:'ready',sections,text,provenance,audit:{providedSources:['candidate_record','resume'],missingSources:[],conflicts:[],supportedClaims:[],finalizationBlocked:false,identityReviewRequired:false}}});
   } else missing.push('structuredResume');
   return { outputs, result:{needsInformation:missing.length>0,missing,resumeStatus,readyOutputs:outputs.map(x=>x.type)} };
 }

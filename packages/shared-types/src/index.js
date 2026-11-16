@@ -115,21 +115,9 @@ export const WorkflowOutputSchema = z.object({
   }).strict(),
   brandedResume: z.object({
     status: z.literal("draft"),
-    exportStatus: z.enum(["draft_rendered", "not_rendered"]),
-    exportMessage: z.string().max(300).nullable(),
-    pdf: z.object({
-      fileName: z.string().min(1).max(200),
-      mimeType: z.literal("application/pdf"),
-      sizeBytes: z.number().int().positive().max(8 * 1024 * 1024),
-      base64: z.string().min(1).max(12 * 1024 * 1024),
-      reviewLabel: z.literal("Draft for recruiter review"),
-    }).strict().nullable(),
     content: z.string().max(50000),
     sections: WorkflowResumeSchema,
-  }).strict().superRefine((resume, ctx) => {
-    if (resume.exportStatus === "draft_rendered" && !resume.pdf) ctx.addIssue({ code: "custom", path: ["pdf"], message: "Rendered drafts require a PDF" });
-    if (resume.exportStatus === "not_rendered" && resume.pdf) ctx.addIssue({ code: "custom", path: ["pdf"], message: "Unrendered drafts cannot include a PDF" });
-  }),
+  }).strict(),
   submission: z.object({ status: z.literal("draft"), fields: SubmissionFieldsSchema }).strict(),
   presentationEmail: z.object({ status: z.literal("draft"), subject: z.string().max(500), body: z.string().max(10000), attachmentStatus: z.literal("not_generated") }).strict(),
   loxoDraft: z.object({ status: z.literal("draft"), bullets: z.array(SourceBackedClaimSchema).max(20) }).strict(),

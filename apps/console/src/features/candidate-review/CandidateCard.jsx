@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useMemo, useState, useRef } from "react";
-import { ExternalLink, MapPin, Tag, Check, ShieldAlert, AlertCircle, FileText, Loader2, NotebookText, Pencil, Plus, Send } from "lucide-react";
+import { ExternalLink, MapPin, Tag, Check, ShieldAlert, AlertCircle, Loader2, NotebookText, Pencil, Plus, Send } from "lucide-react";
 import { Badge } from "../../components/ui/badge.tsx";
 import { handleTabListKeyDown } from "../../components/handleTabListKeyDown.js";
 import { Button } from "../../components/ui/button.tsx";
@@ -20,8 +20,7 @@ import {
   getCandidateById,
   subscribeCandidateRecords,
 } from "./candidateEditorService.js";
-import { getOwnershipStatus, openBrandedResume } from "./brandResume.js";
-import { createCandidateDraft } from "./candidateReviewService.js";
+import { getOwnershipStatus } from "./brandResume.js";
 import RejectMenu from "./RejectMenu.jsx";
 import ContactReveal from "./ContactReveal.jsx";
 import ExperienceTimeline from "./ExperienceTimeline.jsx";
@@ -50,7 +49,6 @@ export default function CandidateCard({
   const [isDragging, setIsDragging] = useState(false);
   const [isDeciding, setIsDeciding] = useState(false);
   const [decisionError, setDecisionError] = useState("");
-  const [brandError, setBrandError] = useState("");
   const [showWriteUp, setShowWriteUp] = useState(false);
   const [ownershipOverride, setOwnershipOverride] = useState(false);
   const [rejectOpen, setRejectOpen] = useState(false);
@@ -191,26 +189,6 @@ export default function CandidateCard({
     const result = await onLogActivity(candidateId, payload);
     if (result?.ok !== false) markDone("loxo");
     return result;
-  };
-
-  const handleBrandResume = async () => {
-    setBrandError("");
-    try {
-      if (resumeSource.kind === "none") {
-        throw new Error("Not enough data to build a resume");
-      }
-      await createCandidateDraft({
-        job: currentJob,
-        candidate,
-        kind: "resume_pdf",
-        body: resumeSource.text,
-      });
-      const result = openBrandedResume(candidate);
-      if (!result.ok) throw new Error(result.error);
-      markDone("brandedresume");
-    } catch (error) {
-      setBrandError(error.message || "The branded resume could not be opened.");
-    }
   };
 
   // Drag overlay stamps
@@ -414,9 +392,9 @@ export default function CandidateCard({
         </div>
       ) : null}
 
-      {decisionError || brandError ? (
+      {decisionError ? (
         <div role="alert" className="mx-4 mt-2 flex items-center gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-2 text-xs text-destructive">
-          <AlertCircle size={14} /> {decisionError || brandError}
+          <AlertCircle size={14} /> {decisionError}
         </div>
       ) : null}
 
@@ -497,9 +475,6 @@ export default function CandidateCard({
           <NotebookText size={15} className="mr-1.5" /> Write-up
         </Button>
 
-        <Button type="button" variant="outline" onClick={handleBrandResume} className="h-10 border-amber-400 bg-amber-50 text-xs font-bold text-amber-950 hover:bg-amber-100" data-testid="brand-resume-button">
-          <FileText size={15} className="mr-1.5" /> Brand resume
-        </Button>
         {resumeSource.kind === "profile" ? (
           <Badge variant="outline" className="text-[10px]" title={`Sources: ${(resumeSource.usedSources || []).join(", ")}`}>
             Built from profile, no resume on file

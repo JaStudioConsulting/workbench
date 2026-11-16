@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ExternalLink, FileDown, Mic, Printer, RefreshCw } from "lucide-react";
+import { ExternalLink, FileDown, Mic, RefreshCw } from "lucide-react";
 import { Button } from "../../components/ui/button.tsx";
 import { Badge } from "../../components/ui/badge.tsx";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../components/ui/card.tsx";
@@ -22,7 +22,7 @@ import {
   startBrowserRecording,
 } from "./browserRecorder.js";
 import { createMeetingAdapter } from "./meetingAdapter.js";
-import { downloadMeetingMarkdown, printMeetingPdf } from "./meetingExport.js";
+import { downloadMeetingMarkdown } from "./meetingExport.js";
 import { createMeetingDraft, formatSpeakerTranscript, groupCalendarEvents, safeJoinUrl } from "./meetingModel.js";
 import { syncMeetingDraftNotes } from "./meetingNotesSync.js";
 import { loadMeetingDraft } from "./meetingStore.js";
@@ -593,7 +593,7 @@ export default function MeetingsWorkspace({ adapter = defaultAdapter, launchCont
     <Card><CardHeader><CardTitle>Recruiter template</CardTitle><CardDescription>Sections show exact keyword matches from the transcript. Unmatched sections are marked No matching transcript text.</CardDescription></CardHeader><CardContent className="grid gap-4">
       <Select value={templateId} onValueChange={setTemplateId}><SelectTrigger aria-label="Select meeting template" className="w-full sm:max-w-xs"><span>{MEETING_TEMPLATES.find((item) => item.id === templateId)?.label || "Select template"}</span></SelectTrigger><SelectContent>{MEETING_TEMPLATES.map((item) => <SelectItem key={item.id} value={item.id}>{item.label}</SelectItem>)}</SelectContent></Select>
       <div className="grid gap-3 rounded-lg border bg-background p-4">{template.sections.map((section) => <section key={section.heading}><h3 className="text-sm font-semibold">{section.heading}</h3><p className="whitespace-pre-wrap text-sm text-muted-foreground">{section.content}</p></section>)}</div>
-      <div className="flex flex-wrap gap-2"><Button variant="outline" onClick={() => downloadMeetingMarkdown({ title: exportTitle, markdown: template.markdown })}><FileDown size={14} /> Download Markdown</Button><Button variant="outline" onClick={() => printMeetingPdf({ title: exportTitle, template })}><Printer size={14} /> Print or save PDF</Button></div>
+      <div className="flex flex-wrap gap-2"><Button variant="outline" onClick={() => downloadMeetingMarkdown({ title: exportTitle, markdown: template.markdown })}><FileDown size={14} /> Download Markdown</Button></div>
     </CardContent></Card>
   </div>;
 }

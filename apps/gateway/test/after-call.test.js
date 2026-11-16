@@ -62,7 +62,7 @@ function clientFor(draft) {
   return { messages: { create: async () => ({ content: [{ type: "text", text: JSON.stringify(draft) }] }) } };
 }
 
-test("AI after-call output contains the required resume structure and a branded review PDF", async () => {
+test("AI after-call output contains the required resume structure and no generated PDF", async () => {
   const output = await prepareAfterCallWorkflow(candidate, { id: "recruiter" }, { env: { ANTHROPIC_API_KEY: "synthetic-test-key" }, client: clientFor(modelDraft()), resolvedCandidate });
   assert.equal(output.authority, "recruiter");
   assert.equal(output.audit.finalizationBlocked, false);
@@ -74,10 +74,8 @@ test("AI after-call output contains the required resume structure and a branded 
   assert.match(output.brandedResume.content, /Professional Experience/);
   assert.match(output.brandedResume.content, /Education/);
   assert.match(output.brandedResume.content, /Certifications/);
-  assert.equal(output.brandedResume.exportStatus, "draft_rendered");
-  assert.equal(output.brandedResume.pdf.mimeType, "application/pdf");
-  assert.match(Buffer.from(output.brandedResume.pdf.base64, "base64").toString("ascii", 0, 5), /^%PDF-/);
-  assert.equal(output.brandedResume.pdf.reviewLabel, "Draft for recruiter review");
+  assert.equal(output.brandedResume.pdf, undefined);
+  assert.equal(output.brandedResume.exportStatus, undefined);
   assert.equal(output.presentationEmail.attachmentStatus, "not_generated");
   assert.doesNotMatch(output.presentationEmail.body, /CV attached\./);
   assert.equal(output.reviewRequired, true);

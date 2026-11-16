@@ -182,7 +182,7 @@ export async function saveAfterCallCase({ job, candidate, meetingId, transcript,
 
   const sourceRef = `after-call:${savedMeeting?.id || "unverified"}:${Date.now()}`;
   const artifacts = [
-    { artifact_type: "branded_resume", content: { text: workflow.brandedResume?.content || "", sections: workflow.brandedResume?.sections || null, pdf: workflow.brandedResume?.pdf || null, audit: workflow.audit || null } },
+    { artifact_type: "branded_resume", content: { text: workflow.brandedResume?.content || "", sections: workflow.brandedResume?.sections || null, audit: workflow.audit || null } },
     { artifact_type: "candidate_submission", content: { fields: workflow.submission?.fields || {}, client: workflow.submission?.client || null, audit: workflow.audit || null } },
     { artifact_type: "presentation_email", content: { subject: workflow.presentationEmail?.subject || "", body: workflow.presentationEmail?.body || "", attachmentStatus: workflow.presentationEmail?.attachmentStatus || "not_generated", audit: workflow.audit || null } },
     { artifact_type: "loxo_update", content: { bullets: workflow.loxoDraft?.bullets || [], audit: workflow.audit || null } },
@@ -285,10 +285,7 @@ export async function updateCaseArtifact(artifactId, content, { client = supabas
     .eq("artifact_type", prior.artifact_type).order("created_at", { ascending: false }).order("id", { ascending: false }).limit(1).maybeSingle(),
   "The latest draft version could not be checked.");
   if (!latest || latest.id !== prior.id) throw new Error("This artifact version is stale. Reload the case before editing.");
-  let nextContent = { ...content };
-  if (prior.artifact_type === "branded_resume" && prior.content?.text !== nextContent.text) {
-    nextContent = { ...nextContent, pdf: null, exportStatus: "not_rendered", exportMessage: "Edited text has not been rendered as a new PDF." };
-  }
+  const nextContent = { ...content };
   const textAtPaths = (value, prefix = "", result = {}) => {
     if (typeof value === "string") result[prefix || "$"] = value;
     else if (Array.isArray(value)) value.forEach((item, index) => textAtPaths(item, `${prefix}[${index}]`, result));
