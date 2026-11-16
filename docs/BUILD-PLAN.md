@@ -1,3 +1,5 @@
+Historical: describes the earlier sign-in based setup and page layout. Not current.
+
 # Workbench Build Plan
 
 Owner: Ja. Repo: `JaStudioConsulting/workbench`. Base commit: `1eb2099` (main, Nov 8 2026).

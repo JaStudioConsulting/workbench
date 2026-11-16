@@ -1,14 +1,14 @@
 import { Component, lazy, Suspense, useEffect, useRef, useState } from "react";
 import { Settings } from "lucide-react";
 import { Skeleton } from "./components/ui/skeleton.tsx";
-import ExistingAccountAccess from "./ExistingAccountAccess.jsx";
-import { getWorkbenchSession, signOutWorkbench, subscribeToWorkbenchSession } from "./supabase-auth.js";
+import { getWorkbenchSession, subscribeToWorkbenchSession } from "./supabase-auth.js";
 import { getVerifiedLocalWorkbenchSession, openLocalWorkbenchSession } from "./local-session.js";
 import { startCandidateCallSession } from "./features/meetings/candidateCallSession.js";
 import { getMeetingStatus } from "./features/meetings/meetingGatewayClient.js";
 import HeaderSearch from "./features/search/HeaderSearch.jsx";
 import { candidateReviewIdFromHomeItem } from "./features/home/homeNavigation.js";
 import { clearLiveReviewCache } from "./features/candidate-review/candidateReviewService.js";
+import { clearReadCache } from "./lib/readCache.js";
 
 const ContextPicker = lazy(() => import("./ContextPicker.jsx"));
 const WorkbenchOneView = lazy(() => import("./features/workbench/WorkbenchOneView.jsx"));
@@ -45,7 +45,6 @@ export default function App() {
   const [sessionUserId, setSessionUserId] = useState("");
   const [authError, setAuthError] = useState("");
   const [localSessionRetry, setLocalSessionRetry] = useState(0);
-  const [signingOut, setSigningOut] = useState(false);
   const [page, setPage] = useState("Home");
   const [context, setContext] = useState("Independent recruiting");
   const [recruiting, setRecruiting] = useState(null);
@@ -60,6 +59,13 @@ export default function App() {
   const recordingLocked = ["starting", "recording", "finalizing"].includes(meetingLaunch?.phase);
 
   useEffect(() => {
+    if (!localSessionMode || !localSessionOwnerId) {
+      setAuthError(!localSessionMode
+        ? "The local session build flag is missing. Rebuild with local session access enabled."
+        : "The local session owner ID is missing. Rebuild with the configured owner ID.");
+      setAuthLoading(false);
+      return undefined;
+    }
     let active = true;
     let initialized = false;
     const unsubscribe = subscribeToWorkbenchSession((session) => {
@@ -68,6 +74,7 @@ export default function App() {
       const acceptedSession = Boolean(session) && (!localSessionMode
         || (initialized && localSessionOwnerId && nextUserId === localSessionOwnerId && sessionUserIdRef.current === localSessionOwnerId));
       if (sessionUserIdRef.current && sessionUserIdRef.current !== nextUserId) {
+        clearReadCache();
         clearLiveReviewCache();
         setPage("Home"); setContext("Independent recruiting"); setRecruiting(null);
         setFocusCandidateId(""); setFocusLeadId(""); setFocusClient(null); setFocusNote(null); setMeetingLaunch(null);
@@ -246,24 +253,6 @@ export default function App() {
     setMeetingLaunch((current) => ({ ...(current || { source: "meeting" }), ...patch }));
   };
 
-  const handleSignOut = async () => {
-    if (recordingLocked) {
-      setAuthError("Stop the active meeting recording before signing out.");
-      return;
-    }
-    setSigningOut(true);
-    setAuthError("");
-    try {
-      await signOutWorkbench();
-      clearLiveReviewCache();
-      setHasSession(false);
-    } catch (error) {
-      setAuthError(error.message || "Unable to sign out of Workbench");
-    } finally {
-      setSigningOut(false);
-    }
-  };
-
   const openJobReview = (job) => {
     if (recordingLocked) return;
     setRecruiting((current) => ({ ...(current || {}), job }));
@@ -293,19 +282,16 @@ export default function App() {
     return <main className="flex min-h-screen items-center justify-center" role="status">{localSessionMode ? "Opening your workspace…" : "Checking Workbench session…"}</main>;
   }
   if (!hasSession) {
-    if (localSessionMode) {
-      return (
-        <main className="flex min-h-screen items-center justify-center bg-background p-4">
-          <section className="w-full max-w-md rounded-xl border bg-card p-6 shadow-sm" aria-labelledby="local-session-title">
-            <p className="text-sm font-semibold text-muted-foreground">JA Workbench</p>
-            <h1 id="local-session-title" className="mt-2 text-2xl font-semibold">Opening your workspace…</h1>
-            <p className="mt-3 text-sm text-destructive" role="alert">{authError || "Your private session could not be opened."}</p>
-            <button type="button" className="mt-5 min-h-11 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground" onClick={() => { setAuthError(""); setAuthLoading(true); setLocalSessionRetry((value) => value + 1); }}>Try again</button>
-          </section>
-        </main>
-      );
-    }
-    return <ExistingAccountAccess sessionError={authError} />;
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-background p-4">
+        <section className="w-full max-w-md rounded-xl border bg-card p-6 shadow-sm" aria-labelledby="local-session-title">
+          <p className="text-sm font-semibold text-muted-foreground">JA Workbench</p>
+          <h1 id="local-session-title" className="mt-2 text-2xl font-semibold">Opening your workspace…</h1>
+          <p className="mt-3 text-sm text-destructive" role="alert">{authError || "Your private session could not be opened."}</p>
+          <button type="button" className="mt-5 min-h-11 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground" onClick={() => { setAuthError(""); setAuthLoading(true); setLocalSessionRetry((value) => value + 1); }}>Try again</button>
+        </section>
+      </main>
+    );
   }
 
   return <div className="min-h-screen bg-background text-foreground">
@@ -316,14 +302,11 @@ export default function App() {
       <Suspense fallback={null}><ContextPicker value={context} onChange={setContext} /></Suspense>
       <button type="button" onClick={() => selectPage("Settings")} disabled={recordingLocked} title={recordingLocked ? "Stop the active recording before opening Settings" : undefined} className="inline-flex min-h-10 items-center gap-2 rounded-md border px-3 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-50" aria-label="Open Settings and Profile"><Settings size={16} />Settings</button>
       <button type="button" onClick={() => window.print()} className="min-h-10 rounded-md border px-3 text-sm font-medium" aria-label="Print current Workbench view">Print</button>
-      {!localSessionMode ? <button type="button" onClick={handleSignOut} disabled={signingOut || recordingLocked} title={recordingLocked ? "Stop the active recording before signing out" : undefined} className="min-h-10 rounded-md border px-3 text-sm font-medium disabled:opacity-60">
-        {signingOut ? "Signing out…" : "Sign out"}
-      </button> : null}
     </header>
     {authError ? <p className="px-4 pt-2 text-sm text-destructive md:px-6" role="alert">{authError}</p> : null}
     <div className="workbench-print-label" aria-hidden="true"><strong>JA Workbench</strong><span>Current view: Workbench</span></div>
     <main id="workbench-main" tabIndex={-1} className="workbench-main min-w-0 overflow-x-clip p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] md:p-4">
-      <PageErrorBoundary key={`${sessionUserId}:${page}`} onHome={() => selectPage("Home")}>
+      <PageErrorBoundary onHome={() => selectPage("Home")}>
         <Suspense fallback={<PanelFallback />}>
           <WorkbenchOneView
             destination={page}

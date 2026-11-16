@@ -3,7 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createHash } from "node:crypto";
 
-const ignored = new Set([".git", "node_modules", "dist", "coverage", ".vercel", ".build", ".swiftpm"]);
+const ignored = new Set([".git", "node_modules", ".pnpm-store", ".temp", "dist", "coverage", ".vercel", ".build", ".swiftpm"]);
 const forbiddenAssets = /\.(avif|gif|heic|jpe?g|pdf|png|svg|webp|docx|xlsx|csv)$/i;
 const approvedAssets = new Map([
   ["apps/console/public/assets/tttg_logo.png", "ecad1061bb94c2a11d901b6a6b900d2411a3ce0874806307d3bc4dca7421f055"],

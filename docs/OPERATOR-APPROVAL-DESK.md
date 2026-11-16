@@ -1,3 +1,5 @@
+Historical: describes the earlier sign-in based setup. Not current.
+
 # Operator approval desk
 
 The desk stores recruiter review work in owner-scoped Supabase cases. Home holds daily review and manual Loxo completion; Meetings saves after-call packages; candidate marketing stores MPC research. The Tracker import panel supports explicit CSV/XLSX and Google Sheets preview/confirmation.

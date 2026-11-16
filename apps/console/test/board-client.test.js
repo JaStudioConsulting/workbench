@@ -108,7 +108,7 @@ test("boards require a verified subject and a Supabase session before any reques
 
   const signedOut = { auth: { getSession: async () => ({ data: { session: null }, error: null }) } };
   const fetchImpl = () => { throw new Error("should not fetch"); };
-  await assert.rejects(() => listSubjectBoards("job", JOB_ID, { client: signedOut, fetchImpl }), /Sign in/);
+  await assert.rejects(() => listSubjectBoards("job", JOB_ID, { client: signedOut, fetchImpl }), /Workbench could not reach your workspace/);
 });
 
 test("an over-limit scene is rejected on the client without a network request", async () => {

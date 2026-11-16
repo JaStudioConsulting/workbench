@@ -1,3 +1,5 @@
+Historical: describes the earlier sign-in based setup. Not current.
+
 # Authentication configuration
 
 Authentication is intentionally unavailable unless every setting below is supplied at runtime by the deployment platform:

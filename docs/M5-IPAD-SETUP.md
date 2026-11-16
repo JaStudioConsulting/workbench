@@ -1,3 +1,5 @@
+Historical: describes the earlier sign-in based setup. Not current.
+
 # Open JA Workbench on iPad
 
 This guide applies after the M5 iPad changes are merged and deployed. The Workbench is currently served to the tailnet at **https://jcs-macbook-air.tail8a223f.ts.net**.

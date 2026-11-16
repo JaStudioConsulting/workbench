@@ -1,7 +1,6 @@
 import { supabase } from "../../supabase-client.js";
-import { gatewayBaseURL } from "../../auth-client.js";
 
-const CHANNELS = new Set(["copy", "mailto", "gmail_draft"]);
+const CHANNELS = new Set(["copy", "mailto"]);
 
 function normalizeEntry(entry = {}) {
   const channel = String(entry.channel || "");
@@ -32,9 +31,9 @@ function fromRow(row) {
 
 async function currentUser(client) {
   const { data, error } = await client.auth.getUser();
-  if (error) throw new Error("Sign-in status could not be checked. Try again.");
+  if (error) throw new Error("Workbench could not reach your workspace. Reload the page, then try again.");
   const user = data?.user || null;
-  if (!user) throw new Error("Sign in to save outreach history.");
+  if (!user) throw new Error("Workbench could not reach your workspace. Reload the page, then save outreach history again.");
   return user;
 }
 
@@ -71,79 +70,6 @@ export async function listOutreach({ client = supabase } = {}) {
 
   if (error) throw new Error("Outreach history could not be loaded. Check your connection and try again.");
   return (data || []).map(fromRow);
-}
-
-export async function getMailStatus({ request = globalThis.fetch } = {}) {
-  try {
-    const response = await request(new URL("/api/mail/status", gatewayBaseURL), {
-      credentials: "include",
-      headers: { accept: "application/json" },
-    });
-    const status = await response.json().catch(() => null);
-    if (!response.ok) {
-      return {
-        connected: false,
-        canDraft: false,
-        canRead: false,
-        error: true,
-        code: status?.error?.code || "MAIL_STATUS_UNAVAILABLE",
-      };
-    }
-    return {
-      connected: Boolean(status.connected),
-      canDraft: Boolean(status.canDraft),
-      canRead: Boolean(status.canRead),
-    };
-  } catch {
-    return { connected: false, canDraft: false, canRead: false, error: true, code: "NETWORK_UNAVAILABLE" };
-  }
-}
-
-export async function saveGmailDraft({ to, subject, body }, { request = globalThis.fetch } = {}) {
-  const status = await getMailStatus({ request });
-  if (!status.canDraft) return { ok: false, reason: "no_scope" };
-
-  const response = await request(new URL("/api/mail/draft", gatewayBaseURL), {
-    method: "POST",
-    credentials: "include",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      to: String(to || "").trim(),
-      subject: String(subject || "").trim(),
-      body: String(body || ""),
-    }),
-  });
-  if (!response.ok) {
-    const detail = await response.json().catch(() => ({}));
-    return { ok: false, reason: detail.reason || "unavailable" };
-  }
-  return { ok: true, ...(await response.json()) };
-}
-
-export async function listMailReplies(emails, { request = globalThis.fetch } = {}) {
-  const normalized = [...new Set((emails || [])
-    .map((email) => String(email || "").trim().toLowerCase())
-    .filter(Boolean))];
-  if (!normalized.length) return { available: true, latestByEmail: {} };
-  try {
-    const url = new URL("/api/mail/replies", gatewayBaseURL);
-    url.searchParams.set("emails", normalized.join(","));
-    const response = await request(url, {
-      credentials: "include",
-      headers: { accept: "application/json" },
-      cache: "no-store",
-    });
-    if (!response.ok) throw new Error("replies unavailable");
-    const payload = await response.json();
-    return {
-      available: Boolean(payload.available),
-      latestByEmail: payload.latestByEmail && typeof payload.latestByEmail === "object"
-        ? payload.latestByEmail
-        : {},
-    };
-  } catch {
-    return { available: false, latestByEmail: {} };
-  }
 }
 
 export function _resetOutreachForTesting() {

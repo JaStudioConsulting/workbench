@@ -593,3 +593,29 @@ test("CandidateEditorDialog, CandidateCard, and PeopleView wire accessible add/e
   assert.match(peopleSource, /data-testid="people-candidate-save-status"/);
   assert.match(peopleSource, /<CandidateEditorDialog/);
 });
+
+test("candidate editor closes to the exact opener and exposes no imported source key", () => {
+  const dialogSource = fs.readFileSync(path.join(featureDir, "CandidateEditorDialog.jsx"), "utf8");
+  const cardSource = fs.readFileSync(path.join(featureDir, "CandidateCard.jsx"), "utf8");
+  const peopleSource = fs.readFileSync(path.join(featureDir, "PeopleView.jsx"), "utf8");
+
+  assert.match(dialogSource, /finalFocus=\{finalFocus\}/);
+  assert.match(dialogSource, /if \(!nextOpen\) onOpenChange\?\.\(false\)/);
+  assert.match(dialogSource, /data-testid="candidate-editor-cancel"/);
+  assert.match(dialogSource, /: "Edit candidate"/);
+  assert.doesNotMatch(dialogSource, /candidate-source-key-badge/);
+  assert.match(cardSource, /finalFocus=\{\(\) => editorTriggerRef\.current\}/);
+  assert.match(peopleSource, /finalFocus=\{\(\) => editorTriggerRef\.current\}/);
+  assert.match(cardSource, /const closeEditor = \(\) => \{[\s\S]*?globalThis\.requestAnimationFrame\?\.\(\(\) => globalThis\.requestAnimationFrame\?\.\(\(\) => editorTriggerRef\.current\?\.focus\(\)\)\)/);
+  assert.match(peopleSource, /const closeEditor = \(\) => \{[\s\S]*?globalThis\.requestAnimationFrame\?\.\(\(\) => globalThis\.requestAnimationFrame\?\.\(\(\) => editorTriggerRef\.current\?\.focus\(\)\)\)/);
+  assert.match(cardSource, /onOpenChange=\{\(open\) => !open && closeEditor\(\)\}/);
+  assert.match(peopleSource, /onOpenChange=\{\(open\) => !open && closeEditor\(\)\}/);
+});
+
+test("candidate row Notes opens the candidate's existing notes panel", () => {
+  const peopleSource = fs.readFileSync(path.join(featureDir, "PeopleView.jsx"), "utf8");
+  assert.match(peopleSource, /aria-controls=\{`people-candidate-notes-\$\{candidate\.id\}`\}/);
+  assert.match(peopleSource, /setNotesCandidateId\(\(current\) => current === candidate\.id \? null : candidate\.id\)/);
+  assert.match(peopleSource, /data-testid="people-candidate-notes-panel"/);
+  assert.match(peopleSource, /<NotesPanel subjectType="candidate" subjectId=\{candidate\.id\}/);
+});

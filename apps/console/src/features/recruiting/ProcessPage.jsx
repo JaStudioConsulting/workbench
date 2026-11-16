@@ -22,10 +22,10 @@ export default function ProcessPage() {
   const [caseState, setCaseState] = useState({ status: operatorCasesEnabled ? "loading" : "disabled", items: [], error: "", requestId: 0 });
   const [selectedCaseId, setSelectedCaseId] = useState("");
 
-  const load = async () => {
+  const load = async (force = false) => {
     setState((current) => ({ ...current, status: "loading", error: "" }));
     try {
-      const data = await loadProcessData();
+      const data = await loadProcessData(undefined, undefined, { force });
       setState({ status: "ready", data, error: "" });
     } catch (error) {
       setState({ status: "error", data: null, error: error.message || "Could not load process data" });

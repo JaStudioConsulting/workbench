@@ -9,7 +9,6 @@ import { discoverMcp, loadRecruitmentContext } from "./src/recruitment-package.j
 import { createNativeCaptureManager, parseByteRange } from "./src/native-capture.js";
 import { registerAiRoutes } from "./src/ai-routes.js";
 import { registerCandidateRoutes } from "./src/candidate-routes.js";
-import { registerMailRoutes } from "./src/mail-routes.js";
 import { registerNotesBoardsRoutes } from "./src/notes-boards-routes.js";
 import { registerSearchRoutes } from "./src/search-routes.js";
 import { registerTrackerImportRoutes } from "./src/tracker-import-routes.js";
@@ -126,7 +125,6 @@ export async function createApp({
   app.get("/api/safety", (_req, res) => res.json(SafetyStateSchema.parse({
     auth: configuredAuth.enabled ? "configured" : "unavailable",
     storage: "unavailable",
-    gmail: "draft_only",
     externalWrites: false,
   })));
 
@@ -254,10 +252,6 @@ export async function createApp({
   // AI routes use the user's approved Supabase app session. Google cookies are
   // required only by Google-backed features.
   registerAiRoutes(app, { authenticated: supabaseRecruiterAccess, env });
-  registerMailRoutes(app, {
-    authenticated: authoritativeGoogleSession,
-    getGoogleProviderAccessToken: configuredAuth.getGoogleProviderAccessToken?.bind(configuredAuth),
-  });
   registerCandidateRoutes(app, {
     env,
     authConfig: configuredAuth,

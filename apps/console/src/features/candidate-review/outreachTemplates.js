@@ -62,11 +62,3 @@ export function buildMailto({ to, subject, body }) {
   const params = `subject=${encodeURIComponent(subject || "")}&body=${encodeURIComponent(body || "")}`;
   return `mailto:${encodeURIComponent(to || "").replace(/%40/g, "@")}?${params}`;
 }
-
-// The mail status shape belongs to the mail builder, so read it defensively.
-export function canSaveGmailDraft(status) {
-  if (!status || typeof status !== "object") return true;
-  if (status.ok === false) return false;
-  const flags = [status.canDraft, status.compose, status.draft, status.scopes?.compose, status.scopes?.draft];
-  return !flags.some((flag) => flag === false);
-}

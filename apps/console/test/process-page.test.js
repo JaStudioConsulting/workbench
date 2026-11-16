@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { buildProcessSummary, hasCandidateProfileData, loadJobRailData } from "../src/features/recruiting/processService.js";
+import { buildProcessSummary, hasCandidateProfileData, loadJobRailData, loadProcessData } from "../src/features/recruiting/processService.js";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -103,6 +103,64 @@ test("profile evidence prevents a false missing-source block", () => {
   assert.equal(hasCandidateProfileData({ profile_url: "https://example.invalid/profile" }), true);
   assert.equal(hasCandidateProfileData({ current_title: "Controller" }), true);
   assert.equal(hasCandidateProfileData({}), false);
+});
+
+test("resume text alone prevents a missing-source block", () => {
+  const summary = buildProcessSummary({
+    jobs: [{ job_id: 10, job_title: "Plant Manager", company: "Example Industries", status: "Active" }],
+    candidates: [{ job_id: 10, candidate_source: "sourcing", candidate_source_id: 1, resume_text: "Resume text" }],
+    actions: [],
+  });
+  assert.equal(summary.blocked.some((item) => item.type === "missing_source"), false);
+});
+
+test("stage counts select only job_id and stage and dedupe between JobRail and ProcessPage", async () => {
+  const selected = [];
+  let stageCountCalls = 0;
+  const client = {
+    from(table) {
+      let selectedColumns = "";
+      const result = table === "tracker_jobs"
+        ? { data: [{ job_id: 5, job_title: "Role", company: "Client", status: "Active" }], error: null }
+          : table === "candidate_review_feed"
+          ? null
+          : { data: [], error: null };
+      const query = {
+        select(columns) {
+          selectedColumns = columns;
+          selected.push([table, columns]);
+          if (table === "candidate_review_feed" && columns === "job_id,stage") stageCountCalls += 1;
+          return query;
+        },
+        eq() { return query; },
+        order() { return query; },
+        limit() { return query; },
+        then(resolve, reject) {
+          const resolved = table === "candidate_review_feed"
+            ? { data: selectedColumns.includes("candidate_source") ? [{ job_id: 5, stage: "Applied", candidate_source: "sourcing", candidate_source_id: 2 }] : [{ job_id: 5, stage: "Applied" }], error: null }
+            : result;
+          return Promise.resolve(resolved).then(resolve, reject);
+        },
+      };
+      return query;
+    },
+  };
+  const [railData, processData] = await Promise.all([
+    loadJobRailData(client),
+    loadProcessData(client),
+  ]);
+  assert.equal(stageCountCalls, 1);
+  assert.deepEqual(selected.find(([table]) => table === "candidate_review_feed"), ["candidate_review_feed", "job_id,stage"]);
+  assert.ok(selected.some(([table, columns]) => table === "candidate_review_feed" && columns === "job_id,stage,candidate_source,candidate_source_id,candidate_name,resume_text,profile_url,profile_summary,fit_evidence,current_title,current_company"));
+  assert.deepEqual(selected.filter(([table]) => table === "tracker_jobs").length, 2);
+  assert.equal(railData.jobs[0].candidateCount, null);
+  assert.deepEqual(railData.jobs[0].stageCounts, {});
+  assert.equal(processData.jobs[0].candidateCount, 1);
+  assert.equal(processData.jobs[0].stageCounts.Applied, 1);
+  const rail = fs.readFileSync(path.resolve(root, "src/features/workbench/JobRail.jsx"), "utf8");
+  const page = fs.readFileSync(path.resolve(root, "src/features/recruiting/ProcessPage.jsx"), "utf8");
+  assert.match(rail, /loadJobRailData\(/);
+  assert.match(page, /loadProcessData\(/);
 });
 
 test("Process shows live records and keeps case history behind its existing flag", () => {

@@ -32,6 +32,7 @@ export default function CandidateEditorDialog({
   onSaved,
   client,
   fetchImpl,
+  finalFocus,
 }) {
   const [baselineRecord, setBaselineRecord] = useState(() => (
     mode === "edit" ? (getCachedCandidateRecord(candidate?.id) || candidate) : null
@@ -194,18 +195,19 @@ export default function CandidateEditorDialog({
     ? "Add candidate"
     : provenance.isManual
       ? "Edit manual candidate"
-      : "Edit candidate overlay";
+      : "Edit candidate";
 
   return (
     <Dialog
       open={open}
       onOpenChange={(nextOpen) => {
-        if (!nextOpen && !saving) onOpenChange?.(false);
+        if (!nextOpen) onOpenChange?.(false);
       }}
     >
       <DialogContent
         className="max-h-[90vh] overflow-y-auto sm:max-w-2xl"
         data-testid="candidate-editor-dialog"
+        finalFocus={finalFocus}
         onClick={(event) => event.stopPropagation()}
       >
         <form onSubmit={handleSaveForm} noValidate data-testid="candidate-editor-form">
@@ -223,11 +225,6 @@ export default function CandidateEditorDialog({
               >
                 {provenance.badgeLabel}
               </Badge>
-              {provenance.id ? (
-                <Badge variant="outline" className="text-[11px] font-mono" data-testid="candidate-source-key-badge">
-                  {provenance.id}
-                </Badge>
-              ) : null}
             </div>
             <DialogDescription data-testid="candidate-provenance-description">
               {provenance.description}
@@ -350,7 +347,6 @@ export default function CandidateEditorDialog({
               variant="outline"
               size="sm"
               onClick={() => onOpenChange?.(false)}
-              disabled={saving}
               data-testid="candidate-editor-cancel"
             >
               Cancel

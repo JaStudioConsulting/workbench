@@ -3,15 +3,15 @@ import { supabase } from "../../supabase-client.js";
 
 async function supabaseAccessToken() {
   const { data, error } = await supabase.auth.getSession();
-  if (error) throw new Error("Sign in again to use meeting capture.");
+  if (error) throw new Error("Workbench could not reach your workspace. Reload the page, then use meeting capture again.");
   const token = data?.session?.access_token;
-  if (!token) throw new Error("Sign in to use meeting capture.");
+  if (!token) throw new Error("Workbench could not reach your workspace. Reload the page, then use meeting capture again.");
   return token;
 }
 
 async function bearerHeaders(getAccessToken) {
   const token = await getAccessToken();
-  if (typeof token !== "string" || !token.trim()) throw new Error("Sign in to use meeting capture.");
+  if (typeof token !== "string" || !token.trim()) throw new Error("Workbench could not reach your workspace. Reload the page, then use meeting capture again.");
   return { Authorization: `Bearer ${token.trim()}` };
 }
 

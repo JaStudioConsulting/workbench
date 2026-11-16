@@ -3,6 +3,7 @@
 import { PIPELINE_STAGE_ORDER } from "./constants.js";
 import { supabase } from "../../supabase-client.js";
 import { parseCandidateSourceKey } from "@ja/shared-types";
+import { clearReadCache, invalidateReadCache, readThroughCache, scopedReadKey } from "../../lib/readCache.js";
 
 // In-memory local stores (in-memory only, no persistent browser storage)
 // Keyed strictly by composite key: jobId + "::" + loxoPersonId
@@ -15,6 +16,7 @@ let runtimePresentations = [];
 const runtimeCandidatesByJob = new Map();
 let liveReviewJobsLoaded = false;
 const liveCandidateJobIds = new Set();
+let presentationHistoryError = "";
 
 function sourceIdentity(candidateId) {
   const [source, rawId] = String(candidateId || "").split(":");
@@ -328,23 +330,27 @@ export function mapLivePresentation(row, candidate = null) {
 
 const PRESENTATION_PAGE_SIZE = 1000;
 
-async function fetchPresentationRows() {
-  const allRows = [];
-  for (let start = 0; ; start += PRESENTATION_PAGE_SIZE) {
-    const { data, error } = await supabaseClient
-      .from("presentations")
-      .select("*")
-      .order("id", { ascending: true })
-      .range(start, start + PRESENTATION_PAGE_SIZE - 1);
-    if (error) throw new Error("Supabase could not load presentation history");
-    const page = data || [];
-    allRows.push(...page);
-    if (page.length < PRESENTATION_PAGE_SIZE) return allRows;
-  }
+async function fetchPresentationRows({ force = false } = {}) {
+  return readThroughCache(scopedReadKey("candidate-review:presentations", supabaseClient), async () => {
+    const allRows = [];
+    for (let start = 0; ; start += PRESENTATION_PAGE_SIZE) {
+      const { data, error } = await supabaseClient
+        .from("presentations")
+        .select("*")
+        .order("id", { ascending: true })
+        .range(start, start + PRESENTATION_PAGE_SIZE - 1);
+      if (error) throw error;
+      const page = data || [];
+      allRows.push(...page);
+      if (page.length < PRESENTATION_PAGE_SIZE) return allRows;
+    }
+  }, { force }).catch(() => {
+    throw new Error("Supabase could not load presentation history");
+  });
 }
 
-export async function loadLivePresentations() {
-  const rows = await fetchPresentationRows();
+export async function loadLivePresentations({ force = false } = {}) {
+  const rows = await fetchPresentationRows({ force });
   runtimePresentations = rows.map((row) => mapLivePresentation(row));
   for (const [jobId, list] of runtimeCandidatesByJob.entries()) {
     runtimeCandidatesByJob.set(
@@ -355,7 +361,7 @@ export async function loadLivePresentations() {
   return runtimePresentations;
 }
 
-export async function loadLiveReviewJobs() {
+export async function loadLiveReviewJobs({ force = false } = {}) {
   const [
     { data, error },
     { data: linkedRows, error: linkedError },
@@ -366,8 +372,18 @@ export async function loadLiveReviewJobs() {
       .select("job_id,job_title,company,location,compensation,status,date_opened,owners,loxo_link")
       .eq("status", "Active")
       .order("date_opened", { ascending: false, nullsFirst: false }),
-    supabaseClient.from("candidate_review_feed").select("job_id").limit(1000),
-    fetchPresentationRows(),
+    readThroughCache(scopedReadKey("candidate-review:job-ids", supabaseClient), async () => {
+      const result = await supabaseClient.from("candidate_review_feed").select("job_id").limit(1000);
+      if (result.error) throw result.error;
+      return result;
+    }, { force }).then((result) => ({ data: result.data, error: null }), (error) => ({ data: null, error })),
+    fetchPresentationRows({ force }).then((rows) => {
+      presentationHistoryError = "";
+      return rows;
+    }, (error) => {
+      presentationHistoryError = error.message || "Supabase could not load presentation history";
+      return [];
+    }),
   ]);
   if (error) throw new Error("Supabase could not load Tracker jobs");
   // Candidate links only influence sort order. Keep active jobs usable when
@@ -393,26 +409,26 @@ export async function loadLiveReviewJobs() {
   return runtimeJobs;
 }
 
-export async function loadLiveCandidatesForJob(jobId) {
-  const [
-    { data: rows, error },
-    { data: actions, error: actionsError },
-    presentations,
-  ] = await Promise.all([
-    supabaseClient
-      .from("candidate_review_feed")
-      .select("*")
-      .eq("job_id", Number(jobId))
-      .limit(500),
-    supabaseClient
-      .from("candidate_review_actions")
-      .select("*")
-      .eq("job_id", Number(jobId))
-      .order("created_at", { ascending: false }),
-    fetchPresentationRows(),
+export async function loadLiveCandidatesForJob(jobId, { force = false } = {}) {
+  const [candidateResult, actionsResult, presentationResult] = await Promise.allSettled([
+    readThroughCache(scopedReadKey(`candidate-review:candidates:${String(jobId)}`, supabaseClient), async () => {
+      const result = await supabaseClient.from("candidate_review_feed").select("*").eq("job_id", Number(jobId)).limit(500);
+      if (result.error) throw result.error;
+      return result.data || [];
+    }, { force }),
+    readThroughCache(scopedReadKey(`candidate-review:actions:${String(jobId)}`, supabaseClient), async () => {
+      const result = await supabaseClient.from("candidate_review_actions").select("*").eq("job_id", Number(jobId)).order("created_at", { ascending: false });
+      if (result.error) throw result.error;
+      return result.data || [];
+    }, { force }),
+    fetchPresentationRows({ force }),
   ]);
-  if (error) throw new Error("Supabase could not load candidates for this job");
-  if (actionsError) throw new Error("Supabase could not load saved review actions");
+  if (candidateResult.status === "rejected") throw new Error("Supabase could not load candidates for this job");
+  if (actionsResult.status === "rejected") throw new Error("Supabase could not load saved review actions");
+  const rows = candidateResult.value;
+  const actions = actionsResult.value;
+  const presentations = presentationResult.status === "fulfilled" ? presentationResult.value : [];
+  presentationHistoryError = presentationResult.status === "rejected" ? "Supabase could not load presentation history" : "";
 
   const actionMap = new Map();
   for (const item of actions || []) {
@@ -692,7 +708,14 @@ export function getCachedLiveCandidatesForJob(jobId) {
   return getCandidatesForJob(jobId);
 }
 
+export function getPresentationHistoryError() {
+  return presentationHistoryError;
+}
+
 export function clearLiveReviewCache() {
+  clearReadCache();
+  invalidateReadCache("candidate-review:");
+  presentationHistoryError = "";
   candidateDecisions.clear();
   loggedActivities.clear();
   activityOutbox.clear();
@@ -786,6 +809,9 @@ export async function recordCandidateDecision(jobId, personId, decision, options
           });
       if (result.error) throw new Error("Could not save the candidate decision");
     }
+    invalidateReadCache("candidate-review:");
+    invalidateReadCache("process:stage-counts:");
+    invalidateReadCache("process:candidate-evidence:");
   }
 
   if (decision === "want" || decision === "pass" || decision === null) {
@@ -839,6 +865,9 @@ export async function recordCandidateSubmission(jobId, personId, details = {}, o
     idempotency_key: idempotencyKey,
   });
   if (error) throw new Error("Could not save the submission draft");
+  invalidateReadCache("candidate-review:");
+  invalidateReadCache("process:stage-counts:");
+  invalidateReadCache("process:candidate-evidence:");
 
   await loadLiveCandidatesForJob(jobId);
 
@@ -926,6 +955,10 @@ export async function logCandidateActivity(
     newActivity.id = `db-act-${data.id}`;
     newActivity.date = displayDate(data.created_at);
   }
+
+  invalidateReadCache("candidate-review:");
+  invalidateReadCache("process:stage-counts:");
+  invalidateReadCache("process:candidate-evidence:");
 
   activityOutbox.set(resolvedIdempotencyKey, newActivity);
 

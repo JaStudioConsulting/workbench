@@ -478,7 +478,7 @@ test("browser recording refuses an insecure origin before requesting the microph
   assert.equal(microphoneRequests, 0);
   assert.match(
     meetingRecordingErrorMessage({ code: "INSECURE_CONTEXT" }),
-    /Tailscale HTTPS/,
+    /Open Workbench on this Mac/,
   );
 });
 
@@ -511,7 +511,7 @@ test("shared call audio failure still records the microphone with a warning", as
   assert.equal(stopped, true);
 });
 
-test("Meetings workspace uses browser microphone recording and the existing Calendar client", async () => {
+test("Meetings workspace keeps Calendar loading behind the feature flag", async () => {
   const [workspace, variants, recorder, app, index] = await Promise.all([
     readFile(new URL("../src/features/meetings/MeetingsWorkspace.jsx", import.meta.url), "utf8"),
     readFile(new URL("../src/features/meetings/MeetingCaptureVariants.jsx", import.meta.url), "utf8"),
@@ -519,7 +519,8 @@ test("Meetings workspace uses browser microphone recording and the existing Cale
     readFile(new URL("../src/App.jsx", import.meta.url), "utf8"),
     readFile(new URL("../index.html", import.meta.url), "utf8"),
   ]);
-  assert.match(workspace, /getUpcomingGoogleCalendar/);
+  assert.match(workspace, /calendarEnabled \? loadCalendar\(\) : undefined/);
+  assert.match(workspace, /calendarEnabled \? <Card>/);
   assert.match(workspace, /Today/);
   assert.match(workspace, /Upcoming/);
   assert.match(workspace, /Past/);
@@ -534,10 +535,10 @@ test("Meetings workspace uses browser microphone recording and the existing Cale
   assert.match(app, /startCandidateCallSession/);
   assert.match(app, /onMeetingLaunchChange=\{updateMeetingLaunch\}/);
   assert.match(app, /recordingLocked/);
-  assert.match(app, /key=\{`\$\{sessionUserId\}:\$\{page\}`\}/);
+  assert.doesNotMatch(app, /PageErrorBoundary key=.*page/);
   assert.match(app, /const openCandidate = \(jobId, personId\) => \{\s*if \(recordingLocked\) return;/);
   assert.match(app, /const openJobReview = \(job\) => \{\s*if \(recordingLocked\) return;/);
-  assert.match(app, /disabled=\{signingOut \|\| recordingLocked\}/);
+  assert.doesNotMatch(app, /signingOut|Sign out/);
   assert.match(workspace, /onLaunchChange\?\.\(\{ phase: "recording"/);
   assert.match(workspace, /setMeetingDraftDirty\(true\)/);
   assert.match(workspace, /previousOwnerId/);
@@ -627,7 +628,7 @@ test("missing transcript remains a draft input gap and blocks case review", asyn
 test("after-call auth and model errors give recoverable plain messages", async () => {
   const input = { job: { id: 42, title: "Manager", company: "Example" }, candidate: { id: "sourcing:7", name: "Candidate", title: "Supervisor", profileSummary: "Leadership" }, transcript: "Call text" };
   let calls = 0;
-  await assert.rejects(makeCandidateNotes(input, { getAccessToken: async () => "", fetchImpl: async () => { calls += 1; } }), /Sign in again/);
+  await assert.rejects(makeCandidateNotes(input, { getAccessToken: async () => "", fetchImpl: async () => { calls += 1; } }), /Workbench could not reach your workspace/);
   assert.equal(calls, 0);
   await assert.rejects(makeCandidateNotes(input, { getAccessToken: async () => "token", fetchImpl: async () => ({ ok: false, json: async () => ({ error: { code: "AI_NOT_CONFIGURED" } }) }) }), /not available right now/);
   await assert.rejects(makeCandidateNotes(input, { getAccessToken: async () => "token", fetchImpl: async () => ({ ok: false, json: async () => ({ error: { code: "AI_INVALID_OUTPUT" } }) }) }), /checked against the source material/);

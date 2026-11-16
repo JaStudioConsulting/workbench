@@ -1,5 +1,14 @@
 # Repository Instructions
 
+## Current direction
+
+- Workbench runs on Ja's Mac at `http://127.0.0.1:<port>`. There is no owner login, login screen, magic link, or Sign out. The app silently opens a workspace session through `POST /api/auth/local-session`; it is loopback-only, rejects forwarded/proxy requests, and uses a machine secret file. Never add a login, OAuth prompt, or session gate. Tailscale and iPad access are off.
+- Data stays in hosted Supabase. Do not use local Supabase or Docker. The Supabase CLI is a dev dependency for managing the hosted database from this Mac.
+- Gmail integration is removed. Calendar, Google sign-in, and Google Sheets import by link are off behind default-off flags `VITE_GOOGLE_CALENDAR_ENABLED` and `VITE_GOOGLE_WORKSPACE_ENABLED`. CSV/XLSX import works.
+- The interface is one screen: Jobs column, Candidates (People / Swipe / Board), Today, and Meetings. Map, Process, Leads, Settings, and Profile open as panels. The old 12 pages are not pages.
+- The top agent decides and delegates; use cheaper workers for hands-on work.
+- Open items: slow reads on `candidate_review_feed` and presentations have a draft fix in `apps/gateway/migrations/034_rls_initplan_tracker_policies.sql` and `apps/gateway/migrations/035_rls_initplan_remaining_policies.sql`, not applied. Branded resume PDF tests need Python `reportlab`.
+
 ## Source of truth and codebase knowledge
 
 1. Treat the current `main` branch and its tests as the source of truth.
@@ -11,7 +20,7 @@
 ## UI and product direction
 
 1. Ja owns UI and frontend direction. Do not invent dashboard metrics, candidate records, activity, integrations, or product states.
-2. Use `google/skills` as the official know-how source for Google Drive, Docs, Sheets, Gmail, and Calendar workflows. Use the relevant skill rather than guessing Google behavior.
+2. Use `google/skills` as the official know-how source for Google Drive, Docs, Sheets, and Calendar workflows when enabled. Google product features are switched off for now; do not turn them on without Ja's direction.
 3. Ja may use Nylas products, screens, or documentation to describe a desired workflow or layout. Treat that as a reference unless he explicitly requests a Nylas integration.
 4. Do not merge or restore archived synthetic UI wholesale. Reuse only a specifically approved interaction or component idea.
 
@@ -25,7 +34,7 @@ All Google Workspace and Google Cloud work for this repository must use this one
 - Primary Google account: `emailjanow` + `@gmail.com`
 - Approved business Google account: `ja` + `@toptiertalentgroup.com`
 
-The addresses are deliberately split above to satisfy the repository privacy check. Treat both as approved accounts for work on the Google project; do not replace either one with an assumed account. Product sign-in still requires a separate server-side allowlist before it can be called live.
+The addresses are deliberately split above to satisfy the repository privacy check. Treat both as approved accounts for work on the Google project; do not replace either one with an assumed account. Google product features are switched off for now; this project lock does not enable them.
 
 Before any Google Cloud command or configuration change:
 

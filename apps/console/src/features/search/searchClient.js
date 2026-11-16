@@ -92,7 +92,7 @@ export async function getCallerSearchAccessToken({ client = supabase } = {}) {
     throw createSearchStateError(
       "auth_error",
       "UNAUTHORIZED",
-      "Sign in with Supabase to search your Workbench records.",
+      "Workbench could not reach your workspace. Reload the page, then search again.",
       401,
     );
   }
@@ -128,7 +128,7 @@ export async function getCallerSearchAccessToken({ client = supabase } = {}) {
     throw createSearchStateError(
       "auth_error",
       "UNAUTHORIZED",
-      "Sign in with Supabase to search your Workbench records.",
+      "Workbench could not reach your workspace. Reload the page, then search again.",
       401,
     );
   }
@@ -169,7 +169,7 @@ export function mapGatewaySearchError(status, payload) {
   const message = parsedEnvelope.success
     ? parsedEnvelope.data.error.message
     : status === 401
-      ? "Sign in with Supabase to search your Workbench records."
+      ? "Workbench could not reach your workspace. Reload the page, then search again."
       : status === 403
         ? "Your account is not authorized for Workbench search."
         : "Workbench search could not be completed.";

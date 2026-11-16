@@ -21,7 +21,7 @@ const REGION_FILTER_ITEMS = [
 const NotesPanel = lazy(() => import("../notes/NotesPanel.jsx"));
 const BoardPanel = lazy(() => import("../board/BoardPanel.jsx"));
 
-export default function JobsMapView({ onSelectJobForWorkflow, onOpenJobReview, focusJobId = "" }) {
+export default function JobsMapView({ onSelectJobForWorkflow, onOpenJobReview }) {
   const [jobs, setJobs] = useState([]);
   const [loading, setLoading] = useState(false);
   const [dataSource, setDataSource] = useState("loading"); // "ready" | "empty" | "error"
@@ -83,16 +83,6 @@ export default function JobsMapView({ onSelectJobForWorkflow, onOpenJobReview, f
   useEffect(() => {
     loadJobs();
   }, []);
-
-  useEffect(() => {
-    if (!focusJobId || jobs.length === 0) return;
-    const matched = jobs.find(
-      (item) => String(item.originalJobId) === String(focusJobId) || String(item.id) === String(focusJobId),
-    );
-    if (matched) {
-      setSelectedJob(matched);
-    }
-  }, [focusJobId, jobs]);
 
   // 2. Dynamic Leaflet Map Initialization (safe for SSR / Sites worker builds)
   useEffect(() => {
@@ -392,16 +382,12 @@ export default function JobsMapView({ onSelectJobForWorkflow, onOpenJobReview, f
   };
 
   return (
-    <div className="flex h-[calc(100vh-140px)] min-h-[600px] w-full flex-col gap-3" data-testid="jobs-map-feature">
+    <div className="flex min-h-[600px] w-full flex-col gap-3" data-testid="jobs-map-feature">
       {/* 1. Header Toolbar */}
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-card p-3 shadow-sm">
         <div className="flex items-center gap-2">
           <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-primary-foreground">
             <Briefcase size={18} />
-          </div>
-          <div>
-            <h2 className="text-base font-semibold leading-tight">Jobs Map & Proximity Radar</h2>
-            <p className="text-xs text-muted-foreground">Spatial matching and distance radius ranking</p>
           </div>
         </div>
 
@@ -441,9 +427,9 @@ export default function JobsMapView({ onSelectJobForWorkflow, onOpenJobReview, f
       {dataSource === "error" && !loading ? <p role="alert" className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm">Saved jobs couldn&apos;t load. Check your connection and try again.</p> : null}
 
       {/* 2. Filter & Candidate Search Bar */}
-      <div className="grid gap-2 rounded-lg border bg-muted/20 p-3 sm:grid-cols-2 lg:grid-cols-6">
+      <div className="grid min-w-0 grid-cols-1 gap-2 rounded-lg border bg-muted/20 p-3">
         {/* Candidate Location Typeahead */}
-        <div className="relative lg:col-span-2">
+        <div className="relative min-w-0">
           <div className="flex items-center relative">
             <MapPin size={15} className="absolute left-3 text-muted-foreground" />
             <Input
@@ -486,7 +472,7 @@ export default function JobsMapView({ onSelectJobForWorkflow, onOpenJobReview, f
         </div>
 
         {/* Keyword Filter */}
-        <div>
+        <div className="min-w-0">
           <Input
             value={keywordFilter}
             aria-label="Filter title or skill"
@@ -497,7 +483,7 @@ export default function JobsMapView({ onSelectJobForWorkflow, onOpenJobReview, f
         </div>
 
         {/* Recruiter Owner Filter */}
-        <div>
+        <div className="min-w-0">
           <Select value={selectedOwner} onValueChange={setSelectedOwner} items={ownerFilterItems}>
             <SelectTrigger aria-label="Filter jobs by recruiter owner" className="w-full text-xs">
               <SelectValue placeholder="All Owners" />
@@ -516,7 +502,7 @@ export default function JobsMapView({ onSelectJobForWorkflow, onOpenJobReview, f
         </div>
 
         {/* Radius Filter */}
-        <div>
+        <div className="min-w-0">
           <Select value={maxRadius} onValueChange={setMaxRadius} disabled={!searchCoords} items={radiusFilterItems}>
             <SelectTrigger aria-label="Filter jobs by distance" className="w-full text-xs">
               <SelectValue placeholder="Any Distance" />
@@ -534,7 +520,7 @@ export default function JobsMapView({ onSelectJobForWorkflow, onOpenJobReview, f
         </div>
 
         {/* Unit Toggle & Region */}
-        <div className="flex items-center gap-1.5">
+        <div className="flex min-w-0 flex-wrap items-center gap-1.5">
           <div className="flex rounded-md border bg-muted p-0.5 text-xs">
             <button
               type="button"
@@ -555,7 +541,7 @@ export default function JobsMapView({ onSelectJobForWorkflow, onOpenJobReview, f
           </div>
 
           <Select value={regionFilter} onValueChange={setRegionFilter} items={REGION_FILTER_ITEMS}>
-            <SelectTrigger aria-label="Filter jobs by region" className="min-w-0 flex-1 text-xs">
+            <SelectTrigger aria-label="Filter jobs by region" className="min-w-[9rem] flex-1 text-xs">
               <SelectValue placeholder="All Regions" className="min-w-0" />
             </SelectTrigger>
             <SelectContent>
@@ -605,8 +591,8 @@ export default function JobsMapView({ onSelectJobForWorkflow, onOpenJobReview, f
                       <CardContent className="p-3">
                         <div className="flex items-start justify-between gap-2">
                           <div className="min-w-0 flex-1">
-                            <h4 className="text-sm font-semibold truncate leading-snug">{job.title}</h4>
-                            <p className="text-xs text-muted-foreground truncate">{job.company}</p>
+                            <h4 className="break-words text-sm font-semibold leading-snug">{job.title}</h4>
+                            <p className="break-words text-xs text-muted-foreground">{job.company}</p>
                           </div>
                           {job.distance !== null && (
                             <Badge variant="secondary" className="shrink-0 text-xs font-mono">
@@ -643,13 +629,10 @@ export default function JobsMapView({ onSelectJobForWorkflow, onOpenJobReview, f
 
           {/* Job Details Drawer */}
           {selectedJob && (
-            <div className="absolute bottom-3 left-3 right-3 sm:right-auto sm:w-[380px] z-20 max-h-[80dvh] overflow-y-auto rounded-xl border bg-card/95 backdrop-blur p-4 shadow-xl">
+            <div className="absolute bottom-3 left-3 right-3 z-20 max-h-[min(80dvh,32rem)] overflow-y-auto rounded-xl border bg-card/95 p-4 shadow-xl backdrop-blur sm:right-auto sm:w-[min(380px,calc(100%-1.5rem))]">
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-1.5">
-                    <Badge variant="outline" className="text-[10px]">
-                      ID: {selectedJob.originalJobId}
-                    </Badge>
                     {selectedJob.isMultiLocation && (
                       <Badge variant="secondary" className="text-[10px]">
                         Multi-Site Opening

@@ -287,7 +287,7 @@ export default function HeaderSearch({
                   <ShieldAlert className="mt-0.5 size-4 shrink-0 text-amber-800" aria-hidden="true" />
                   <div className="min-w-0 flex-1 space-y-1">
                     <p className="font-semibold">
-                      {state.error.code === "FORBIDDEN" ? "Search access denied" : "Sign in required to search"}
+                      {state.error.code === "FORBIDDEN" ? "Search access denied" : "Reload to search"}
                     </p>
                     <p className="text-amber-900">{state.error.message}</p>
                     {typeof onNavigatePage === "function" ? (
@@ -416,9 +416,9 @@ export default function HeaderSearch({
                                         {item.status}
                                       </Badge>
                                     ) : null}
-                                    <span className="font-mono text-[10px] text-muted-foreground">
-                                      {item.entityType === "job" ? `#${item.entityId}` : item.entityId}
-                                    </span>
+                                    {item.entityType === "job" ? (
+                                      <span className="font-mono text-[10px] text-muted-foreground">#{item.entityId}</span>
+                                    ) : null}
                                   </div>
                                 </div>
                                 {metadataLine ? (

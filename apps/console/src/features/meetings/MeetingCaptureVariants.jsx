@@ -7,6 +7,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { Textarea } from "../../components/ui/textarea.tsx";
 import { isSecureRecordingContext, meetingCaptureState } from "./browserRecorder.js";
 import { isMeetingContextLocked } from "./meetingModel.js";
+import { operatorCasesEnabled } from "../operator-cases/operatorCaseService.js";
+import { calendarEnabled } from "../../featureFlags.js";
 
 const VARIANTS = [
   { id: "guided", label: "Guided", rightWhen: "The workflow is occasional and sequence matters", cost: "More vertical travel" },
@@ -114,9 +116,9 @@ function RecruitingContext({ launchContext, recruiting, selectedJob, selectedJob
     </div>;
   }
 
-  return <div className="grid gap-3 sm:grid-cols-2">
-    <label className="text-sm font-medium">Job<Select items={jobItems} value={selectedJobId} onValueChange={(value) => setSelectedJobId(String(value))} disabled={lockedCall}><SelectTrigger aria-label="Select meeting job" className="mt-1 w-full"><SelectValue placeholder="Select job" /></SelectTrigger><SelectContent><SelectItem value="">No job attached</SelectItem>{recruiting.jobs.map((job) => <SelectItem key={job.id} value={String(job.id)}>{job.title} · {job.company}</SelectItem>)}</SelectContent></Select></label>
-    <label className="text-sm font-medium">Candidate<Select items={candidateItems} value={selectedCandidateId} onValueChange={(value) => setSelectedCandidateId(String(value))} disabled={lockedCall || recruiting.phase === "loading_candidates"}><SelectTrigger aria-label="Select meeting candidate" className="mt-1 w-full"><SelectValue placeholder={recruiting.phase === "loading_candidates" ? "Loading candidates" : "Select candidate"} /></SelectTrigger><SelectContent><SelectItem value="">No candidate attached</SelectItem>{recruiting.candidates.map((candidate) => <SelectItem key={candidate.id} value={String(candidate.id)}>{candidate.name} · {candidate.title}</SelectItem>)}</SelectContent></Select></label>
+  return <div className="grid min-w-0 grid-cols-1 gap-3">
+    <label className="text-sm font-medium">Job<Select items={jobItems} value={selectedJobId} onValueChange={(value) => setSelectedJobId(String(value))} disabled={lockedCall}><SelectTrigger aria-label="Select meeting job" className="mt-1 w-full"><SelectValue placeholder="Select job" /></SelectTrigger><SelectContent>{recruiting.jobs.map((job) => <SelectItem key={job.id} value={String(job.id)}>{job.title} · {job.company}</SelectItem>)}</SelectContent></Select></label>
+    <label className="text-sm font-medium">Candidate<Select items={candidateItems} value={selectedCandidateId} onValueChange={(value) => setSelectedCandidateId(String(value))} disabled={lockedCall || !selectedJobId || recruiting.phase === "loading_candidates"}><SelectTrigger aria-label="Select meeting candidate" className="mt-1 w-full"><SelectValue placeholder={recruiting.phase === "loading_candidates" ? "Loading candidates" : "Select candidate"} /></SelectTrigger><SelectContent>{recruiting.candidates.map((candidate) => <SelectItem key={candidate.id} value={String(candidate.id)}>{candidate.name} · {candidate.title}</SelectItem>)}</SelectContent></Select></label>
   </div>;
 }
 
@@ -128,7 +130,7 @@ function RecordingControls({ launchContext, recording, beginRecording, finishRec
     ? meetingCaptureState(recording)
     : secure
       ? "Recording uses this device's microphone. Audio stays on this device for playback and download."
-      : "Recording needs the secure Workbench address. Open the Tailscale HTTPS link, then try again.";
+      : "Recording needs a secure Workbench address. Open Workbench on this Mac, then try again.";
   const warning = recording?.warning || (callLaunch ? "Phone call audio is not captured." : "");
   return <div className="flex flex-col gap-3">
     <p className="text-sm text-muted-foreground">{captureNote}{callLaunch ? " The call is placed only after recording starts." : ""}</p>

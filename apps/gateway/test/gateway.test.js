@@ -4,7 +4,6 @@ import { Readable } from "node:stream";
 import test from "node:test";
 import { createApp } from "../app.js";
 import { createConfiguredAuth, parseAllowedGoogleEmails, parseExactHttpsOrigins } from "../src/auth.js";
-import { createDraftOnlyMailService } from "../src/gmail.js";
 import { discoverMcp, loadRecruitmentAuthority, validatePublishedRecruitmentAssets, validateRecruitmentManifest } from "../src/recruitment-package.js";
 import { createMemoryTestStorage, requireDurableStorage } from "../src/storage.js";
 
@@ -93,7 +92,6 @@ test("private Supabase bootstrap and Better Auth Google sign-in report separate 
       ...testEnv,
       WORKBENCH_LOCAL_SESSION_ENABLED: "1",
       WORKBENCH_LOCAL_SESSION_OWNER_ID: supabaseUserId,
-      WORKBENCH_TAILSCALE_LOGIN_SHA256: "a".repeat(64),
       WORKBENCH_LOCAL_SESSION_SECRET_FILE: "/private/session-secret",
     },
     authConfig: authenticated,
@@ -433,10 +431,10 @@ test("external package manifest and every packaged asset validate", async () => 
   await assert.rejects(() => validatePublishedRecruitmentAssets({ readSkillText: async () => JSON.stringify({ front_door: { id: "recruiter", path: "recruiter/SKILL.md" }, policies: ["_JA-RULES.md"], capabilities: [{ id: "valid", path: "missing.md" }] }), assertSkillFile: async () => { throw new Error("missing packaged asset"); } }), /missing packaged asset/);
 });
 
-test("draft-only mail and test-only storage do not expose external write methods", async () => {
-  const service = createDraftOnlyMailService({ createDraft: async (message) => message });
-  assert.deepEqual((await service.createDraft({ to: "review@example.invalid", subject: "Draft", body: "Review" })).labels, ["DRAFT"]);
-  assert.equal("send" in service, false);
+test("Gmail routes are not registered and test-only storage does not expose durability", async () => {
+  const app = await createApp({ env: testEnv, recruitmentContextLoader: testRecruitmentContext });
+  const paths = app._router.stack.flatMap((layer) => layer.route ? [layer.route.path] : []);
+  assert.equal(paths.some((path) => String(path).startsWith("/api/mail")), false);
   const storage = createMemoryTestStorage();
   await storage.put("x", { value: 1 });
   assert.deepEqual(await storage.get("x"), { value: 1 });
@@ -447,7 +445,7 @@ test("public safety status contains only supported fields", async () => {
   const app = await createApp({ env: testEnv, recruitmentContextLoader: testRecruitmentContext });
   const response = await request(app, "GET", "/api/safety");
   assert.equal(response.status, 200);
-  assert.deepEqual(Object.keys(response.body).sort(), ["auth", "externalWrites", "gmail", "storage"]);
+  assert.deepEqual(Object.keys(response.body).sort(), ["auth", "externalWrites", "storage"]);
   assert.equal(response.body.externalWrites, false);
 });
 

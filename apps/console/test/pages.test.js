@@ -17,7 +17,7 @@ test("App mounts one Workbench view with every former destination reachable", as
   assert.match(oneView, /data-testid="workbench-one-view"/);
   assert.match(oneView, />People<\/TabsTrigger>/);
   assert.match(oneView, />Swipe<\/TabsTrigger>/);
-  assert.match(oneView, />Board<\/TabsTrigger>/);
+  assert.match(oneView, />Pipeline<\/TabsTrigger>/);
   assert.match(home, /loadHomeData/);
   assert.match(mail, /listOutreach/);
   assert.match(app, /clearLiveReviewCache\(\)/);

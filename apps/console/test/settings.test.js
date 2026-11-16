@@ -1,6 +1,14 @@
 import test from "node:test";
+import { readFile } from "node:fs/promises";
 import assert from "node:assert/strict";
 import { loadSettingsStatus, readCanadaFilter, saveCanadaFilter } from "../src/features/settings/settingsService.js";
+import { googleWorkspaceEnabled } from "../src/featureFlags.js";
+
+test("Google Workspace settings panel stays unrendered unless explicitly enabled", async () => {
+  const source = await readFile(new URL("../src/features/settings/SettingsPage.jsx", import.meta.url), "utf8");
+  assert.equal(googleWorkspaceEnabled, false);
+  assert.match(source, /googleWorkspaceEnabled \? <GoogleWorkspacePanel \/> : null/);
+});
 
 test("Canada filter defaults on and persists an explicit choice", () => {
   const values = new Map();
@@ -10,37 +18,21 @@ test("Canada filter defaults on and persists an explicit choice", () => {
   assert.equal(readCanadaFilter(storage), false);
 });
 
-test("settings status stays honest when optional services are unavailable", async () => {
+test("settings reports workspace connectivity without AI, mail, or sign-in status", async () => {
   const client = { auth: { async getSession() { return { data: { session: null }, error: null }; } } };
-  const request = async (url) => {
-    if (String(url).includes("/api/auth/workbench-status")) return { ok: true, status: 200, async json() { return { googleSignIn: "unavailable", localDataSession: "configured" }; } };
-    if (String(url).includes("/api/mail/status")) return { ok: false, async json() { return { error: { code: "AUTH_UNAVAILABLE" } }; } };
-    return { ok: false, async json() { return {}; } };
-  };
-  const status = await loadSettingsStatus({ client, request });
+  const status = await loadSettingsStatus({ client, request: async () => { throw new Error("No request expected"); } });
   assert.equal(status.supabase.connected, false);
-  assert.equal(status.google.connected, false);
-  assert.equal(status.google.signIn, "unavailable");
-  assert.equal(status.google.localDataSession, "configured");
-  assert.equal(status.google.code, "AUTH_UNAVAILABLE");
   assert.equal(Object.hasOwn(status, "ai"), false);
+  assert.equal(Object.hasOwn(status, "google"), false);
   assert.equal(Object.hasOwn(status, "meetings"), false);
   assert.match(status.loxo.label, /Queued mode/);
 });
 
-test("settings checks account connections without querying AI or transcription services", async () => {
-  const client = { auth: { async getSession() { return { data: { session: {} }, error: null }; } } };
-  const requested = [];
-  const request = async (url) => {
-    requested.push(new URL(url).pathname);
-    if (String(url).includes("/api/auth/workbench-status")) return { ok: true, status: 200, async json() { return { googleSignIn: "configured", localDataSession: "configured" }; } };
-    if (String(url).includes("/api/mail/status")) return { ok: true, async json() { return { connected: false, canRead: false, canDraft: false }; } };
-    throw new Error("Settings must not request model services");
-  };
-  const status = await loadSettingsStatus({ client, request });
-  assert.deepEqual(requested.sort(), ["/api/auth/workbench-status", "/api/mail/status"]);
-  assert.equal(Object.hasOwn(status, "ai"), false);
-  assert.equal(Object.hasOwn(status, "meetings"), false);
-  assert.equal(status.google.signIn, "configured");
+test("settings labels an active workspace connection Connected", async () => {
+  const client = { auth: { async getSession() { return { data: { session: { access_token: "workspace-token" } }, error: null }; } } };
+  const status = await loadSettingsStatus({ client });
   assert.equal(status.supabase.connected, true);
+  const source = await readFile(new URL("../src/features/settings/SettingsPage.jsx", import.meta.url), "utf8");
+  assert.match(source, /state\.status\.supabase\.connected \? "Connected"/);
+  assert.doesNotMatch(source, /Signed in|Sign in|signed-in|Gmail/);
 });

@@ -49,8 +49,8 @@ test("My leads CRUD works locally when the table is unavailable", async () => {
 test("auth lookup failure never falls back to a local save", async () => {
   const storage = memoryStorage();
   const client = { auth: { getUser: async () => ({ data: { user: null }, error: { message: "offline" } }) } };
-  await assert.rejects(saveLead({ company: "North Plant" }, { client, storage }), /Sign-in status could not be checked/);
-  await assert.rejects(loadLeadsWithStatus({ client, storage }), /Sign-in status could not be checked/);
+  await assert.rejects(saveLead({ company: "North Plant" }, { client, storage }), /Workbench could not reach your workspace/);
+  await assert.rejects(loadLeadsWithStatus({ client, storage }), /Workbench could not reach your workspace/);
   assert.equal(storage.getItem(LEADS_STORAGE_KEY), null);
 });
 
@@ -108,7 +108,7 @@ test("Leads page exposes real loading, empty, error and editor states", async ()
   assert.match(source, /No client companies found in active Tracker jobs/);
   assert.match(source, /No leads added/);
   assert.match(source, /Add lead/);
-  assert.match(source, /Saved on this device only\. Sign in to sync\./);
+  assert.match(source, /Saved on this device only\. Reload to sync\./);
   assert.match(source, /Review possible matches before saving/);
   assert.match(source, /Keep as a separate lead/);
   assert.match(source, /Device only/);

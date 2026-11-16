@@ -54,7 +54,7 @@ function displayMeeting(row) {
   };
 }
 
-// Hydrate saved meetings through the signed-in user's RLS-scoped client.
+// Hydrate saved meetings through the workspace's RLS-scoped client.
 // Source links remain intact even when a job is no longer in the active feed.
 export async function loadMeetingDraft(id, { client = supabase } = {}) {
   if (typeof id !== "string" || !UUID_PATTERN.test(id)) throw new Error("Choose a valid saved meeting.");

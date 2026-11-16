@@ -1,5 +1,5 @@
 import { supabase } from "../../supabase-client.js";
-import { listMailReplies, listOutreach } from "../mail/mailClient.js";
+import { readThroughCache, scopedReadKey } from "../../lib/readCache.js";
 import { listOperatorCases } from "../operator-cases/operatorCaseService.js";
 
 function candidateKey(value = {}) {
@@ -101,50 +101,58 @@ async function checked(query, message) {
   return data || [];
 }
 
-export async function loadHomeData({ client = supabase, now = new Date(), includeCases = true, includeMailReplies = false } = {}) {
-  const [actions, candidates, outreach, cases, leads] = await Promise.all([
-    checked(
+export async function loadHomeData({ client = supabase, now = new Date(), includeCases = true, force = false } = {}) {
+  const errors = {};
+  const loadPart = async (key, promise) => {
+    try { return await promise; }
+    catch (error) { errors[key] = error?.message || `This part of Today could not be loaded.`; return []; }
+  };
+  const [actions, candidates, cases, leads, outreach] = await Promise.all([
+    loadPart("waiting", checked(
       client.from("candidate_review_actions").select("id,job_id,candidate_source,candidate_source_id,action_type,activity_type,note,created_at,status").eq("status", "waiting_for_loxo").order("created_at", { ascending: true }),
       "Waiting actions could not be loaded",
-    ),
-    checked(
+    )),
+    loadPart("candidateNames", readThroughCache(scopedReadKey("home:candidate-names", client), () => checked(
       client.from("candidate_review_feed").select("candidate_source,candidate_source_id,candidate_name").limit(1000),
       "Candidate names could not be loaded",
-    ),
-    listOutreach({ client }),
-    includeCases ? listOperatorCases({ client }) : Promise.resolve([]),
-    checked(
+    ), { force })),
+    includeCases ? loadPart("cases", listOperatorCases({ client })) : Promise.resolve([]),
+    loadPart("reminders", checked(
       client.from("leads").select("id,company,contact,next_action,next_date,status").lte("next_date", startOfDay(now).toISOString().slice(0, 10)).order("next_date", { ascending: true }),
       "Recorded reminders could not be loaded",
-    ),
+    )),
+    loadPart("followUps", checked(
+      client.from("outreach_log").select("id,job_id,person_id,candidate_email,subject,created_at").order("created_at", { ascending: false }).limit(250),
+      "Recorded outreach could not be loaded",
+    )),
   ]);
-  const emails = [...new Set(outreach.map((entry) => entry.candidateEmail).filter(Boolean))];
-  const [replies, artifacts] = await Promise.all([
-    includeMailReplies ? listMailReplies(emails) : Promise.resolve({ available: false, latestByEmail: {} }),
-    cases.length ? checked(
+  let drafts = [];
+  if (cases.length) {
+    const artifacts = await loadPart("drafts", checked(
       client.from("case_artifacts").select("id,case_id,artifact_type,review_state,generated_by,created_at,content->status,content->readiness")
         .in("case_id", cases.map((record) => record.id)).order("created_at", { ascending: false }).limit(250),
       "Ready drafts could not be loaded",
-    ) : Promise.resolve([]),
-  ]);
+    ));
+    drafts = latestReadyCaseDrafts(artifacts.map((artifact) => ({ ...artifact, content: { status: artifact.status, readiness: artifact.readiness } })), cases);
+  }
+  const normalizedOutreach = outreach.map((entry) => ({ ...entry, candidateEmail: entry.candidate_email, createdAt: entry.created_at }));
   return {
     waiting: groupWaitingActions(actions, candidates),
-    drafts: latestReadyCaseDrafts(artifacts.map((artifact) => ({ ...artifact, content: { status: artifact.status, readiness: artifact.readiness } })), cases),
-    outreach,
-    replies,
-    followUps: followUpsDue(outreach, replies, now),
-    reminders: leadRemindersDue(leads, now),
+    drafts,
     cases,
+    followUps: followUpsDue(normalizedOutreach, { available: false, latestByEmail: {} }, now),
+    reminders: leadRemindersDue(leads, now),
+    errors,
   };
 }
 
-export async function listMpcCandidates({ client = supabase } = {}) {
-  const rows = await checked(
+export async function listMpcCandidates({ client = supabase, force = false } = {}) {
+  const rows = await readThroughCache(scopedReadKey("home:mpc-candidates", client), () => checked(
     client.from("candidate_review_feed")
       .select("candidate_source,candidate_source_id,candidate_name,current_title,current_company")
       .limit(5000),
     "Candidates could not be loaded. Retry, or check that live Tracker data is available.",
-  );
+  ), { force });
   const unique = new Map();
   for (const row of rows) {
     const candidateId = Number(row.candidate_source_id);

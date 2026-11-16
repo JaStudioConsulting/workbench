@@ -1,4 +1,5 @@
 import { supabase } from "../../supabase-client.js";
+import { readThroughCache, scopedReadKey } from "../../lib/readCache.js";
 import { LOXO_PIPELINE_STAGES } from "../candidate-review/constants.js";
 
 const TWO_DAYS_MS = 2 * 24 * 60 * 60 * 1000;
@@ -21,17 +22,18 @@ export function hasCandidateProfileData(candidate) {
   );
 }
 
-export function buildProcessSummary({ jobs = [], candidates = [], actions = [], candidateDataAvailable = true }, now = new Date()) {
+export function buildProcessSummary({ jobs = [], candidates = [], candidateCountRows = candidates, actions = [], candidateDataAvailable = true }, now = new Date()) {
   const activeJobs = jobs.filter((job) => text(job.status).toLowerCase() === "active");
   const jobIds = new Set(activeJobs.map((job) => String(job.job_id)));
   const activeCandidates = candidates.filter((candidate) => jobIds.has(String(candidate.job_id)));
+  const activeCountRows = candidateCountRows.filter((candidate) => jobIds.has(String(candidate.job_id)));
   const candidateLookup = new Map(activeCandidates.map((candidate) => [
     `${candidate.job_id}:${candidateKey(candidate)}`,
     candidate,
   ]));
 
   const jobSummaries = activeJobs.map((job) => {
-    const rows = activeCandidates.filter((candidate) => String(candidate.job_id) === String(job.job_id));
+    const rows = activeCountRows.filter((candidate) => String(candidate.job_id) === String(job.job_id));
     const stageCounts = Object.fromEntries(LOXO_PIPELINE_STAGES.map((stage) => [stage, 0]));
     for (const candidate of rows) {
       if (Object.hasOwn(stageCounts, candidate.stage)) stageCounts[candidate.stage] += 1;
@@ -65,7 +67,7 @@ export function buildProcessSummary({ jobs = [], candidates = [], actions = [], 
     });
 
   const missingSources = candidateDataAvailable ? activeCandidates
-    .filter((candidate) => !text(candidate.resume_text) && !hasCandidateProfileData(candidate))
+    .filter((candidate) => candidate.profileEvidenceAvailable !== false && !text(candidate.resume_text) && !hasCandidateProfileData(candidate))
     .map((candidate) => ({
       type: "missing_source",
       id: `source:${candidate.job_id}:${candidateKey(candidate)}`,
@@ -91,17 +93,25 @@ export function buildProcessSummary({ jobs = [], candidates = [], actions = [], 
   };
 }
 
-export async function loadProcessData(client = supabase, now = new Date()) {
-  const [jobsResult, candidatesResult, actionsResult] = await Promise.all([
+export async function loadProcessData(client = supabase, now = new Date(), { force = false } = {}) {
+  const [jobsResult, candidatesResult, evidenceResult, actionsResult] = await Promise.all([
     client
       .from("tracker_jobs")
       .select("job_id,job_title,company,status")
       .eq("status", "Active")
       .order("date_opened", { ascending: false, nullsFirst: false }),
-    client
-      .from("candidate_review_feed")
-      .select("job_id,candidate_source,candidate_source_id,candidate_name,stage,resume_text,profile_url,profile_summary,fit_evidence,current_title,current_company")
-      .limit(5000),
+    readThroughCache(scopedReadKey("process:stage-counts", client), async () => {
+      const result = await client.from("candidate_review_feed").select("job_id,stage").limit(5000);
+      if (result.error) throw result.error;
+      return result;
+    }, { force }).catch((error) => ({ data: null, error })),
+    readThroughCache(scopedReadKey("process:candidate-evidence", client), async () => {
+      const result = await client.from("candidate_review_feed")
+        .select("job_id,stage,candidate_source,candidate_source_id,candidate_name,resume_text,profile_url,profile_summary,fit_evidence,current_title,current_company")
+        .limit(5000);
+      if (result.error) throw result.error;
+      return result;
+    }, { force }).catch((error) => ({ data: null, error })),
     client
       .from("candidate_review_actions")
       .select("id,job_id,candidate_source,candidate_source_id,created_at,status")
@@ -112,11 +122,13 @@ export async function loadProcessData(client = supabase, now = new Date()) {
   if (jobsResult.error) throw new Error("Could not load active Tracker jobs");
   if (actionsResult.error) throw new Error("Could not load queued Loxo actions");
 
+  const candidateDataAvailable = !candidatesResult.error && !evidenceResult.error;
   return buildProcessSummary({
     jobs: jobsResult.data || [],
-    candidates: candidatesResult.error ? [] : (candidatesResult.data || []),
+    candidates: candidateDataAvailable ? (evidenceResult.data || []) : [],
+    candidateCountRows: candidatesResult.data || [],
     actions: actionsResult.data || [],
-    candidateDataAvailable: !candidatesResult.error,
+    candidateDataAvailable,
   }, now);
 }
 

@@ -1,10 +1,12 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ExternalLink, FileDown, Mic, Printer, RefreshCw } from "lucide-react";
 import { Button } from "../../components/ui/button.tsx";
+import { Badge } from "../../components/ui/badge.tsx";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../components/ui/card.tsx";
 import { Select, SelectContent, SelectItem, SelectTrigger } from "../../components/ui/select.tsx";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../components/ui/tabs.tsx";
 import { getUpcomingGoogleCalendar } from "../../google-workspace-client.js";
+import { calendarEnabled } from "../../featureFlags.js";
 import { supabase } from "../../supabase-client.js";
 import { loadLiveCandidatesForJob, loadLiveReviewJobs } from "../candidate-review/candidateReviewService.js";
 import {
@@ -71,7 +73,7 @@ function EventList({ events, onRecord }) {
   })}</div>;
 }
 
-export default function MeetingsWorkspace({ adapter = defaultAdapter, launchContext = null, onLaunchChange }) {
+export default function MeetingsWorkspace({ adapter = defaultAdapter, launchContext = null, selectedJob: workspaceSelectedJob = null, onLaunchChange }) {
   const launchJobId = String(launchContext?.job?.id || "");
   const launchCandidateId = String(launchContext?.candidate?.id || "");
   const savedLaunchId = launchContext?.phase === "saved" ? String(launchContext.meeting?.id || "") : "";
@@ -115,6 +117,7 @@ export default function MeetingsWorkspace({ adapter = defaultAdapter, launchCont
   const draftOwnerRef = useRef(draftOwnerId);
   const meetingDraftOwnerRef = useRef(meetingDraftOwnerId);
   const localDraftSnapshotRef = useRef(null);
+  const workspaceJobIdRef = useRef("");
   transcriptRef.current = transcript;
   notesRef.current = notes;
   draftOwnerRef.current = draftOwnerId;
@@ -122,6 +125,7 @@ export default function MeetingsWorkspace({ adapter = defaultAdapter, launchCont
   localDraftSnapshotRef.current = { jobId: selectedJobId, candidateId: selectedCandidateId, transcript, notes, templateId, eventTitle: selectedEvent?.title || "", dirty: meetingDraftDirty, idempotencyKey: draftSaveId.current };
 
   const loadCalendar = useCallback(() => {
+    if (!calendarEnabled) return undefined;
     const controller = new AbortController();
     setCalendar({ phase: "loading", events: [] });
     getUpcomingGoogleCalendar({ signal: controller.signal })
@@ -130,7 +134,7 @@ export default function MeetingsWorkspace({ adapter = defaultAdapter, launchCont
     return () => controller.abort();
   }, []);
 
-  useEffect(() => loadCalendar(), [loadCalendar]);
+  useEffect(() => calendarEnabled ? loadCalendar() : undefined, [loadCalendar]);
   useEffect(() => {
     const audioUrl = recordedAudio?.url;
     return () => { if (audioUrl) URL.revokeObjectURL(audioUrl); };
@@ -163,11 +167,32 @@ export default function MeetingsWorkspace({ adapter = defaultAdapter, launchCont
     });
     supabase.auth.getUser().then(({ data, error: authError }) => {
       if (!active) return;
-      if (authError) { setLocalDraftError("Sign-in status could not be checked. Unsaved meeting recovery is unavailable until you retry."); return; }
+      if (authError) { setLocalDraftError("Workbench could not reach your workspace. Reload the page, then check unsaved meeting recovery again."); return; }
       setDraftOwnerId(data?.user?.id || "");
-    }).catch(() => { if (active) setLocalDraftError("Sign-in status could not be checked. Unsaved meeting recovery is unavailable until you retry."); });
+    }).catch(() => { if (active) setLocalDraftError("Workbench could not reach your workspace. Reload the page, then check unsaved meeting recovery again."); });
     return () => { active = false; authListener?.subscription?.unsubscribe?.(); };
   }, []);
+  useEffect(() => {
+    if (savedLaunchId && !savedMeetingReady) return;
+    const nextJobId = String(workspaceSelectedJob?.loxoJobId || workspaceSelectedJob?.id || "");
+    if (savedLaunchId && loadedMeetingId === savedLaunchId) {
+      if (!selectedJobId && !selectedCandidateId && nextJobId) {
+        workspaceJobIdRef.current = nextJobId;
+        setSelectedJobId(nextJobId);
+      }
+      return;
+    }
+    if (!nextJobId || nextJobId === workspaceJobIdRef.current) return;
+    if (meetingDraftOwnerId && meetingDraftOwnerId !== draftOwnerId) return;
+    if (meetingDraftDirty || transcript.trim() || notes.trim() || recording?.active) return;
+    workspaceJobIdRef.current = nextJobId;
+    if (nextJobId === selectedJobId) return;
+    setSelectedJobId(nextJobId);
+    setSelectedCandidateId("");
+    setLoadedMeetingId(null);
+    setMeetingDraftOwnerId("");
+    setTranscript(""); setNotes(""); setSegments([]); setSpeakers([]); setSpeakerLabels({});
+  }, [workspaceSelectedJob?.loxoJobId, workspaceSelectedJob?.id, selectedJobId, selectedCandidateId, meetingDraftOwnerId, draftOwnerId, meetingDraftDirty, transcript, notes, recording, savedLaunchId, savedMeetingReady, loadedMeetingId]);
   useEffect(() => {
     if (!recording?.active) return undefined;
     const activeRecording = recording;
@@ -285,7 +310,8 @@ export default function MeetingsWorkspace({ adapter = defaultAdapter, launchCont
   const saveDeviceDraft = async (context, text = transcriptRef.current, callNotes = notesRef.current) => {
     if (!String(text || "").trim() && !String(callNotes || "").trim()) return null;
     const ownerId = meetingDraftOwnerId || draftOwnerId;
-    if (!ownerId) throw new Error("Sign-in status is unavailable. Save this meeting before changing its candidate or job.");
+    if (!ownerId) throw new Error("Workbench could not reach your workspace. Reload the page, then save this meeting before changing its candidate or job.");
+    
     return saveLocalMeetingDraft({
       ownerId,
       jobId: context?.jobId || "",
@@ -320,7 +346,8 @@ export default function MeetingsWorkspace({ adapter = defaultAdapter, launchCont
     if (!meetingDraftDirty) return undefined;
     if (!transcript.trim() && !notes.trim()) return undefined;
     const ownerId = meetingDraftOwnerId || draftOwnerId;
-    if (!ownerId) { setLocalDraftError("Sign-in status is unavailable. Unsaved text is not being saved on this device."); return undefined; }
+    if (!ownerId) { setLocalDraftError("Workbench could not reach your workspace. Reload the page, then save this meeting draft on this device again."); return undefined; }
+    
     const timer = setTimeout(() => {
       saveDeviceDraft({ jobId: selectedJobId, candidateId: selectedCandidateId })
         .then((saved) => { if (saved) { setLocalDraftStatus("Unsaved meeting work is saved on this device only."); setLocalDraftError(""); } })
@@ -331,7 +358,7 @@ export default function MeetingsWorkspace({ adapter = defaultAdapter, launchCont
 
   const changeMeetingContext = async (field, value) => {
     if (meetingDraftOwnerId && meetingDraftOwnerId !== draftOwnerId) {
-      setLocalDraftError("Sign in to the account that owns this unsaved meeting before changing its candidate or job.");
+      setLocalDraftError("This unsaved meeting was recorded under a different workspace owner, so it can't be opened here. Its candidate or job was not changed.");
       return;
     }
     try {
@@ -353,7 +380,7 @@ export default function MeetingsWorkspace({ adapter = defaultAdapter, launchCont
     if (!savedMeetingReady) return;
     setError(""); setStatus(""); setSelectedEvent(event);
     if (meetingDraftOwnerId && meetingDraftOwnerId !== draftOwnerId) {
-      setError("Sign in to the account that owns this unsaved meeting before starting another recording.");
+      setError("This unsaved meeting was recorded under a different workspace owner, so it can't be opened here. Recording was not started.");
       return;
     }
     if (!isSecureRecordingContext()) {
@@ -458,7 +485,7 @@ export default function MeetingsWorkspace({ adapter = defaultAdapter, launchCont
   const saveDraft = async () => {
     if (!savedMeetingReady) { setError("Load the saved meeting successfully before editing or saving it."); return; }
     setError(""); setStatus(""); setNotesWarning("");
-    if (meetingDraftOwnerId && meetingDraftOwnerId !== draftOwnerId) { setError("This unsaved meeting belongs to the previous signed-in account. Sign in to that account to save or continue it."); return; }
+    if (meetingDraftOwnerId && meetingDraftOwnerId !== draftOwnerId) { setError("This unsaved meeting was recorded under a different workspace owner, so it can't be opened here."); return; }
     const jobForDraft = selectedJob || (recordingMetadata?.jobId ? { id: recordingMetadata.jobId, title: recordingMetadata.jobTitle } : null);
     const candidateForDraft = selectedCandidate || (recordingMetadata?.candidateId ? { id: recordingMetadata.candidateId, name: recordingMetadata.candidateName } : null);
     if (recordingMetadata?.jobId && String(recordingMetadata.jobId) !== String(jobForDraft?.id || "")) { setError("The recording belongs to a different job. Recover it without changing context."); return; }
@@ -521,7 +548,7 @@ export default function MeetingsWorkspace({ adapter = defaultAdapter, launchCont
   const exportTitle = selectedEvent?.title || (selectedCandidate ? `${selectedCandidate.name} meeting` : template.label);
 
   return <div className="flex flex-col gap-4" data-testid="meetings-workspace">
-    <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-lg font-semibold">Meetings</h2><p className="text-sm text-muted-foreground">Recordings, source transcripts, notes, and recruiting context.</p></div></div>
+    <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-lg font-semibold">Meetings</h2><p className="text-sm text-muted-foreground">Recordings, transcripts, notes, and recruiting context.</p></div>{calendarEnabled ? <Badge variant="outline">Google Calendar read-only</Badge> : null}</div>
     {error ? <div role="alert" className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">{error}</div> : null}
     {notesWarning ? <div role="alert" className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">{notesWarning}</div> : null}
     <div role="status" aria-atomic="true" className={status ? "rounded-md border border-emerald-700/30 bg-emerald-50 p-3 text-sm text-emerald-950" : "sr-only"}>{status}</div>
@@ -532,13 +559,13 @@ export default function MeetingsWorkspace({ adapter = defaultAdapter, launchCont
     {recoveryState.phase === "error" ? <div role="alert" className="flex flex-wrap items-center gap-2 rounded-md border border-destructive/30 p-3 text-sm"><span>{recoveryState.error}</span><Button type="button" size="sm" variant="outline" onClick={() => setRecoveryState((current) => ({ ...current, requestId: current.requestId + 1 }))}>Retry</Button></div> : null}
     {recoveryState.items.length ? <Card><CardHeader><CardTitle>Recovered audio on this device</CardTitle><CardDescription>These recordings were kept on this device after the recorder stopped or the tab closed. Recover one to play or download its audio.</CardDescription></CardHeader><CardContent className="grid gap-3">{recoveryState.items.map((item) => <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border p-3" key={item.id}><div className="min-w-0"><p className="break-words text-sm font-semibold">{item.candidateName || "Candidate"}{item.jobTitle ? ` · ${item.jobTitle}` : ""}</p><p className="text-xs text-muted-foreground">{item.startedAt ? new Date(item.startedAt).toLocaleString() : "Saved recording"} · Microphone only</p></div><Button className="h-auto min-h-9 whitespace-normal text-center" variant="outline" onClick={() => recoverSavedRecording(item.id)} disabled={Boolean(recoveringId) || Boolean(recording) || !savedMeetingReady}>{recoveringId === item.id ? "Recovering…" : "Recover recording"}</Button></div>)}</CardContent></Card> : null}
 
-    {calendar.phase === "ready" ? <Card><CardHeader><CardTitle>Calendar</CardTitle><CardDescription>Events come from the connected Google Calendar account.</CardDescription></CardHeader><CardContent>
+    {calendarEnabled ? <Card><CardHeader><CardTitle>Calendar</CardTitle><CardDescription>Events come from the connected Google Calendar account.</CardDescription></CardHeader><CardContent>
       {calendar.phase === "loading" ? <p className="text-sm text-muted-foreground">Loading meetings...</p> : null}
       {calendar.phase === "error" ? <Button variant="outline" onClick={loadCalendar}><RefreshCw size={14} /> Retry Calendar</Button> : null}
       {calendar.phase === "ready" ? <Tabs defaultValue="today"><TabsList><TabsTrigger value="today">Today</TabsTrigger><TabsTrigger value="upcoming">Upcoming</TabsTrigger><TabsTrigger value="past">Past</TabsTrigger></TabsList><TabsContent value="today"><EventList events={grouped.today} onRecord={beginRecording} /></TabsContent><TabsContent value="upcoming"><EventList events={grouped.upcoming} onRecord={beginRecording} /></TabsContent><TabsContent value="past"><EventList events={grouped.past} onRecord={beginRecording} /></TabsContent></Tabs> : null}
     </CardContent></Card> : null}
 
-    {meetingDraftOwnerId && meetingDraftOwnerId !== draftOwnerId ? <p className="rounded-md border border-amber-700/30 bg-amber-50 p-3 text-sm text-amber-950" role="alert">This unsaved meeting belongs to the previous signed-in account. It is saved on this device under that account and hidden until that account signs in again.</p> : <MeetingCaptureVariants launchContext={launchContext} recruiting={recruiting} selectedJob={selectedJob} selectedJobId={selectedJobId} setSelectedJobId={(value) => { void changeMeetingContext("job", value); }} selectedCandidate={selectedCandidate} selectedCandidateId={selectedCandidateId} setSelectedCandidateId={(value) => { void changeMeetingContext("candidate", value); }} recording={recording} beginRecording={beginRecording} finishRecording={finishRecording} recordedAudio={recordedAudio} selectedEvent={selectedEvent} transcribing={transcribing} includeSharedAudio={includeSharedAudio} setIncludeSharedAudio={setIncludeSharedAudio} transcript={transcript} setTranscript={(value) => { setMeetingDraftOwnerId((current) => current || draftOwnerId); setMeetingDraftDirty(true); setLocalDraftStatus("Keeping this unsaved meeting draft on this device…"); setTranscript(value); }} notes={notes} setNotes={(value) => { setMeetingDraftOwnerId((current) => current || draftOwnerId); setMeetingDraftDirty(true); setLocalDraftStatus("Keeping this unsaved meeting draft on this device…"); setNotes(value); }} segments={segments} speakers={speakers} speakerLabels={speakerLabels} onSpeakerLabelChange={renameSpeaker} saveDraft={saveDraft} />}
+    {meetingDraftOwnerId && meetingDraftOwnerId !== draftOwnerId ? <p className="rounded-md border border-amber-700/30 bg-amber-50 p-3 text-sm text-amber-950" role="alert">This unsaved meeting was recorded under a different workspace owner, so it can't be opened here.</p> : <MeetingCaptureVariants launchContext={launchContext} recruiting={recruiting} selectedJob={selectedJob} selectedJobId={selectedJobId} setSelectedJobId={(value) => { void changeMeetingContext("job", value); }} selectedCandidate={selectedCandidate} selectedCandidateId={selectedCandidateId} setSelectedCandidateId={(value) => { void changeMeetingContext("candidate", value); }} recording={recording} beginRecording={beginRecording} finishRecording={finishRecording} recordedAudio={recordedAudio} selectedEvent={selectedEvent} transcribing={transcribing} includeSharedAudio={includeSharedAudio} setIncludeSharedAudio={setIncludeSharedAudio} transcript={transcript} setTranscript={(value) => { setMeetingDraftOwnerId((current) => current || draftOwnerId); setMeetingDraftDirty(true); setLocalDraftStatus("Keeping this unsaved meeting draft on this device…"); setTranscript(value); }} notes={notes} setNotes={(value) => { setMeetingDraftOwnerId((current) => current || draftOwnerId); setMeetingDraftDirty(true); setLocalDraftStatus("Keeping this unsaved meeting draft on this device…"); setNotes(value); }} segments={segments} speakers={speakers} speakerLabels={speakerLabels} onSpeakerLabelChange={renameSpeaker} saveDraft={saveDraft} />}
 
     <section className="rounded-lg border bg-card p-4" aria-label="Meeting notes tab">
       <button type="button" aria-expanded={showLinkedNotes} onClick={() => setShowLinkedNotes((value) => !value)} className="min-h-11 rounded-md border px-3 text-sm font-semibold">Notes</button>

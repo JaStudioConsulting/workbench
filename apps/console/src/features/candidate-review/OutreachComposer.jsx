@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Check, Clipboard, ExternalLink, Loader2, Mail } from "lucide-react";
+import { Check, Clipboard, ExternalLink } from "lucide-react";
 import { Button } from "../../components/ui/button.tsx";
 import { Input } from "../../components/ui/input.tsx";
 import { Textarea } from "../../components/ui/textarea.tsx";
@@ -13,24 +13,21 @@ import {
 import {
   OUTREACH_TEMPLATES,
   buildMailto,
-  canSaveGmailDraft,
   pickRoleOptions,
   renderOutreach,
 } from "./outreachTemplates.js";
 import { copyText } from "./clipboard.js";
-import { getMailStatus, getProfile, logOutreach, province, saveGmailDraft } from "./externals.js";
+import { getProfile, logOutreach, province } from "./externals.js";
 
-// Outreach is always a draft. Copy, open in Mail, or save a Gmail draft. Ja sends it himself.
+// Outreach is always a draft. Copy or open in Mail. Ja sends it himself.
 export default function OutreachComposer({ open, onOpenChange, candidate, currentJob, jobs, onDrafted }) {
   const [templateId, setTemplateId] = useState(OUTREACH_TEMPLATES[0].id);
   const [roleId, setRoleId] = useState(currentJob ? String(currentJob.id) : "");
   const [signature, setSignature] = useState("");
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
-  const [busy, setBusy] = useState("");
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
-  const [draftAllowed, setDraftAllowed] = useState(true);
 
   const roles = useMemo(() => pickRoleOptions(currentJob, jobs, province), [currentJob, jobs]);
   const role = roles.find((item) => String(item.id) === String(roleId)) || currentJob || null;
@@ -46,10 +43,6 @@ export default function OutreachComposer({ open, onOpenChange, candidate, curren
       .then(() => getProfile())
       .then((profile) => active && setSignature(String(profile?.signature || "")))
       .catch(() => active && setSignature(""));
-    Promise.resolve()
-      .then(() => getMailStatus())
-      .then((status) => active && setDraftAllowed(canSaveGmailDraft(status)))
-      .catch(() => active && setDraftAllowed(false));
     return () => {
       active = false;
     };
@@ -103,26 +96,7 @@ export default function OutreachComposer({ open, onOpenChange, candidate, curren
     await record("mailto");
   };
 
-  const saveDraft = async () => {
-    setError("");
-    setNotice("");
-    setBusy("gmail");
-    try {
-      const result = await saveGmailDraft({ to: email, subject, body });
-      if (result?.ok) {
-        setNotice("Saved as a Gmail draft. Nothing was sent.");
-        await record("gmail_draft");
-      } else if (result?.reason === "no_scope") {
-        setDraftAllowed(false);
-      } else {
-        setError("Gmail draft was not saved. Use Copy or Open in Mail instead.");
-      }
-    } catch (caught) {
-      setError(caught?.message || "Gmail draft was not saved.");
-    } finally {
-      setBusy("");
-    }
-  };
+
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -183,11 +157,6 @@ export default function OutreachComposer({ open, onOpenChange, candidate, curren
           <Button type="button" variant="outline" onClick={openInMail} disabled={!email || !body.trim()}>
             <ExternalLink size={14} /> Open in Mail
           </Button>
-          {draftAllowed ? (
-            <Button type="button" onClick={saveDraft} disabled={busy === "gmail" || !email || !body.trim()}>
-              {busy === "gmail" ? <Loader2 size={14} className="animate-spin" /> : <Mail size={14} />} Save as Gmail draft
-            </Button>
-          ) : null}
         </div>
       </DialogContent>
     </Dialog>

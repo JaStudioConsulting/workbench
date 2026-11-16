@@ -263,6 +263,8 @@ test("server-rendered seeded HeaderSearch and Leads focus preserve unknown clien
     assert.match(searchHtml, /data-testid="search-result-job"[^>]*data-entity-id="501"/);
     assert.match(searchHtml, /data-testid="search-result-client"[^>]*data-entity-id="Apex Tooling"/);
     assert.match(searchHtml, /Apex Tooling/);
+    const visibleSearchText = searchHtml.replace(/<[^>]*>/g, " ");
+    assert.doesNotMatch(visibleSearchText, /\b(?:submission:30|sourcing:20)\b/);
     assert.match(searchHtml, /Presented to: Synthetic Client A/);
     assert.match(searchHtml, /Senior Program Manager<\/span> · Synthetic Client A · possible · title match/);
     assert.match(searchHtml, /Pending confirmation/);

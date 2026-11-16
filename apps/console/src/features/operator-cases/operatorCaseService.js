@@ -1,4 +1,5 @@
 import { supabase } from "../../supabase-client.js";
+import { invalidateReadCache } from "../../lib/readCache.js";
 
 export const operatorCasesEnabled = import.meta.env?.VITE_OPERATOR_CASES_ENABLED !== "0";
 
@@ -263,8 +264,10 @@ export async function openDailyCaseFromReviewAction(actionId, { client = supabas
 }
 
 export async function markDailyReviewActionReported(caseActionId, { client = supabase } = {}) {
-  return checked(client.rpc("complete_daily_review_action", { p_case_action_id: caseActionId }),
+  const result = await checked(client.rpc("complete_daily_review_action", { p_case_action_id: caseActionId }),
     "The Home action could not be recorded as user-reported in one transaction.");
+  invalidateReadCache("candidate-review:");
+  return result;
 }
 
 export async function reviewCaseArtifact(artifactId, reviewState, { client = supabase } = {}) {

@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import express from "express";
 import { registerAiRoutes } from "../src/ai-routes.js";
 
-async function request(app, method, path, { body, authenticated = true } = {}) {
+async function request(app, method, path, { body, authenticated = true, cookie, authorization } = {}) {
   const server = app.listen(0, "127.0.0.1");
   await new Promise((resolve) => server.once("listening", resolve));
   try {
@@ -11,7 +11,8 @@ async function request(app, method, path, { body, authenticated = true } = {}) {
     const response = await fetch(`http://127.0.0.1:${address.port}${path}`, {
       method,
       headers: {
-        ...(authenticated ? { authorization: "Bearer test" } : {}),
+        ...(authorization ? { authorization } : authenticated ? { authorization: "Bearer test" } : {}),
+        ...(cookie ? { cookie } : {}),
         ...(body === undefined ? {} : { "content-type": "application/json" }),
       },
       body: body === undefined ? undefined : JSON.stringify(body),
@@ -23,7 +24,7 @@ async function request(app, method, path, { body, authenticated = true } = {}) {
 }
 
 function authenticated(req, res, next) {
-  if (req.headers.authorization !== "Bearer test") return res.status(401).json({ error: { code: "UNAUTHORIZED", message: "Sign in required" } });
+  if (req.headers.authorization !== "Bearer test") return res.status(401).json({ error: { code: "UNAUTHORIZED", message: "A valid session is required" } });
   next();
 }
 

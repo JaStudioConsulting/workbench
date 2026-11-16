@@ -32,8 +32,8 @@ export async function makeCandidateNotes({ job, candidate, transcript, notes = "
   if (!jobDescription) throw new Error("Job source details are not available.");
   let token;
   try { token = await getAccessToken(); }
-  catch { throw new Error("Sign in again before preparing after-call drafts."); }
-  if (!token) throw new Error("Sign in again before preparing after-call drafts.");
+  catch { throw new Error("Workbench could not reach your workspace. Reload the page, then prepare after-call drafts again."); }
+  if (!token) throw new Error("Workbench could not reach your workspace. Reload the page, then prepare after-call drafts again.");
   let response;
   try {
     response = await fetchImpl(new URL("/api/workflows/after-call/prepare", baseURL), {
@@ -57,7 +57,7 @@ export async function makeCandidateNotes({ job, candidate, transcript, notes = "
     const messages = {
       AI_NOT_CONFIGURED: "After-call drafting is not available right now. Try again later.",
       AI_INVALID_OUTPUT: "The draft could not be checked against the source material. Review the sources and try again.",
-      UNAUTHORIZED: "Your sign-in expired. Sign in again, then retry.",
+      UNAUTHORIZED: "Your workspace session ended. Reload the page and try again.",
       FORBIDDEN: "This account cannot prepare after-call drafts.",
       INVALID_INPUT: "Check the candidate and job details, then try again.",
     };

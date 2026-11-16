@@ -64,6 +64,11 @@ export default function PeopleView({ candidates = [], currentJob, jobs = [], sub
   const [submittingId, setSubmittingId] = useState("");
   const [visibleLimit, setVisibleLimit] = useState(100);
   const focusedRowRef = useRef(null);
+  const editorTriggerRef = useRef(null);
+  const closeEditor = () => {
+    setEditorState(null);
+    globalThis.requestAnimationFrame?.(() => globalThis.requestAnimationFrame?.(() => editorTriggerRef.current?.focus()));
+  };
   const focusKey = parseCandidateSourceKey(focusCandidateId)?.id ?? null;
 
   useEffect(() => {
@@ -244,7 +249,8 @@ export default function PeopleView({ candidates = [], currentJob, jobs = [], sub
           <Button
             type="button"
             size="sm"
-            onClick={() => {
+            onClick={(event) => {
+              editorTriggerRef.current = event.currentTarget;
               setSaveNotice("");
               setEditorState({ mode: "create", candidate: null });
             }}
@@ -291,7 +297,7 @@ export default function PeopleView({ candidates = [], currentJob, jobs = [], sub
         ) : null}
 
         <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-          <Filter size={13} /> {filteredCandidates.length} shown {viewFilter === "submitted" ? <span>· filter by job, location, client, or date</span> : null}
+          <Filter size={13} /> {filteredCandidates.length.toLocaleString()} in list {viewFilter === "submitted" ? <span>· filter by job, location, client, or date</span> : null}
           {directoryLoading ? <span role="status" className="inline-flex items-center gap-1" data-testid="candidates-directory-loading"><Loader2 size={12} className="animate-spin" /> Loading candidates...</span> : null}
         </div>
       </div>
@@ -398,7 +404,7 @@ export default function PeopleView({ candidates = [], currentJob, jobs = [], sub
                     </div>
 
                     <div className="flex flex-wrap items-center gap-2 shrink-0">
-                      <Button type="button" size="sm" variant="outline" aria-expanded={notesCandidateId === candidate.id} onClick={(event) => { event.stopPropagation(); setNotesCandidateId((current) => current === candidate.id ? null : candidate.id); }} className="h-8 px-2.5 text-xs font-semibold">
+                      <Button type="button" size="sm" variant="outline" aria-expanded={notesCandidateId === candidate.id} aria-controls={`people-candidate-notes-${candidate.id}`} onClick={(event) => { event.stopPropagation(); setNotesCandidateId((current) => current === candidate.id ? null : candidate.id); }} className="h-8 px-2.5 text-xs font-semibold">
                         <NotebookText size={12} className="mr-1" /> Notes
                       </Button>
                       <Button type="button" size="sm" variant="outline" aria-expanded={boardCandidateId === candidate.id} onClick={(event) => { event.stopPropagation(); setBoardCandidateId((current) => current === candidate.id ? null : candidate.id); }} className="h-8 px-2.5 text-xs font-semibold">
@@ -408,7 +414,8 @@ export default function PeopleView({ candidates = [], currentJob, jobs = [], sub
                         type="button"
                         size="sm"
                         variant="outline"
-                        onClick={() => {
+                        onClick={(event) => {
+                          editorTriggerRef.current = event.currentTarget;
                           setSaveNotice("");
                           setEditorState({ mode: "edit", candidate });
                         }}
@@ -440,7 +447,7 @@ export default function PeopleView({ candidates = [], currentJob, jobs = [], sub
                     </div>
                   ) : null}
                   {notesCandidateId === candidate.id ? (
-                    <div className="mt-3" onClick={(event) => event.stopPropagation()}>
+                    <div id={`people-candidate-notes-${candidate.id}`} className="mt-3" onClick={(event) => event.stopPropagation()} data-testid="people-candidate-notes-panel">
                       <Suspense fallback={<p className="text-sm text-muted-foreground">Loading notes editor…</p>}>
                         <NotesPanel subjectType="candidate" subjectId={candidate.id} defaultTitle={candidate.name} />
                       </Suspense>
@@ -465,9 +472,10 @@ export default function PeopleView({ candidates = [], currentJob, jobs = [], sub
       {writeUpCandidate ? <CandidateWriteUpDialog candidate={writeUpCandidate} currentJob={currentJob} open onOpenChange={(open) => !open && setWriteUpCandidate(null)} /> : null}
       <CandidateEditorDialog
         open={Boolean(editorState)}
-        onOpenChange={(open) => !open && setEditorState(null)}
+        onOpenChange={(open) => !open && closeEditor()}
         mode={editorState?.mode || "create"}
         candidate={editorState?.candidate || null}
+        finalFocus={() => editorTriggerRef.current}
         onSaved={(savedRecord) => {
           if (savedRecord) {
             setSaveNotice(

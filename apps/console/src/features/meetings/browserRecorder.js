@@ -86,7 +86,7 @@ export function meetingRecordingFilename(blob) {
 export function meetingRecordingErrorMessage(error) {
   const message = String(error?.message || "");
   if (error?.code === "INSECURE_CONTEXT" || /secure context|requires https/i.test(message)) {
-    return "Recording needs the secure Workbench address. Open the Tailscale HTTPS link, then try again.";
+    return "Recording needs a secure Workbench address. Open Workbench on this Mac, then try again.";
   }
   if (/screencapturekit|screen.*record|system audio|declined tcc/i.test(message)) {
     return "Mac call-audio permission is blocked. In System Settings, allow Screen & System Audio Recording for Workbench, then try again.";
@@ -278,7 +278,7 @@ export async function saveLocalMeetingDraft(draft, { indexedDBImpl = globalThis.
   const ownerId = normalizeDraftIdentity(draft?.ownerId);
   const jobId = normalizeDraftIdentity(draft?.jobId);
   const candidateId = normalizeDraftIdentity(draft?.candidateId);
-  if (!ownerId) throw new Error("A verified account is required to keep an unsaved draft on this device.");
+  if (!ownerId) throw new Error("Workbench could not reach your workspace. Reload the page, then try saving this draft again.");
   if (!indexedDBImpl?.open) throw new Error("This browser cannot keep an unsaved meeting draft after you close the page.");
   const saved = {
     id: localMeetingDraftId(ownerId, jobId, candidateId),
@@ -469,7 +469,7 @@ export async function startBrowserRecording({
     error.code = "INSECURE_CONTEXT";
     throw error;
   }
-  if (!String(ownerId || "").trim()) throw new Error("Sign in before starting a recording that can be recovered on this device.");
+  if (!String(ownerId || "").trim()) throw new Error("Workbench could not reach your workspace. Reload the page, then start a recording again.");
   if (!mediaDevices?.getUserMedia) throw new Error("This browser cannot record meetings.");
   const format = selectWorkbenchRecordingFormat(MediaRecorderImpl);
   const canRecordWav = typeof AudioContextImpl === "function"

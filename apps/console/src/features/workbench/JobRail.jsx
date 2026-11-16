@@ -21,14 +21,14 @@ function JobList({ jobs, selectedJob, onSelectJob, disabled, candidateDataAvaila
         >
           <span className="flex items-start justify-between gap-2">
             <span className="min-w-0">
-              <span className="block truncate text-sm font-semibold">{job.title}</span>
-              <span className="block truncate text-xs text-muted-foreground">{job.company}</span>
+              <span className="block whitespace-normal break-words text-sm font-semibold">{job.title}</span>
+              <span className="block whitespace-normal break-words text-xs text-muted-foreground">{job.company}</span>
             </span>
             {candidateDataAvailable ? <Badge variant="outline" className="shrink-0">{job.candidateCount}</Badge> : null}
           </span>
           {!candidateDataAvailable ? <span className="mt-2 block text-[11px] text-muted-foreground">Stage counts unavailable</span> : stageCounts.length ? <span className="mt-2 flex flex-wrap gap-1" aria-label="Nonzero stage counts">
             {stageCounts.map(([stage, count]) => <span key={stage} className="rounded border bg-muted/40 px-1.5 py-0.5 text-[11px] text-muted-foreground">{stage} <strong className="text-foreground">{count}</strong></span>)}
-          </span> : <span className="mt-2 block text-[11px] text-muted-foreground">No candidates</span>}
+          </span> : job.candidateCount === 0 ? <span className="mt-2 block text-[11px] text-muted-foreground">No candidates</span> : null}
         </button>
       </li>;
     })}
@@ -55,10 +55,10 @@ export default function JobRail({ selectedJob, onSelectJob, onOpenMap, onOpenPro
   return <aside className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden rounded-xl border bg-card" aria-label="Jobs and recruiting tools" data-testid="job-rail">
     <div className="border-b p-3">
       <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Jobs</p>
-      <div className="mt-3 grid grid-cols-3 gap-1.5">
-        <Button type="button" size="sm" variant="outline" className="min-w-0 px-2" disabled={disabled} title={disabled ? "Stop the active recording before opening the map" : undefined} onClick={onOpenMap}><Map size={14} /><span className="truncate">Map</span></Button>
-        <Button type="button" size="sm" variant="outline" className="min-w-0 px-2" disabled={disabled} title={disabled ? "Stop the active recording before opening Process" : undefined} onClick={onOpenProcess}><GitBranch size={14} /><span className="truncate">Process</span></Button>
-        <Button type="button" size="sm" variant="outline" className="min-w-0 px-2" disabled={disabled} title={disabled ? "Stop the active recording before opening Leads" : undefined} onClick={onOpenLeads}><UsersRound size={14} /><span className="truncate">Leads</span></Button>
+      <div className="mt-3 flex flex-wrap gap-1.5">
+        <Button type="button" size="sm" variant="outline" className="shrink-0 px-2" disabled={disabled} title={disabled ? "Stop the active recording before opening the map" : undefined} onClick={onOpenMap}><Map size={14} className="shrink-0" /><span>Map</span></Button>
+        <Button type="button" size="sm" variant="outline" className="shrink-0 px-2" disabled={disabled} title={disabled ? "Stop the active recording before opening Process" : undefined} onClick={onOpenProcess}><GitBranch size={14} className="shrink-0" /><span>Process</span></Button>
+        <Button type="button" size="sm" variant="outline" className="shrink-0 px-2" disabled={disabled} title={disabled ? "Stop the active recording before opening Leads" : undefined} onClick={onOpenLeads}><UsersRound size={14} className="shrink-0" /><span>Leads</span></Button>
       </div>
     </div>
     <div className="min-h-0 flex-1 overflow-auto p-3">

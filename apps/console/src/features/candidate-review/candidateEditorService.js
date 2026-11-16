@@ -16,6 +16,7 @@ import {
 } from "@ja/shared-types";
 import { gatewayBaseURL } from "../../auth-client.js";
 import { supabase } from "../../supabase-client.js";
+import { invalidateReadCache, readThroughCache, scopedReadKey } from "../../lib/readCache.js";
 
 const UI_PLACEHOLDER_VALUES = new Set([
   "Unnamed candidate",
@@ -163,6 +164,7 @@ function storeCandidateRecordList(records) {
 }
 
 export function _resetCandidateEditorStoreForTesting() {
+  invalidateReadCache("candidate-directory:");
   candidateRecordsById.clear();
   storeListeners.clear();
   cachedOwnerId = null;
@@ -206,7 +208,7 @@ export async function getSupabaseCandidateAccessToken({ client = supabase } = {}
   if (error || !data?.session?.access_token) {
     syncCacheOwner(null);
     throw Object.assign(
-      new Error("Sign in with Supabase to view or edit candidates."),
+      new Error("Workbench could not reach your workspace. Reload the page, then view or edit candidates again."),
       { code: "UNAUTHORIZED", status: 401 },
     );
   }
@@ -214,7 +216,7 @@ export async function getSupabaseCandidateAccessToken({ client = supabase } = {}
   const accessToken = String(data.session.access_token).trim();
   if (!accessToken) {
     throw Object.assign(
-      new Error("Sign in with Supabase to view or edit candidates."),
+      new Error("Workbench could not reach your workspace. Reload the page, then view or edit candidates again."),
       { code: "UNAUTHORIZED", status: 401 },
     );
   }
@@ -285,7 +287,7 @@ export function describeCandidateProvenance(candidateOrRecord, { mode = "edit" }
       hasOverlay: false,
       badgeLabel: "Manual record",
       sourceLabel: SOURCE_LABELS.manual,
-      description: "Creates a manual candidate record in public.candidates_manual.",
+      description: "Adds a candidate you enter by hand.",
       editableFields: MANUAL_CANDIDATE_EDITABLE_FIELDS,
     });
   }
@@ -344,7 +346,7 @@ export function describeCandidateProvenance(candidateOrRecord, { mode = "edit" }
     hasOverlay: Boolean(editedAt),
     badgeLabel: editedAt ? "Imported overlay (edited)" : `${sourceLabel} (imported)`,
     sourceLabel,
-    description: `Saves an owner overlay on ${parsedKey.tracker_source}${trackerRow ? ` row #${trackerRow}` : ""} without modifying the imported Tracker table. Clearing a field writes null over the imported value.`,
+    description: "Your edits are saved on top of the imported record. The original import is not changed. Clearing a field hides the imported value.",
     editableFields: TRACKER_CANDIDATE_OVERLAY_FIELDS,
   });
 }
@@ -628,14 +630,26 @@ export async function listCandidates(
 }
 
 export async function loadCandidateDirectory(options = {}) {
-  const pageSize = 500;
-  const records = [];
-  for (let offset = 0; offset <= 10_000; offset += pageSize) {
-    const page = await listCandidates({ limit: pageSize, offset }, options);
-    records.push(...page);
-    if (page.length < pageSize) return records;
-  }
-  throw new Error("Candidate directory exceeds the supported page range");
+  const { force = false } = options;
+  const scope = options.client || supabase;
+  return readThroughCache(scopedReadKey("candidate-directory", scope), async () => {
+    const pageSize = 500;
+    const records = [];
+    for (let offset = 0; offset <= 10_000; offset += pageSize) {
+      const page = await listCandidates({ limit: pageSize, offset }, options);
+      records.push(...page);
+      if (page.length < pageSize) return records;
+    }
+    throw new Error("Candidate directory exceeds the supported page range");
+  }, { force });
+}
+
+function invalidateCandidateReadCaches() {
+  invalidateReadCache("candidate-directory:");
+  invalidateReadCache("candidate-review:");
+  invalidateReadCache("process:stage-counts:");
+  invalidateReadCache("process:candidate-evidence:");
+  invalidateReadCache("home:");
 }
 
 export async function getCandidateById(
@@ -694,7 +708,9 @@ export async function createCandidate(
   }
 
   const parsed = CandidateResponseSchema.parse(payload);
-  return storeCandidateRecord(parsed.candidate);
+  const saved = storeCandidateRecord(parsed.candidate);
+  invalidateCandidateReadCaches();
+  return saved;
 }
 
 export async function updateCandidate(
@@ -736,7 +752,9 @@ export async function updateCandidate(
   }
 
   const parsed = CandidateResponseSchema.parse(payload);
-  return storeCandidateRecord(parsed.candidate);
+  const saved = storeCandidateRecord(parsed.candidate);
+  invalidateCandidateReadCaches();
+  return saved;
 }
 
 function computeInitials(name) {
