@@ -73,7 +73,7 @@ function EventList({ events, onRecord }) {
   })}</div>;
 }
 
-export default function MeetingsWorkspace({ adapter = defaultAdapter, launchContext = null, onLaunchChange }) {
+export default function MeetingsWorkspace({ adapter = defaultAdapter, launchContext = null, selectedJob: workspaceSelectedJob = null, onLaunchChange }) {
   const launchJobId = String(launchContext?.job?.id || "");
   const launchCandidateId = String(launchContext?.candidate?.id || "");
   const savedLaunchId = launchContext?.phase === "saved" ? String(launchContext.meeting?.id || "") : "";
@@ -173,7 +173,15 @@ export default function MeetingsWorkspace({ adapter = defaultAdapter, launchCont
     return () => { active = false; authListener?.subscription?.unsubscribe?.(); };
   }, []);
   useEffect(() => {
+    if (savedLaunchId && !savedMeetingReady) return;
     const nextJobId = String(workspaceSelectedJob?.loxoJobId || workspaceSelectedJob?.id || "");
+    if (savedLaunchId && loadedMeetingId === savedLaunchId) {
+      if (!selectedJobId && !selectedCandidateId && nextJobId) {
+        workspaceJobIdRef.current = nextJobId;
+        setSelectedJobId(nextJobId);
+      }
+      return;
+    }
     if (!nextJobId || nextJobId === workspaceJobIdRef.current) return;
     if (meetingDraftOwnerId && meetingDraftOwnerId !== draftOwnerId) return;
     if (meetingDraftDirty || transcript.trim() || notes.trim() || recording?.active) return;
@@ -184,7 +192,7 @@ export default function MeetingsWorkspace({ adapter = defaultAdapter, launchCont
     setLoadedMeetingId(null);
     setMeetingDraftOwnerId("");
     setTranscript(""); setNotes(""); setSegments([]); setSpeakers([]); setSpeakerLabels({});
-  }, [workspaceSelectedJob?.loxoJobId, workspaceSelectedJob?.id, selectedJobId, meetingDraftOwnerId, draftOwnerId, meetingDraftDirty, transcript, notes, recording]);
+  }, [workspaceSelectedJob?.loxoJobId, workspaceSelectedJob?.id, selectedJobId, selectedCandidateId, meetingDraftOwnerId, draftOwnerId, meetingDraftDirty, transcript, notes, recording, savedLaunchId, savedMeetingReady, loadedMeetingId]);
   useEffect(() => {
     if (!recording?.active) return undefined;
     const activeRecording = recording;

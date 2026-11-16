@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { CalendarDays, FileCheck2, FileText, Mail, RefreshCw, Users, Megaphone } from "lucide-react";
+import { CalendarDays, FileCheck2, FileText, Mail, RefreshCw, TimerReset, Users, Megaphone } from "lucide-react";
 import { Button } from "../../components/ui/button.tsx";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../components/ui/card.tsx";
 import { Label } from "../../components/ui/label.tsx";
@@ -9,6 +9,7 @@ import { listMpcCandidates, loadHomeData, waitingAgeLabel } from "./homeService.
 import { loadMpcCaseForCandidate, openMpcCase } from "../operator-cases/mpcService.js";
 import MpcIntakeForm from "../operator-cases/MpcIntakeForm.jsx";
 import { calendarEnabled } from "../../featureFlags.js";
+import { UpcomingCalendar } from "../../components/UpcomingCalendar.jsx";
 
 function WorkList({ title, description, icon: Icon, items, empty, onOpen, renderItem, error, onRetry }) {
   return (
