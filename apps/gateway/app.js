@@ -14,6 +14,7 @@ import { registerSearchRoutes } from "./src/search-routes.js";
 import { registerTrackerImportRoutes } from "./src/tracker-import-routes.js";
 import { createSupabaseRecruiterAccess } from "./src/supabase-recruiter-auth.js";
 import { registerBrandedResumeEditRoutes } from "./src/branded-resume-edit-routes.js";
+import { registerResumeFormatRoutes } from "./src/resume-format-routes.js";
 import { getLocalSessionAvailability, registerLocalSessionRoute } from "./src/local-session.js";
 
 function respondError(res, code, message, status = 503) {
@@ -32,7 +33,7 @@ export function createCorsGuard(env) {
       "Access-Control-Allow-Credentials": "true",
       "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
       "Access-Control-Allow-Headers": "Content-Type, Authorization, Mcp-Protocol-Version, Mcp-Session-Id",
-      "Access-Control-Expose-Headers": "Mcp-Session-Id",
+      "Access-Control-Expose-Headers": "Mcp-Session-Id, Content-Disposition",
       Vary: "Origin",
     });
     if (req.method === "OPTIONS") return res.status(204).end();
@@ -115,6 +116,8 @@ export async function createApp({
   app.use("/api/operator-cases", express.json({ limit: "2mb" }));
   app.use("/api/documents", express.json({ limit: "29mb" }));
   app.use("/api/automation", express.json({ limit: "2mb" }));
+  // Resume text to format: at most 200,000 characters, plus JSON escaping.
+  app.use("/api/resume-format", express.json({ limit: "1mb" }));
   app.use(express.json({ limit: "128kb" }));
   app.get("/healthz", (_req, res) => res.json({ ok: true, service: "recruiting-workbench-gateway" }));
   // This release has no AI execution path, regardless of installed credentials.
@@ -133,6 +136,7 @@ export async function createApp({
   const supabaseRecruiterAccess = createSupabaseRecruiterAccess({ env, fetchImpl: candidateFetch });
   registerAutomationRoutes(app, { access: supabaseRecruiterAccess, env, fetchImpl: candidateFetch || globalThis.fetch });
   registerBrandedResumeEditRoutes(app, { access: supabaseRecruiterAccess, env, fetchImpl: candidateFetch || globalThis.fetch });
+  registerResumeFormatRoutes(app, { access: supabaseRecruiterAccess });
   app.get("/api/meetings/status", supabaseRecruiterAccess, async (_req, res) => {
     res.set("Cache-Control", "private, no-store");
     return res.json({
