@@ -8,6 +8,7 @@ import { LOXO_PIPELINE_STAGES, RESUME_INDICATOR_STATES } from "./constants.js";
 import { getOwnershipStatus } from "./brandResume.js";
 import { enrichCandidatesWithPresentations } from "./candidateReviewService.js";
 import CandidateWriteUpDialog from "./CandidateWriteUpDialog.jsx";
+import BrandedResumeControl from "./BrandedResumeControl.jsx";
 import CandidateEditorDialog from "./CandidateEditorDialog.jsx";
 import CandidatePresentationSummary, {
   CandidatePresentationBadges,
@@ -421,6 +422,7 @@ export default function PeopleView({ candidates = [], currentJob, jobs = [], sub
                       ) : (
                         <>
                           <button type="button" disabled={!candidate.phone} onClick={() => onStartCandidateCall?.({ job: currentJob, candidate })} className="inline-flex h-8 items-center rounded-md border bg-background px-3 text-xs font-semibold hover:bg-muted disabled:pointer-events-none disabled:opacity-50"><Phone size={13} className="mr-1.5" />Call</button>
+                          <BrandedResumeControl compact text={candidate.fullResumeText} candidateName={candidate.name} />
                           <Button type="button" size="sm" variant="outline" className="h-8 text-xs" onClick={() => setWriteUpCandidate(candidate)}><NotebookText size={13} className="mr-1.5" />Write-up</Button>
                           <Button type="button" size="sm" variant="outline" className="h-8 text-xs" onClick={() => setOutreachCandidate(candidate)}><Mail size={13} className="mr-1.5" />Outreach</Button>
                           <Button type="button" size="sm" className="h-8 bg-blue-700 text-xs text-white hover:bg-blue-800" disabled={submittingId === candidate.id} onClick={() => markSubmitted(candidate)}>{submittingId === candidate.id ? <Loader2 size={13} className="mr-1.5 animate-spin" /> : <Send size={13} className="mr-1.5" />}Mark submitted</Button>

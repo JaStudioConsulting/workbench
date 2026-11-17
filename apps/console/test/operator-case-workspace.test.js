@@ -57,7 +57,8 @@ test("case workspace exposes review controls but no execution control", async ()
   assert.match(source, /Ready for manual entry/);
   assert.match(source, /identityReviewRequired/);
   assert.doesNotMatch(source, /Download resume PDF|downloadWorkflowResumePdf|Retry PDF export/);
-  assert.match(source, /Document output is not set up yet\./);
+  assert.doesNotMatch(source, /Document output is not set up yet\./);
+  assert.match(source, /<BrandedResumeControl /);
   assert.match(source, /updateMpcArtifact/);
   assert.match(source, /if \(state\.data\.record\.case_type === "mpc"\) return updateMpcArtifact/);
   assert.match(source, /Earlier saved versions/);

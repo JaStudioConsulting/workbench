@@ -9,6 +9,7 @@ import ActivityTrail from "./ActivityTrail.jsx";
 import LogActivityForm from "./LogActivityForm.jsx";
 import AlsoFitsDialog from "./AlsoFitsDialog.jsx";
 import CandidateWriteUpDialog from "./CandidateWriteUpDialog.jsx";
+import BrandedResumeControl from "./BrandedResumeControl.jsx";
 import CandidateEditorDialog from "./CandidateEditorDialog.jsx";
 import CandidatePresentationSummary, {
   CandidatePresentationBadges,
@@ -474,6 +475,8 @@ export default function CandidateCard({
         <Button type="button" variant="outline" onClick={() => { markDone("write-up"); setShowWriteUp(true); }} className="h-10 text-xs font-semibold">
           <NotebookText size={15} className="mr-1.5" /> Write-up
         </Button>
+
+        <BrandedResumeControl text={candidate.fullResumeText} candidateName={candidate.name} className="w-full" />
 
         {resumeSource.kind === "profile" ? (
           <Badge variant="outline" className="text-[10px]" title={`Sources: ${(resumeSource.usedSources || []).join(", ")}`}>

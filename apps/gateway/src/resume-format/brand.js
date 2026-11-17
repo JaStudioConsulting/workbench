@@ -3,7 +3,7 @@
 // margins" page rules and the locked styles) unless marked "default".
 //
 // Fixed elements the generated files add around the candidate's own words:
-//   1. The firm logo image (apps/gateway/assets/tttg_logo.png), centred at the top of
+//   1. The firm logo image (apps/console/public/assets/tttg_logo.png), centred at the top of
 //      page 1. Image alt text: "Top Tier Talent Group" (from the previous template's
 //      alt attribute; it is not printed).
 //   2. A page number (digits only, centred in the bottom margin). DEFAULT: the previous
@@ -16,6 +16,8 @@ import path from "node:path";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const assets = path.resolve(here, "../../assets");
+// The firm logo is the console's approved asset; it is not copied a second time.
+const logoFile = path.resolve(here, "../../../console/public/assets/tttg_logo.png");
 
 export const BRAND = Object.freeze({
   firmName: "Top Tier Talent Group", // used for the file name and logo alt text only
@@ -27,7 +29,7 @@ export const BRAND = Object.freeze({
     italic: path.join(assets, "fonts/Arimo_400Regular_Italic.ttf"),
     boldItalic: path.join(assets, "fonts/Arimo_700Bold_Italic.ttf"),
   }),
-  logoFile: path.join(assets, "tttg_logo.png"),
+  logoFile,
   logoWidthPt: 176.25, // 235px in the previous template
   logoSpaceAfterPt: 7.5, // 10px
   logoAltText: "Top Tier Talent Group",

@@ -4,12 +4,16 @@ import { fileURLToPath } from "node:url";
 import { createHash } from "node:crypto";
 
 const ignored = new Set([".git", "node_modules", ".pnpm-store", ".temp", "dist", "coverage", ".vercel", ".build", ".swiftpm"]);
-const forbiddenAssets = /\.(avif|gif|heic|jpe?g|pdf|png|svg|webp|docx|xlsx|csv)$/i;
+const forbiddenAssets = /\.(avif|gif|heic|jpe?g|pdf|png|svg|webp|docx|xlsx|csv|ttf|otf|woff2?)$/i;
 const approvedAssets = new Map([
   ["apps/console/public/assets/tttg_logo.png", "ecad1061bb94c2a11d901b6a6b900d2411a3ce0874806307d3bc4dca7421f055"],
   ["apps/console/public/icons/workbench-icon.svg", "9e6284903fbab5db6072500f7cb7233fee19fc1cbe059971c7cb77dce61fe6eb"],
   ["apps/console/public/icons/apple-touch-icon.png", "3f571628fb1a18741e127b1b5d7301cd7f5431bf80de79e9f0a06fd8bb234cee"],
   ["apps/console/public/icons/workbench-icon-192.png", "4d5dd153461403837660609671a1c8e7c089fc5359946a6ca96f5e587d77e99a"],
+  ["apps/gateway/assets/fonts/Arimo_400Regular.ttf", "88cc899855d30f9c779b73c3319d0e077b098f927187aafce11ca029add707a6"],
+  ["apps/gateway/assets/fonts/Arimo_400Regular_Italic.ttf", "6bd2c6a6fa87f4566cf0a92c5834884597acbd7be9719e550837865ac4167a42"],
+  ["apps/gateway/assets/fonts/Arimo_700Bold.ttf", "ec96ac9fdd94766f66f6140c1375bf011577558f88d43f76b3b59307d2a6bca3"],
+  ["apps/gateway/assets/fonts/Arimo_700Bold_Italic.ttf", "b42b19c10bf5d526f00068303a643282c3df55a79c6fa2eea80b4a078a4a705a"],
   ["apps/console/public/icons/workbench-icon-512.png", "3a0ecbce34e1cfecfb194bb59fbf407bd21dc5343cecd9bd6d487ce8162d8a29"],
 ]);
 const credentialFiles = new Set([".npmrc", ".netrc", ".pypirc", ".env"]);
