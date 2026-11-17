@@ -65,7 +65,7 @@ EXPERIENCE
 Duties:
 1. Plan the weekly schedule
 2) Order consumables
-3. Review the safety log
+4. Review the safety log
    * nested star item
 
 Closing note after the list.`;
@@ -119,6 +119,27 @@ const awkward = [
   "Last line.",
 ].join("\r\n");
 
+const numbers = `Quinn Parker
+
+PROCESS STEPS
+1. First step
+2. Second step
+4. Fourth step after a gap
+7) Seventh with a bracket
+7) Seventh again
+1) Restart with a bracket
+1) And a repeat
+  10. Nested ten
+  3. Nested three`;
+
+const proseNumbers = `Sky Nolan
+
+TIMELINE
+2019. Moved to Toronto
+1. 5 years in sales
+2. A lone numbered line that is prose
+Closing words.`;
+
 const long = longResume();
 
 export const FIXTURES = [
@@ -140,9 +161,9 @@ Cut scrap by 11%
 nested dash item under the bullets
 second nested item that continues on an indented line
 Duties:
-Plan the weekly schedule
-Order consumables
-Review the safety log
+1. Plan the weekly schedule
+2) Order consumables
+4. Review the safety log
 nested star item
 Closing note after the list.`,
   },
@@ -170,11 +191,23 @@ Platform Engineer
 Built the pipeline
 Wrote runbooks for the team wiki
 Kept notes at docs
-First step
-Second step
+1. First step
+2. Second step
 npm run test
 Final line with an unclosed **star and a snake_case_word.`,
     markdownFixture: true,
+  },
+  {
+    name: "typed numbers kept: skipped, repeated and bracket-delimited",
+    input: numbers,
+    expected: numbers,
+    expectMarkers: ["1.", "2.", "4.", "7)", "7)", "1)", "1)", "10.", "3."],
+  },
+  {
+    name: "numbers in prose stay prose with the number kept",
+    input: proseNumbers,
+    expected: proseNumbers,
+    expectMarkers: [],
   },
   { name: "very long resume over several pages", input: long.input, expected: long.expected, minPages: long.minPages },
   {

@@ -4,9 +4,9 @@ import { buildResumeModel, ResumeFormatError } from "./model.js";
 import { renderResumePdf } from "./pdf.js";
 
 export { ResumeFormatError, buildResumeModel, modelWords, NO_TEXT_MESSAGE, MAX_RESUME_CHARS } from "./model.js";
-export { layoutResume, renderResumePdf } from "./pdf.js";
+export { layoutResume, renderResumePdf, expectedPdfWords, isCapsBlock } from "./pdf.js";
 export { renderResumeDocx } from "./docx.js";
-export { BRAND, FIXED_ELEMENTS } from "./brand.js";
+export { BRAND, FIXED_ELEMENTS, upperForDisplay } from "./brand.js";
 
 export const FORMATS = Object.freeze({
   pdf: Object.freeze({ extension: "pdf", mimeType: "application/pdf" }),

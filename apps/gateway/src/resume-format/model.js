@@ -16,9 +16,15 @@
 //   R4  A line of only "-", "*", "_" or "=" (three or more, spaces allowed) is a rule.
 //   R5  A line starting with one of - * + or a bullet character (see BULLET_CHARS)
 //       followed by a space and more text is a bullet item. The marker is removed.
-//   R6  A line starting with 1-3 digits, "." or ")", a space and text is a numbered
-//       item. The marker is removed; the list is numbered by the document, starting
-//       at the first number in the text.
+//   R6  Numbered item (list rather than prose). A line is a numbered item only when ALL
+//       hold: it starts with 1 or 2 digits, then "." or ")", then a space; the text after
+//       it starts with a letter or an opening quote, bracket or parenthesis (so
+//       "1. 5 years in sales" is prose); and another numbered line sits in the same
+//       list area (a lone "2. Moved to Toronto" is prose). The list area runs across
+//       blank lines, bullet lines and indented lines, and stops at any other line.
+//       Anything else (for example "2019. Moved to Toronto") is body text with its
+//       number kept. The typed number and its delimiter are CONTENT: they are shown
+//       exactly as typed ("1.", "1)", "4." after "2.") and are never renumbered.
 //   R7  List nesting: marker indent of 0-1 spaces is level 0, 2-5 is level 1, 6+ is
 //       level 2 (a tab counts as 4 spaces).
 //   R8  A non-list line indented at least 2 spaces directly under a list item
@@ -56,7 +62,8 @@ export const NO_TEXT_MESSAGE = "There is no resume text to format. Add or paste 
 
 const BULLET_CHARS = "•·▪▫◦●○■□►‣⁃∙";
 const BULLET_RE = new RegExp(`^([ \\t]*)([-*+${BULLET_CHARS}])[ \\t\\u00A0]+(\\S.*)$`, "u");
-const NUMBER_RE = /^([ \t]*)(\d{1,3})[.)][ \t\u00A0]+(\S.*)$/u;
+const NUMBER_RE = /^([ \t]*)(\d{1,2}[.)])[ \t\u00A0]+(\S.*)$/u;
+const ITEM_TEXT_START_RE = /^[\p{L}"'“‘(\[]/u;
 const MD_HEADING_RE = /^ {0,3}(#{1,6})[ \t\u00A0]+(.*)$/u;
 const RULE_RE = /^[ \t]*([-*_=])(?:[ \t]*\1){2,}[ \t]*$/u;
 const FENCE_RE = /^[ \t]*(?:`{3,}|~{3,})[^`]*$/u;
@@ -206,9 +213,30 @@ function classify(rawLine, insideFence) {
   if (bullet) return { kind: "bullet", indent: indentWidth(bullet[1]), text: bullet[3].replace(WS_RUN_RE, " ").trim() };
   const numbered = NUMBER_RE.exec(rawLine);
   if (numbered) {
-    return { kind: "number", indent: indentWidth(numbered[1]), number: Number(numbered[2]), text: numbered[3].replace(WS_RUN_RE, " ").trim() };
+    const text = numbered[3].replace(WS_RUN_RE, " ").trim();
+    // Only a candidate until the list-area check below confirms it.
+    if (ITEM_TEXT_START_RE.test(text)) return { kind: "number", indent: indentWidth(numbered[1]), marker: numbered[2], text, raw: rawLine };
   }
   return { kind: "text", indent: indentWidth(rawLine), text: rawLine.replace(WS_RUN_RE, " ").trim() };
+}
+
+// A numbered candidate is a list item only when another candidate is in the same list
+// area. Otherwise it is prose and keeps its number as typed.
+function confirmNumberedItems(infos) {
+  const skippable = (info) => info.kind === "blank" || info.kind === "bullet"
+    || (info.kind === "text" && info.indent >= 2);
+  const hasNeighbour = (from, step) => {
+    for (let k = from + step; k >= 0 && k < infos.length; k += step) {
+      if (infos[k].kind === "number") return true;
+      if (!skippable(infos[k])) return false;
+    }
+    return false;
+  };
+  return infos.map((info, index) => {
+    if (info.kind !== "number") return info;
+    if (hasNeighbour(index, 1) || hasNeighbour(index, -1)) return info;
+    return { kind: "text", indent: info.indent, text: info.raw.replace(WS_RUN_RE, " ").trim() };
+  });
 }
 
 const wordsOf = (text) => text.split(/\s+/u).filter(Boolean);
@@ -255,26 +283,32 @@ export function buildResumeModel(input) {
   let previousKind = "start"; // start | blank | text | list | heading | rule
   let lastItem = null;
   let lastParagraph = null;
-  let numberState = []; // numbering reference per list level
 
   const nextNonBlankExists = (from) => {
     for (let k = from + 1; k < lines.length; k += 1) if (lines[k].raw.trim()) return true;
     return false;
   };
   const breakFlow = (kind) => { previousKind = kind; lastItem = null; lastParagraph = null; };
-  let listRefCounter = 0;
+
+  // Classify every line first (fence state is sequential), then confirm numbered items.
+  const classified = [];
+  let fenceOpen = false;
+  for (const entry of lines) {
+    const info = classify(entry.raw, fenceOpen);
+    if (info.kind === "fence") fenceOpen = !fenceOpen;
+    classified.push(info);
+  }
+  const infos = confirmNumberedItems(classified);
 
   for (const entry of lines) {
-    const info = classify(entry.raw, insideFence);
+    const info = infos[entry.index];
     if (info.kind === "fence") {
       insideFence = !insideFence;
       breakFlow("blank");
-      numberState = [];
       continue;
     }
     if (info.kind === "blank") {
       breakFlow("blank");
-      numberState = [];
       continue;
     }
     if (info.kind === "code") {
@@ -290,7 +324,6 @@ export function buildResumeModel(input) {
     if (info.kind === "rule") {
       blocks.push({ type: "rule" });
       breakFlow("rule");
-      numberState = [];
       continue;
     }
     if (info.kind === "heading") {
@@ -299,33 +332,16 @@ export function buildResumeModel(input) {
       if (first && info.level === 1) blocks.push({ type: "title", lines: [runs], keepWithNext: true });
       else blocks.push({ type: "heading", level: info.level, lines: [runs], keepWithNext: true });
       breakFlow("heading");
-      numberState = [];
       continue;
     }
     if (info.kind === "bullet" || info.kind === "number") {
       const level = levelForIndent(info.indent);
       const ordered = info.kind === "number";
-      let listRef = null;
-      let number = null;
-      if (ordered) {
-        if (!numberState[level]) {
-          listRefCounter += 1;
-          numberState[level] = { ref: `numbered-${listRefCounter}`, next: info.number, start: info.number };
-        }
-        listRef = numberState[level].ref;
-        number = numberState[level].next;
-        numberState[level].next += 1;
-        numberState.length = level + 1;
-      } else {
-        numberState.length = level;
-      }
       const item = {
         type: "listItem",
         ordered,
         level,
-        listRef,
-        number,
-        start: ordered ? numberState[level].start : null,
+        marker: ordered ? info.marker : null, // the author's own number and delimiter
         indent: info.indent,
         lines: [parseInline(info.text)],
       };
@@ -354,13 +370,11 @@ export function buildResumeModel(input) {
       if (isSectionHeadingLine(display)) {
         blocks.push({ type: "heading", level: 2, lines: [runs], keepWithNext: true });
         breakFlow("heading");
-        numberState = [];
         continue;
       }
       if (isLabelHeadingLine(display)) {
         blocks.push({ type: "heading", level: 3, lines: [runs], keepWithNext: true });
         breakFlow("heading");
-        numberState = [];
         continue;
       }
     }
@@ -368,7 +382,6 @@ export function buildResumeModel(input) {
     else {
       lastParagraph = { type: "paragraph", lines: [runs] };
       blocks.push(lastParagraph);
-      numberState = [];
     }
     previousKind = "text";
     lastItem = null;
@@ -396,6 +409,7 @@ export function blockLines(block) {
 export function modelWords(model) {
   const words = [];
   for (const block of model.blocks) {
+    if (block.type === "listItem" && block.ordered) words.push(block.marker); // the author's own number
     for (const line of blockLines(block)) words.push(...wordsOf(runsText(line)));
   }
   return words;

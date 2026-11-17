@@ -1,6 +1,6 @@
 // Word (.docx) output. Pure JavaScript (docx + jszip), no network, no clock.
 // Real Word styles (Title, Heading 1-3, List Paragraph, Hyperlink), real list
-// numbering definitions, a PAGE field in the footer. Page setup is US Letter.
+// numbering definitions. No header or footer. Page setup is US Letter.
 
 import { readFile } from "node:fs/promises";
 import JSZip from "jszip";
@@ -9,14 +9,14 @@ import {
   BorderStyle,
   Document,
   ExternalHyperlink,
-  Footer,
   HeadingLevel,
   ImageRun,
   LevelFormat,
   LineRuleType,
   Packer,
-  PageNumber,
   Paragraph,
+  Tab,
+  TabStopType,
   TextRun,
 } from "docx";
 import { BRAND } from "./brand.js";
@@ -42,24 +42,22 @@ function levelConfig(level, { bullet, start = 1 }) {
   };
 }
 
-function numberingConfig(model) {
-  const config = [{ reference: "bullets", levels: [0, 1, 2].map((level) => levelConfig(level, { bullet: true })) }];
-  const seen = new Set();
-  for (const block of model.blocks) {
-    if (block.type === "listItem" && block.ordered && !seen.has(block.listRef)) {
-      seen.add(block.listRef);
-      config.push({
-        reference: block.listRef,
-        levels: [0, 1, 2].map((level) => levelConfig(level, { bullet: false, start: level === block.level ? block.start : 1 })),
-      });
-    }
-  }
-  return config;
+// Bullets are real list numbering. Numbers are the author's own typed numbers, written as
+// text with a hanging indent (see blockParagraph), so they are never renumbered.
+function numberingConfig() {
+  return [{ reference: "bullets", levels: [0, 1, 2].map((level) => levelConfig(level, { bullet: true })) }];
 }
 
 function headingStyleOptions(style, { rule = false } = {}) {
   return {
-    run: { font: BRAND.wordFontFamily, size: halfPoints(style.sizePt), bold: true, color: BRAND.color },
+    run: {
+      font: BRAND.wordFontFamily,
+      size: halfPoints(style.sizePt),
+      bold: true,
+      color: BRAND.color,
+      // Capitals are a style property: the stored text stays exactly as typed.
+      ...(style.caps ? { allCaps: true, characterSpacing: twips(style.letterSpacingPt) } : {}),
+    },
     paragraph: {
       spacing: { before: twips(style.beforePt), after: twips(style.afterPt), line: twips(style.leadingPt), lineRule: LineRuleType.EXACT },
       keepNext: true,
@@ -87,11 +85,22 @@ function blockParagraph(block) {
     const heading = [HeadingLevel.HEADING_1, HeadingLevel.HEADING_2, HeadingLevel.HEADING_3][block.level - 1];
     return new Paragraph({ heading, children: lineChildren(block.lines) });
   }
+  if (block.type === "listItem" && block.ordered) {
+    const left = twips(BRAND.list.textIndentPt + BRAND.list.levelStepPt * block.level);
+    const children = lineChildren(block.lines);
+    return new Paragraph({
+      style: "ListParagraph",
+      ...(block.endsList ? { spacing: { after: twips(BRAND.styles.body.afterPt) } } : {}),
+      indent: { left, hanging: twips(BRAND.list.numberHangingPt) },
+      tabStops: [{ type: TabStopType.LEFT, position: left }],
+      children: [new TextRun({ children: [block.marker, new Tab()] }), ...children],
+    });
+  }
   if (block.type === "listItem") {
     return new Paragraph({
       style: "ListParagraph",
       ...(block.endsList ? { spacing: { after: twips(BRAND.styles.body.afterPt) } } : {}),
-      numbering: { reference: block.ordered ? block.listRef : "bullets", level: block.level },
+      numbering: { reference: "bullets", level: block.level },
       children: lineChildren(block.lines),
     });
   }
@@ -193,22 +202,13 @@ export async function renderResumeDocx(model, { title } = {}) {
         paragraph: { spacing: { before: 0, after: twips(styles.body.afterPt), line: twips(styles.body.leadingPt), lineRule: LineRuleType.EXACT } },
       }],
     },
-    numbering: { config: numberingConfig(model) },
+    numbering: { config: numberingConfig() },
     sections: [{
       properties: {
         page: {
           size: { width: twips(page.widthPt), height: twips(page.heightPt) },
-          margin: { top: cmToTwips(m.top), bottom: cmToTwips(m.bottom), left: cmToTwips(m.left), right: cmToTwips(m.right), header: 340, footer: 340 },
+          margin: { top: cmToTwips(m.top), bottom: cmToTwips(m.bottom), left: cmToTwips(m.left), right: cmToTwips(m.right) },
         },
-      },
-      footers: {
-        default: new Footer({
-          children: [new Paragraph({
-            alignment: AlignmentType.CENTER,
-            spacing: { before: 0, after: 0, line: 240, lineRule: LineRuleType.AUTO },
-            children: [new TextRun({ children: [PageNumber.CURRENT], size: halfPoints(styles.pageNumber.sizePt) })],
-          })],
-        }),
       },
       children: [logo, ...model.blocks.map(blockParagraph)],
     }],

@@ -26,8 +26,9 @@ export async function docxBodyWords(buffer) {
   return { words: words(text), xml, zip };
 }
 
-// Text drawn on each PDF page, grouped into lines, with the fixed elements separated:
-// page numbers (bottom margin) and list markers (bullet or number left of the text).
+// Text drawn on each PDF page, grouped into lines. Bullet glyphs are separated out (they
+// are marks, not words). Anything drawn in the bottom margin is reported in pageNumbers;
+// the formatter draws nothing there, so tests expect it empty.
 export async function pdfExtract(buffer) {
   const task = getDocument({ data: new Uint8Array(buffer), useSystemFonts: false, isEvalSupported: false, verbosity: 0 });
   const doc = await task.promise;
@@ -60,7 +61,7 @@ export async function pdfExtract(buffer) {
       let rest = row;
       // A marker (bullet or number) starts between the left margin and the list text.
       const first = row[0];
-      const markerMatch = /^(•|\d+\.)(?:\s+|$)/u.exec(first.str);
+      const markerMatch = /^(•)(?:\s+|$)/u.exec(first.str); // only bullets are marks; typed numbers are words
       const textStarts = [0, 1, 2].map((level) => margin.left + BRAND.list.textIndentPt + BRAND.list.levelStepPt * level);
       const looksLikeMarker = first.x > margin.left + 0.6 && first.x < textStarts[2] - 1 && !textStarts.some((x) => Math.abs(first.x - x) < 0.6);
       if (markerMatch && looksLikeMarker) {

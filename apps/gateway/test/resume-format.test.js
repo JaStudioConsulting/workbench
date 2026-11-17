@@ -1,10 +1,31 @@
 import assert from "node:assert/strict";
 import test, { mock } from "node:test";
-import { BRAND, FIXED_ELEMENTS, NO_TEXT_MESSAGE, ResumeFormatError, buildResumeModel, formatResume, layoutResume, modelWords, renderResumePdf, resumeFileName } from "../src/resume-format/index.js";
+import { BRAND, FIXED_ELEMENTS, NO_TEXT_MESSAGE, ResumeFormatError, buildResumeModel, expectedPdfWords, formatResume, isCapsBlock, layoutResume, modelWords, renderResumePdf, resumeFileName, upperForDisplay } from "../src/resume-format/index.js";
 import { FIXTURES } from "./fixtures/resume-format-fixtures.js";
 import { docxBodyWords, pdfExtract } from "./helpers/resume-extract.js";
 
 const words = (text) => text.split(/\s+/u).filter(Boolean);
+
+// PDF words must equal the hand-written expected words, except that words inside section
+// headings (the only capitalised element in the old template) are compared ignoring case
+// and must actually be in capitals. The model only says which words those are.
+function assertPdfWords(model, actual, expected, label) {
+  const flags = [];
+  for (const block of model.blocks) {
+    if (block.type === "listItem" && block.ordered) flags.push(false);
+    for (const line of block.lines || []) for (const _word of words(line.map((run) => run.text).join(""))) flags.push(isCapsBlock(block));
+  }
+  assert.equal(actual.length, expected.length, `${label}: word count`);
+  assert.equal(flags.length, expected.length, `${label}: flag count`);
+  actual.forEach((word, index) => {
+    if (flags[index]) {
+      assert.equal(word.toLowerCase(), expected[index].toLowerCase(), `${label}: heading word ${index}`);
+      assert.equal(word, upperForDisplay(expected[index]), `${label}: heading word ${index} is in capitals`);
+    } else {
+      assert.equal(word, expected[index], `${label}: word ${index} must be exactly as typed`);
+    }
+  });
+}
 const kinds = (text) => buildResumeModel(text).blocks.map((block) => block.type);
 
 // ---------------------------------------------------------------- structure rules
@@ -52,18 +73,41 @@ test("a heading is kept with the next block", () => {
 test("bullets, numbers, nesting and continuation lines", () => {
   const model = buildResumeModel("Duties\n\n- a\n  - b\n      - c\n        wrapped c\n1. x\n2) y\n   * z\n\nback to body");
   const items = model.blocks.filter((block) => block.type === "listItem");
-  assert.deepEqual(items.map((item) => [item.ordered, item.level, item.number, item.lines.length]), [
-    [false, 0, null, 1], [false, 1, null, 1], [false, 2, null, 2], [true, 0, 1, 1], [true, 0, 2, 1], [false, 1, null, 1],
+  assert.deepEqual(items.map((item) => [item.ordered, item.level, item.marker, item.lines.length]), [
+    [false, 0, null, 1], [false, 1, null, 1], [false, 2, null, 2], [true, 0, "1.", 1], [true, 0, "2)", 1], [false, 1, null, 1],
   ]);
-  assert.deepEqual(modelWords(model), ["Duties", "a", "b", "c", "wrapped", "c", "x", "y", "z", "back", "to", "body"]);
+  assert.deepEqual(modelWords(model), ["Duties", "a", "b", "c", "wrapped", "c", "1.", "x", "2)", "y", "z", "back", "to", "body"]);
   assert.equal(model.blocks.at(-1).type, "paragraph");
 });
 
-test("a numbered list starts at its first number and continues across a blank line", () => {
-  const model = buildResumeModel("3. three\n4. four\n\n5. five");
+test("typed numbers and delimiters are kept exactly: skipped, repeated, bracketed", () => {
+  const model = buildResumeModel("3. three\n4. four\n\n7) seven\n7) again\n1. one\n01. zero one");
   const items = model.blocks.filter((block) => block.type === "listItem");
-  assert.deepEqual(items.map((item) => item.number), [3, 4, 5]);
-  assert.equal(items[0].start, 3);
+  assert.deepEqual(items.map((item) => item.marker), ["3.", "4.", "7)", "7)", "1.", "01."]);
+});
+
+test("list or prose: the number is kept either way, and doubtful lines are prose", () => {
+  const prose = (text) => buildResumeModel(`Lead line that is far too long to be a name, in a paragraph.\n\n${text}`).blocks.slice(1);
+  // 4 digits, text starting with a digit or symbol, and a lone numbered line are all prose.
+  for (const text of ["2019. Moved to Toronto\n2020. Left", "1. 5 years in sales\n2. 10 years in ops", "1. $5 budget\n2. 100% uptime", "2. Moved to Toronto"]) {
+    const blocks = prose(text);
+    assert.ok(blocks.every((block) => block.type === "paragraph"), text);
+    assert.deepEqual(modelWords({ blocks }), words(text), text);
+  }
+  // Two numbered lines in one list area are a list, even around bullets and indented lines.
+  const list = prose("1. one\n  - sub\n    wrapped\n2. two");
+  assert.deepEqual(list.map((block) => block.type), ["listItem", "listItem", "listItem"]);
+  assert.deepEqual(list.filter((block) => block.ordered).map((block) => block.marker), ["1.", "2."]);
+  // Prose between two numbered lines splits them: each is then alone.
+  assert.ok(prose("1. one\nSome prose here\n2. two").every((block) => block.type === "paragraph"));
+});
+
+test("capitals apply to section headings only", () => {
+  const model = buildResumeModel("# Sam Rowan\n\n# Sections\n\n## Summary\n\n### Sub heading\n\nBody Text Stays\n- Bullet Stays");
+  assert.deepEqual(model.blocks.map((block) => [block.type, block.level ?? null, isCapsBlock(block)]), [
+    ["title", null, false], ["heading", 1, true], ["heading", 2, true], ["heading", 3, false], ["paragraph", null, false], ["listItem", 0, false],
+  ]);
+  assert.equal(upperForDisplay("Straße und Größe é"), "STRAßE UND GRÖßE É"); // sharp s has no single-letter capital, kept
 });
 
 test("rules, fences and inline marks", () => {
@@ -94,14 +138,16 @@ for (const fixture of FIXTURES) {
   test(`word for word, PDF: ${fixture.name}`, async () => {
     const file = await formatResume({ text: fixture.input, format: "pdf", candidateName: "Test Person" });
     const extracted = await pdfExtract(file.bytes);
+    const model = buildResumeModel(fixture.input);
     if (fixture.overlongToken) {
       // An address wider than the page has to break inside the word. Compare the letters.
       assert.equal(extracted.words.join(""), words(fixture.expected).join(""));
     } else {
-      assert.deepEqual(extracted.words, words(fixture.expected));
+      assertPdfWords(model, extracted.words, words(fixture.expected), fixture.name);
     }
+    if (fixture.expectMarkers) assert.deepEqual(model.blocks.filter((block) => block.type === "listItem" && block.ordered).map((block) => block.marker), fixture.expectMarkers);
     if (fixture.minPages) assert.ok(extracted.pageCount >= fixture.minPages, `expected at least ${fixture.minPages} pages, got ${extracted.pageCount}`);
-    assert.deepEqual(extracted.pageNumbers.filter(Boolean), Array.from({ length: extracted.pageCount }, (_, index) => String(index + 1)));
+    assert.deepEqual(extracted.pageNumbers.filter(Boolean), [], "nothing is drawn in the bottom margin: no page numbers");
   });
 }
 
@@ -110,7 +156,7 @@ test("the layout the PDF is drawn from has the same words as the model", async (
     const model = buildResumeModel(fixture.input);
     const measure = (_key, text, size) => text.length * size * 0.5;
     const layout = layoutResume(model, { measure, logoHeightPt: 46 });
-    assert.deepEqual(layout.words, modelWords(model), fixture.name);
+    assert.deepEqual(layout.words, expectedPdfWords(model), fixture.name);
   }
 });
 
@@ -121,24 +167,29 @@ test("no markdown marks are printed", async () => {
   for (const text of [docx, pdf]) {
     for (const mark of ["# ", "##", "***", "`", "](", "---", "https://", "```"]) assert.ok(!text.includes(mark), `output contains ${mark}`);
     assert.ok(!/(^| )[-*+] /u.test(text.replace("**star", "")), "a bullet mark was printed");
-    assert.ok(!/(^| )\d+[.)] [A-Z]/u.test(text), "a list number was printed as text");
   }
 });
 
 // ---------------------------------------------------------------- Word styles
 
-test("the Word file uses real styles, list numbering, links and a page-number field", async () => {
+test("the Word file uses real styles, bullet numbering, typed numbers, capitals as a style and no footer", async () => {
   const fixture = FIXTURES.find((item) => item.markdownFixture);
   const file = await formatResume({ text: fixture.input, format: "docx", candidateName: "Sam Rowan" });
   const { xml, zip } = await docxBodyWords(file.bytes);
   const styles = await zip.file("word/styles.xml").async("string");
   const numbering = await zip.file("word/numbering.xml").async("string");
-  const footer = await zip.file("word/footer1.xml").async("string");
   for (const id of ["Title", "Heading1", "Heading2", "Heading3", "ListParagraph", "Hyperlink"]) assert.match(styles, new RegExp(`w:styleId="${id}"`), id);
   for (const id of ["Title", "Heading2", "Heading3"]) assert.match(xml, new RegExp(`<w:pStyle w:val="${id}"/>`), id);
   assert.match(xml, /<w:numPr>/u);
   assert.match(numbering, /w:numFmt w:val="bullet"/u);
-  assert.match(numbering, /w:numFmt w:val="decimal"/u);
+  assert.doesNotMatch(numbering, /w:numFmt w:val="decimal"/u, "numbers are the author's typed numbers, not automatic numbering");
+  assert.match(xml, /<w:t xml:space="preserve">1\.<\/w:t><w:tab\/>/u, "typed number then a tab, with a hanging indent");
+  assert.match(xml, /<w:ind w:left="\d+" w:hanging="\d+"\/>/u);
+  const styleBlock = (id) => styles.slice(styles.indexOf(`w:styleId="${id}"`), styles.indexOf("</w:style>", styles.indexOf(`w:styleId="${id}"`)));
+  assert.match(styleBlock("Heading1"), /<w:caps\/>/u);
+  assert.match(styleBlock("Heading2"), /<w:caps\/>/u);
+  assert.match(styleBlock("Heading2"), /<w:spacing w:val="6"\/>/u, "0.4px letter-spacing from the old template");
+  for (const id of ["Title", "Heading3", "ListParagraph", "Normal"]) assert.doesNotMatch(styleBlock(id), /<w:caps\/>/u, `${id} is not capitalised`);
   assert.match(xml, /<w:b\/>/u);
   assert.match(xml, /<w:i\/>/u);
   assert.match(xml, /<w:hyperlink /u);
@@ -146,8 +197,8 @@ test("the Word file uses real styles, list numbering, links and a page-number fi
   assert.match(xml, /w:w="12240" w:h="15840"/u); // US Letter
   assert.match(styles, /w:rFonts w:ascii="Arial"/u);
   assert.match(styles, /<w:keepNext\/>/u);
-  assert.match(footer, /PAGE/u);
-  assert.ok(!/<w:t[ >]/u.test(footer), "the footer must not hold typed text");
+  assert.ok(!Object.keys(zip.files).some((name) => /footer|header/u.test(name)), "no header or footer parts");
+  assert.ok(!/PAGE|footerReference|headerReference/u.test(xml), "no page number field");
   assert.ok(!/•/u.test(xml), "bullets must come from list numbering, not typed characters");
   const names = Object.keys(zip.files);
   assert.ok(names.every((name) => !name.endsWith("/")), "no folder entries in the zip");
@@ -193,15 +244,15 @@ test("a heading near the bottom of a page moves to the next page with its first 
 
 // ---------------------------------------------------------------- fixed elements
 
-test("the only things added around the words are the logo and page numbers", async () => {
-  const text = "Plain Name\n\nSECTION\n- one\n1. two";
+test("the only thing added around the words is the logo: no page numbers, no footer", async () => {
+  const text = "Plain Name\n\n## Section Head\n- one\n1. two\n3. three\n\n### Label Head\nBody Stays As Typed";
   const pdf = await pdfExtract((await formatResume({ text, format: "pdf" })).bytes);
-  assert.deepEqual(pdf.words, ["Plain", "Name", "SECTION", "one", "two"]);
-  assert.deepEqual(pdf.pageNumbers.filter(Boolean), ["1"]);
-  assert.deepEqual(pdf.markers, ["•", "1."]);
-  assert.deepEqual(FIXED_ELEMENTS.map((item) => item.element), ["Logo image", "Page number"]);
+  assert.deepEqual(pdf.words, ["Plain", "Name", "SECTION", "HEAD", "one", "1.", "two", "3.", "three", "Label", "Head", "Body", "Stays", "As", "Typed"]);
+  assert.deepEqual(pdf.pageNumbers.filter(Boolean), []);
+  assert.deepEqual(pdf.markers, ["•"]);
+  assert.deepEqual(FIXED_ELEMENTS.map((item) => item.element), ["Logo image"]);
   const docx = await docxBodyWords((await formatResume({ text, format: "docx" })).bytes);
-  assert.deepEqual(docx.words, ["Plain", "Name", "SECTION", "one", "two"]);
+  assert.deepEqual(docx.words, ["Plain", "Name", "Section", "Head", "one", "1.", "two", "3.", "three", "Label", "Head", "Body", "Stays", "As", "Typed"], "Word stores the text as typed");
 });
 
 // ---------------------------------------------------------------- deterministic

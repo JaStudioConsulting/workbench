@@ -2,9 +2,9 @@
 // The page is drawn from a layout model (layoutResume) that tests can inspect.
 
 import { readFile } from "node:fs/promises";
-import { PDFDocument, PDFString, rgb } from "pdf-lib";
+import { PDFDocument, PDFString, rgb, setCharacterSpacing } from "pdf-lib";
 import fontkit from "@pdf-lib/fontkit";
-import { BRAND, headingStyle } from "./brand.js";
+import { BRAND, headingStyle, upperForDisplay } from "./brand.js";
 import { ResumeFormatError, runsText } from "./model.js";
 
 const ASCENT = 0.905; // Arimo hhea ascent / descent per em
@@ -20,7 +20,7 @@ export function fontKeyFor(run, forceBold = false) {
   return "regular";
 }
 
-function toWords(line, forceBold, measure, size) {
+function toWords(line, forceBold, measure, size, caps = false) {
   const words = [];
   let current = null;
   const finish = () => {
@@ -35,7 +35,7 @@ function toWords(line, forceBold, measure, size) {
       if (index > 0) finish();
       if (part) {
         current ||= { frags: [], cont: false };
-        current.frags.push({ text: part, key: fontKeyFor(run, forceBold), href: run.href });
+        current.frags.push({ text: caps ? upperForDisplay(part) : part, key: fontKeyFor(run, forceBold), href: run.href });
       }
     });
   }
@@ -63,8 +63,8 @@ function splitWord(word, maxWidth, measure, size) {
   return pieces;
 }
 
-export function wrapLine(line, maxWidth, size, measure, forceBold = false) {
-  const words = toWords(line, forceBold, measure, size);
+export function wrapLine(line, maxWidth, size, measure, forceBold = false, caps = false) {
+  const words = toWords(line, forceBold, measure, size, caps);
   const space = measure("regular", " ", size);
   const lines = [];
   let current = { words: [], width: 0 };
@@ -109,7 +109,7 @@ function segmentsOf(layoutLine, size, measure) {
   return segments;
 }
 
-function planBlock(block, measure, contentWidth) {
+function planBlock(block, baseMeasure, contentWidth) {
   const { list } = BRAND;
   if (block.type === "rule") {
     const rule = BRAND.styles.ruleLine;
@@ -120,17 +120,28 @@ function planBlock(block, measure, contentWidth) {
   let indent = 0;
   let marker = null;
   let wordRule = false;
+  let measure = baseMeasure;
+  let caps = false;
+  let charSpacing = 0;
   if (block.type === "title") { style = BRAND.styles.title; forceBold = true; }
-  else if (block.type === "heading") { style = headingStyle(block.level); forceBold = true; wordRule = Boolean(style.rule); }
+  else if (block.type === "heading") {
+    style = headingStyle(block.level);
+    forceBold = true;
+    wordRule = Boolean(style.rule);
+    // Section headings (levels 1 and 2) were the only capitals in the previous template.
+    caps = Boolean(style.caps);
+    charSpacing = style.letterSpacingPt || 0;
+    if (charSpacing) measure = (key, text, size) => baseMeasure(key, text, size) + charSpacing * [...text].length;
+  }
   else if (block.type === "listItem") {
     style = BRAND.styles.listItem;
     const textX = list.textIndentPt + list.levelStepPt * block.level;
     indent = textX;
-    marker = { text: block.ordered ? `${block.number}.` : list.bulletChar, textX };
+    marker = { text: block.ordered ? block.marker : list.bulletChar, textX, hang: block.ordered ? list.numberHangingPt : list.hangingPt };
   } else style = BRAND.styles.body;
 
   const lines = [];
-  for (const line of block.lines) lines.push(...wrapLine(line, contentWidth - indent, style.sizePt, measure, forceBold));
+  for (const line of block.lines) lines.push(...wrapLine(line, contentWidth - indent, style.sizePt, measure, forceBold, caps));
   const extra = wordRule ? BRAND.headingRule.paddingPt + BRAND.headingRule.thicknessPt : 0;
   return {
     kind: block.type,
@@ -142,6 +153,9 @@ function planBlock(block, measure, contentWidth) {
     extra,
     indent,
     marker,
+    measure,
+    caps,
+    charSpacing,
     keepWithNext: Boolean(block.keepWithNext),
     wordRule,
   };
@@ -201,16 +215,17 @@ export function layoutResume(model, { measure, logoHeightPt = 0 }) {
       const baseline = lineTop + baselineOffset(plan.style);
       const x0 = m.left + plan.indent;
       if (from + i === 0 && plan.marker) {
+        if (plan.marker.text !== BRAND.list.bulletChar) wordPieces.push(plan.marker.text);
         const markerWidth = measure("regular", plan.marker.text, plan.style.sizePt);
-        const natural = m.left + plan.marker.textX - BRAND.list.hangingPt;
+        const natural = m.left + plan.marker.textX - plan.marker.hang;
         const markerX = Math.min(natural, m.left + plan.marker.textX - markerWidth - 3);
         current.items.push({ type: "text", role: "marker", kind: plan.kind, x: markerX, baseline, text: plan.marker.text, key: "regular", size: plan.style.sizePt, width: markerWidth });
       }
       let x = x0;
-      for (const segment of segmentsOf(layoutLine, plan.style.sizePt, measure)) {
+      for (const segment of segmentsOf(layoutLine, plan.style.sizePt, plan.measure)) {
         x += segment.gap;
-        const width = measure(segment.key, segment.text, plan.style.sizePt);
-        current.items.push({ type: "text", role: "body", kind: plan.kind, x, baseline, text: segment.text, key: segment.key, size: plan.style.sizePt, width, href: segment.href });
+        const width = plan.measure(segment.key, segment.text, plan.style.sizePt);
+        current.items.push({ type: "text", role: "body", kind: plan.kind, x, baseline, text: segment.text, key: segment.key, size: plan.style.sizePt, width, href: segment.href, charSpacing: plan.charSpacing });
         x += width;
       }
       for (const word of layoutLine.words) {
@@ -324,6 +339,21 @@ function describeChar(ch) {
   return `“${ch}” (U+${code})`;
 }
 
+export const isCapsBlock = (block) => block.type === "heading" && Boolean(headingStyle(block.level).caps);
+
+// The words the PDF must show: the author's words, with section headings in capitals.
+export function expectedPdfWords(model) {
+  const words = [];
+  for (const block of model.blocks) {
+    if (block.type === "listItem" && block.ordered) words.push(block.marker);
+    for (const line of block.lines || []) {
+      const text = isCapsBlock(block) ? upperForDisplay(runsText(line)) : runsText(line);
+      words.push(...text.split(/\s+/u).filter(Boolean));
+    }
+  }
+  return words;
+}
+
 function assertDrawable(model, fontkitFonts) {
   const missing = new Map();
   for (const block of model.blocks) {
@@ -331,7 +361,8 @@ function assertDrawable(model, fontkitFonts) {
       for (const run of line) {
         const key = fontKeyFor(run, block.type === "title" || block.type === "heading");
         const font = fontkitFonts[key];
-        for (const ch of runsText([run])) {
+        const shown = isCapsBlock(block) ? upperForDisplay(runsText([run])) : runsText([run]);
+        for (const ch of shown) {
           if (ch === " ") continue;
           if (!font.hasGlyphForCodePoint(ch.codePointAt(0)) && !missing.has(ch)) missing.set(ch, true);
         }
@@ -371,14 +402,14 @@ export async function renderResumePdf(model, { title } = {}) {
   const measure = (key, text, size) => fonts[key].widthOfTextAtSize(text, size);
 
   const layout = layoutResume(model, { measure, logoHeightPt });
-  const expected = model.blocks.flatMap((block) => (block.lines || []).flatMap((line) => runsText(line).split(/\s+/u).filter(Boolean)));
+  const expected = expectedPdfWords(model);
   if (layout.words.length !== expected.length || layout.words.some((word, index) => word !== expected[index])) {
     throw new ResumeFormatError("FORMAT_CHECK_FAILED", "The PDF could not be laid out without changing the resume wording, so no file was made. Try the Word file instead.");
   }
 
   const { page: pageSize, color } = BRAND;
   const ink = rgb(Number.parseInt(color.slice(0, 2), 16) / 255, Number.parseInt(color.slice(2, 4), 16) / 255, Number.parseInt(color.slice(4, 6), 16) / 255);
-  layout.pages.forEach((layoutPage, pageIndex) => {
+  layout.pages.forEach((layoutPage) => {
     const page = pdf.addPage([pageSize.widthPt, pageSize.heightPt]);
     const flip = (top) => pageSize.heightPt - top;
     for (const item of layoutPage.items) {
@@ -387,7 +418,9 @@ export async function renderResumePdf(model, { title } = {}) {
       } else if (item.type === "line") {
         page.drawLine({ start: { x: item.x1, y: flip(item.y) }, end: { x: item.x2, y: flip(item.y) }, thickness: item.thickness, color: ink });
       } else {
+        if (item.charSpacing) page.pushOperators(setCharacterSpacing(item.charSpacing));
         page.drawText(item.text, { x: item.x, y: flip(item.baseline), size: item.size, font: fonts[item.key], color: ink });
+        if (item.charSpacing) page.pushOperators(setCharacterSpacing(0));
         if (item.href) {
           page.drawLine({ start: { x: item.x, y: flip(item.baseline) - 1.5 }, end: { x: item.x + item.width, y: flip(item.baseline) - 1.5 }, thickness: 0.5, color: ink });
           const annotation = pdf.context.obj({
@@ -401,10 +434,6 @@ export async function renderResumePdf(model, { title } = {}) {
         }
       }
     }
-    const numberStyle = BRAND.styles.pageNumber;
-    const label = String(pageIndex + 1);
-    const labelWidth = fonts.regular.widthOfTextAtSize(label, numberStyle.sizePt);
-    page.drawText(label, { x: (pageSize.widthPt - labelWidth) / 2, y: numberStyle.fromBottomPt, size: numberStyle.sizePt, font: fonts.regular, color: ink });
   });
   return pdf.save({ useObjectStreams: false });
 }

@@ -6,10 +6,16 @@
 //   1. The firm logo image (apps/console/public/assets/tttg_logo.png), centred at the top of
 //      page 1. Image alt text: "Top Tier Talent Group" (from the previous template's
 //      alt attribute; it is not printed).
-//   2. A page number (digits only, centred in the bottom margin). DEFAULT: the previous
-//      template had no page numbers.
-// Nothing else is added: no firm-name line, no header or footer rule, no labels,
-// captions, confidentiality lines, dates or contact details.
+// Nothing else is added: no page numbers (the previous template had none), no firm-name
+// line, no header or footer, no labels, captions, confidentiality lines, dates or
+// contact details.
+//
+// Capitals: the previous template showed exactly one element in capitals, the section
+// heading (h2.sec-heading: text-transform uppercase, letter-spacing 0.4px; build_resume.py
+// h2 and its reportlab .upper()). The name (h1.cand-name) and the headline were not
+// capitalised. So `caps: true` is set only on the two section-heading styles. Capitals
+// are formatting: Word stores the text as typed and uses the all-caps property; the PDF
+// draws the heading in upper case.
 
 import { fileURLToPath } from "node:url";
 import path from "node:path";
@@ -41,22 +47,31 @@ export const BRAND = Object.freeze({
   styles: Object.freeze({
     body: Object.freeze({ sizePt: 10.5, leadingPt: 14, beforePt: 0, afterPt: 6 }),
     title: Object.freeze({ sizePt: 17, leadingPt: 22, beforePt: 0, afterPt: 8, bold: true }),
-    heading1: Object.freeze({ sizePt: 12.5, leadingPt: 16, beforePt: 12, afterPt: 4.5, bold: true, rule: true }),
-    heading2: Object.freeze({ sizePt: 11, leadingPt: 14, beforePt: 10.5, afterPt: 4.5, bold: true, rule: true }),
+    heading1: Object.freeze({ sizePt: 12.5, leadingPt: 16, beforePt: 12, afterPt: 4.5, bold: true, rule: true, caps: true, letterSpacingPt: 0.3 }),
+    heading2: Object.freeze({ sizePt: 11, leadingPt: 14, beforePt: 10.5, afterPt: 4.5, bold: true, rule: true, caps: true, letterSpacingPt: 0.3 }), // 0.4px = 0.3pt
     heading3: Object.freeze({ sizePt: 10.5, leadingPt: 14, beforePt: 6, afterPt: 3, bold: true }),
     listItem: Object.freeze({ sizePt: 10.5, leadingPt: 14, beforePt: 0, afterPt: 1.5 }),
-    pageNumber: Object.freeze({ sizePt: 9, fromBottomPt: 22 }), // DEFAULT
     ruleLine: Object.freeze({ beforePt: 4, afterPt: 4, heightPt: 4, thicknessPt: 0.6 }),
   }),
   headingRule: Object.freeze({ thicknessPt: 0.9, paddingPt: 2.25 }), // 1.2px rule, 3px padding
-  list: Object.freeze({ textIndentPt: 20, levelStepPt: 18, hangingPt: 14, bulletChar: "•" }),
+  list: Object.freeze({ textIndentPt: 20, levelStepPt: 18, hangingPt: 14, numberHangingPt: 16, bulletChar: "•" }),
 });
 
 export function headingStyle(level) {
   return BRAND.styles[`heading${Math.min(Math.max(level, 1), 3)}`];
 }
 
+// Upper-case for display (formatting only). A character with no single-character upper
+// form (for example the German sharp s) is kept as typed.
+export function upperForDisplay(text) {
+  let result = "";
+  for (const ch of text) {
+    const upper = ch.toUpperCase();
+    result += [...upper].length === 1 ? upper : ch;
+  }
+  return result;
+}
+
 export const FIXED_ELEMENTS = Object.freeze([
   Object.freeze({ element: "Logo image", text: null, source: "previous template (centred, 235px wide)" }),
-  Object.freeze({ element: "Page number", text: "digits only, e.g. 1", source: "default, previous template had none" }),
 ]);
