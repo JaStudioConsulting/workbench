@@ -2,7 +2,7 @@ import JSZip from "jszip";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { BRAND } from "../../src/resume-format/brand.js";
 
-const words = (text) => text.split(/\s+/u).filter(Boolean);
+const words = (text) => text.split(/[ \t\r\n]+/u).filter(Boolean);
 
 function decodeXml(text) {
   return text

@@ -7,6 +7,7 @@ const ignored = new Set([".git", "node_modules", ".pnpm-store", ".temp", "dist",
 const forbiddenAssets = /\.(avif|gif|heic|jpe?g|pdf|png|svg|webp|docx|xlsx|csv|ttf|otf|woff2?)$/i;
 const approvedAssets = new Map([
   ["apps/console/public/assets/tttg_logo.png", "ecad1061bb94c2a11d901b6a6b900d2411a3ce0874806307d3bc4dca7421f055"],
+  ["apps/gateway/assets/tttg_logo.png", "ecad1061bb94c2a11d901b6a6b900d2411a3ce0874806307d3bc4dca7421f055"],
   ["apps/console/public/icons/workbench-icon.svg", "9e6284903fbab5db6072500f7cb7233fee19fc1cbe059971c7cb77dce61fe6eb"],
   ["apps/console/public/icons/apple-touch-icon.png", "3f571628fb1a18741e127b1b5d7301cd7f5431bf80de79e9f0a06fd8bb234cee"],
   ["apps/console/public/icons/workbench-icon-192.png", "4d5dd153461403837660609671a1c8e7c089fc5359946a6ca96f5e587d77e99a"],

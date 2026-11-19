@@ -13,7 +13,7 @@
 //       level 1, two is level 2, three to six is level 3. A closing run of hashes
 //       preceded by a space is removed with the marks. If the very first block of the
 //       text is a level-1 heading it becomes the Title.
-//   R4  A line of only "-", "*", "_" or "=" (three or more, spaces allowed) is a rule.
+//   R4  A line of only "-", "*" or "=" (three or more, spaces allowed) is a rule.
 //   R5  A line starting with one of - * + or a bullet character (see BULLET_CHARS)
 //       followed by a space and more text is a bullet item. The marker is removed.
 //   R6  Numbered item (list rather than prose). A line is a numbered item only when ALL
@@ -29,8 +29,7 @@
 //       level 2 (a tab counts as 4 spaces).
 //   R8  A non-list line indented at least 2 spaces directly under a list item
 //       continues that item (as a new line inside the same item).
-//   R9  Code fences (a line of 3+ backticks or tildes, with an optional language word)
-//       are removed with the marks; the lines between them stay plain body lines.
+//   R9  Only a matched pair of fence lines is removed; intervening lines use normal rules.
 //   R10 Inline marks: **bold** and __bold__, *italic* and _italic_, ***both***,
 //       `code` (shown as plain text), and [text](http(s) or mailto link). Marks are
 //       removed and the formatting is applied. A link keeps its address as a real
@@ -65,12 +64,15 @@ const BULLET_RE = new RegExp(`^([ \\t]*)([-*+${BULLET_CHARS}])[ \\t\\u00A0]+(\\S
 const NUMBER_RE = /^([ \t]*)(\d{1,2}[.)])[ \t\u00A0]+(\S.*)$/u;
 const ITEM_TEXT_START_RE = /^[\p{L}"'“‘(\[]/u;
 const MD_HEADING_RE = /^ {0,3}(#{1,6})[ \t\u00A0]+(.*)$/u;
-const RULE_RE = /^[ \t]*([-*_=])(?:[ \t]*\1){2,}[ \t]*$/u;
-const FENCE_RE = /^[ \t]*(?:`{3,}|~{3,})[^`]*$/u;
-const WS_RUN_RE = /[ \t\u00A0\u1680\u2000-\u200A\u202F\u205F\u3000]+/gu;
+const RULE_RE = /^[ \t]*([-*=])(?:[ \t]*\1){2,}[ \t]*$/u;
+const FENCE_RE = /^[ \t]*(`{3,}|~{3,})(?:[ \t]*[\p{L}\p{N}+-]+)?[ \t]*$/u;
+const WS_RUN_RE = /[ \t\u1680\u2000-\u200A\u202F\u205F\u3000]+/gu;
+const EDGE_WS_RE = /^[ \t\u1680\u2000-\u200A\u202F\u205F\u3000]+|[ \t\u1680\u2000-\u200A\u202F\u205F\u3000]+$/gu;
+const INVISIBLE_RE = /[\u200B\u200C\u200D\u2060\uFEFF]/gu;
 // C0/C1 controls other than tab and newline cannot be stored in Word files or drawn.
 // eslint-disable-next-line no-control-regex
 const CONTROL_RE = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/u;
+const trimContent = (value) => value.replace(EDGE_WS_RE, "");
 
 function indentWidth(raw) {
   let width = 0;
@@ -89,8 +91,6 @@ function levelForIndent(width) {
 }
 
 const isWhitespace = (ch) => ch === undefined || /\s/u.test(ch);
-const isPunctuation = (ch) => ch !== undefined && /[\p{P}\p{S}]/u.test(ch);
-const isAlphanumeric = (ch) => ch !== undefined && /[\p{L}\p{N}]/u.test(ch);
 
 function normalizeHref(href) {
   try { return new URL(href).href; } catch { return null; }
@@ -106,27 +106,43 @@ function pushRun(runs, text, style) {
   runs.push({ text, bold: style.bold, italic: style.italic, href: style.href });
 }
 
-function findCloser(src, from, char, count) {
-  for (let j = from; j < src.length; j += 1) {
-    if (src[j] !== char) continue;
-    let end = j;
-    while (src[end] === char) end += 1;
-    const runLength = end - j;
-    if (runLength === count) {
-      const prev = src[j - 1];
-      const next = src[end];
-      const left = next !== undefined && !isWhitespace(next) && (!isPunctuation(next) || isWhitespace(prev) || isPunctuation(prev));
-      const right = prev !== undefined && !isWhitespace(prev) && (!isPunctuation(prev) || isWhitespace(next) || isPunctuation(next));
-      const canClose = char === "*" ? right : right && (!left || isPunctuation(next));
-      if (canClose && j > from) return j;
-    }
-    j = end - 1;
+function lineTokenMask(src) {
+  const mask = new Uint8Array(src.length);
+  const tokens = /\S+/gu;
+  for (const match of src.matchAll(tokens)) {
+    const token = match[0];
+    if (token.includes("://") || token.includes("@") || token.includes("/")) mask.fill(1, match.index, match.index + token.length);
   }
-  return -1;
+  return mask;
+}
+
+function closerIndex(src, mask) {
+  const closers = new Map();
+  for (const char of ["*", "_"]) {
+    for (let count = 1; count <= 3; count += 1) {
+      let nextValid = -1;
+      const result = new Int32Array(src.length + 1).fill(-1);
+      for (let i = src.length - 1; i >= 0; i -= 1) {
+        result[i] = nextValid;
+        if (src[i] !== char || (i > 0 && src[i - 1] === char) || (i + count < src.length && src[i + count] === char)) continue;
+        let end = i;
+        while (src[end] === char) end += 1;
+        if (end - i !== count || mask[i]) continue;
+        const prev = src[i - 1], next = src[end];
+        const canClose = prev !== undefined && !isWhitespace(prev)
+          && (next === undefined || isWhitespace(next) || [")", "]", "}", "\"", "'", "”", "’", ".", ",", ";", ":", "!", "?"].includes(next));
+        if (canClose) nextValid = i;
+      }
+      closers.set(`${char}${count}`, result);
+    }
+  }
+  return closers;
 }
 
 // Inline marks -> runs. Text outside recognised marks is copied unchanged.
 export function parseInline(src, style = { bold: false, italic: false, href: null }, runs = []) {
+  const mask = lineTokenMask(src);
+  const closers = closerIndex(src, mask);
   let buffer = "";
   const flush = () => { pushRun(runs, buffer, style); buffer = ""; };
   let i = 0;
@@ -143,7 +159,11 @@ export function parseInline(src, style = { bold: false, italic: false, href: nul
     } else if (ch === "[") {
       const closeBracket = src.indexOf("]", i + 1);
       if (closeBracket > i + 1 && src[closeBracket + 1] === "(" && !src.slice(i + 1, closeBracket).includes("[")) {
-        const closeParen = src.indexOf(")", closeBracket + 2);
+        let closeParen = closeBracket + 2, depth = 0;
+        for (; closeParen < src.length; closeParen += 1) {
+          if (src[closeParen] === "(") depth += 1;
+          else if (src[closeParen] === ")") { if (!depth) break; depth -= 1; }
+        }
         const href = closeParen > 0 ? src.slice(closeBracket + 2, closeParen) : "";
         const safeHref = /^(?:https?:\/\/|mailto:)\S+$/iu.test(href) ? normalizeHref(href) : null;
         if (safeHref) {
@@ -157,15 +177,16 @@ export function parseInline(src, style = { bold: false, italic: false, href: nul
       let end = i;
       while (src[end] === ch) end += 1;
       const count = end - i;
-      if (count <= 3) {
+      if (count <= 3 && !mask[i]) {
         const prev = src[i - 1];
         const next = src[end];
-        const left = next !== undefined && !isWhitespace(next) && (!isPunctuation(next) || isWhitespace(prev) || isPunctuation(prev));
-        const right = prev !== undefined && !isWhitespace(prev) && (!isPunctuation(prev) || isWhitespace(next) || isPunctuation(next));
-        const canOpen = ch === "*" ? left : left && (!right || isPunctuation(prev));
-        if (canOpen) {
-          const close = findCloser(src, end, ch, count);
-          if (close > end && src.slice(end, close).trim()) {
+        const canOpen = next !== undefined && !isWhitespace(next)
+          && (i === 0 || isWhitespace(prev) || "([{\"'“‘".includes(prev))
+          && !(prev === ":" || prev === "/" || prev === "@")
+          && !mask[i];
+        if (canOpen && count > 0) {
+          const close = closers.get(`${ch}${count}`)?.[end] ?? -1;
+          if (close > end && trimContent(src.slice(end, close))) {
             flush();
             parseInline(src.slice(end, close), {
               ...style,
@@ -191,33 +212,34 @@ export function parseInline(src, style = { bold: false, italic: false, href: nul
 export const runsText = (runs) => runs.map((run) => run.text).join("");
 export const lineText = (line) => runsText(line);
 
-function plainRuns(text) {
-  return text ? [{ text, bold: false, italic: false, href: null }] : [];
-}
-
-function classify(rawLine, insideFence) {
-  if (insideFence) {
-    if (FENCE_RE.test(rawLine)) return { kind: "fence" };
-    const text = rawLine.replace(WS_RUN_RE, " ").trim();
-    return text ? { kind: "code", text } : { kind: "blank" };
-  }
-  if (!rawLine.trim()) return { kind: "blank" };
-  if (FENCE_RE.test(rawLine)) return { kind: "fence" };
+function classify(rawLine, allowFence = true) {
+  if (!trimContent(rawLine)) return { kind: "blank" };
+  if (/^[ \t]*[-*+][ \t\u00A0]*$/u.test(rawLine)) return { kind: "blank" };
+  if (/^[ \t]*\d{1,2}[.)][ \t\u00A0]*$/u.test(rawLine)) return { kind: "blank" };
+  const fence = allowFence ? FENCE_RE.exec(rawLine) : null;
+  if (fence) return { kind: "fence", delimiter: fence[1][0], length: fence[1].length };
   if (RULE_RE.test(rawLine)) return { kind: "rule" };
   const heading = MD_HEADING_RE.exec(rawLine);
   if (heading) {
-    const text = heading[2].replace(/(?:^|[ \t]+)#+[ \t]*$/u, "").replace(WS_RUN_RE, " ").trim();
-    if (text) return { kind: "heading", level: Math.min(heading[1].length, 3), text };
+    const text = trimContent(heading[2].replace(/(?:^|[ \t]+)#+[ \t]*$/u, "").replace(WS_RUN_RE, " "));
+    if (text && /^[\p{Lu}\p{N}]/u.test(text)) return { kind: "heading", level: Math.min(heading[1].length, 3), text };
   }
   const bullet = BULLET_RE.exec(rawLine);
-  if (bullet) return { kind: "bullet", indent: indentWidth(bullet[1]), text: bullet[3].replace(WS_RUN_RE, " ").trim() };
+  if (bullet && (bullet[2] !== "+" || /^\p{L}/u.test(bullet[3]))) {
+    const itemText = trimContent(bullet[3].replace(WS_RUN_RE, " "));
+    if (itemText.replace(/[\s\u00A0\u200B\u200C\u200D\u2060\uFEFF]/gu, "")) return { kind: "bullet", indent: indentWidth(bullet[1]), text: itemText };
+    return { kind: "blank" };
+  }
   const numbered = NUMBER_RE.exec(rawLine);
   if (numbered) {
-    const text = numbered[3].replace(WS_RUN_RE, " ").trim();
+    const text = trimContent(numbered[3].replace(WS_RUN_RE, " "));
     // Only a candidate until the list-area check below confirms it.
-    if (ITEM_TEXT_START_RE.test(text)) return { kind: "number", indent: indentWidth(numbered[1]), marker: numbered[2], text, raw: rawLine };
+    if (ITEM_TEXT_START_RE.test(text)) {
+      if (!text.replace(/[\s\u00A0]/gu, "")) return { kind: "blank" };
+      return { kind: "number", indent: indentWidth(numbered[1]), marker: numbered[2], text, raw: rawLine };
+    }
   }
-  return { kind: "text", indent: indentWidth(rawLine), text: rawLine.replace(WS_RUN_RE, " ").trim() };
+  return { kind: "text", indent: indentWidth(rawLine), text: trimContent(rawLine.replace(WS_RUN_RE, " ")) };
 }
 
 // A numbered candidate is a list item only when another candidate is in the same list
@@ -235,11 +257,11 @@ function confirmNumberedItems(infos) {
   return infos.map((info, index) => {
     if (info.kind !== "number") return info;
     if (hasNeighbour(index, 1) || hasNeighbour(index, -1)) return info;
-    return { kind: "text", indent: info.indent, text: info.raw.replace(WS_RUN_RE, " ").trim() };
+    return { kind: "text", indent: info.indent, text: trimContent(info.raw.replace(WS_RUN_RE, " ")) };
   });
 }
 
-const wordsOf = (text) => text.split(/\s+/u).filter(Boolean);
+const wordsOf = (text) => text.split(/[ \t\r\n]+/u).filter(Boolean);
 
 function isTitleLine(text) {
   if (text.length > 50 || wordsOf(text).length > 6) return false;
@@ -264,13 +286,13 @@ function isLabelHeadingLine(text) {
 }
 
 export function buildResumeModel(input) {
-  if (typeof input !== "string" || !input.replace(/^\uFEFF/u, "").trim()) {
+  if (typeof input !== "string" || !input.replace(INVISIBLE_RE, "").trim()) {
     throw new ResumeFormatError("NO_RESUME_TEXT", NO_TEXT_MESSAGE);
   }
   if (input.length > MAX_RESUME_CHARS) {
     throw new ResumeFormatError("RESUME_TOO_LONG", "This resume text is too long to format as one file. Shorten it or split it, then try again.");
   }
-  const text = input.replace(/^\uFEFF/u, "").replace(/\r\n?|\u2028|\u2029|\u0085/gu, "\n");
+  const text = input.replace(INVISIBLE_RE, "").replace(/\r\n?|\u2028|\u2029|\u0085/gu, "\n");
   const control = CONTROL_RE.exec(text);
   if (control) {
     const code = control[0].codePointAt(0).toString(16).toUpperCase().padStart(4, "0");
@@ -279,46 +301,43 @@ export function buildResumeModel(input) {
 
   const lines = text.split("\n").map((raw, index, all) => ({ raw, index, total: all.length }));
   const blocks = [];
-  let insideFence = false;
   let previousKind = "start"; // start | blank | text | list | heading | rule
   let lastItem = null;
   let lastParagraph = null;
 
   const nextNonBlankExists = (from) => {
-    for (let k = from + 1; k < lines.length; k += 1) if (lines[k].raw.trim()) return true;
+    for (let k = from + 1; k < lines.length; k += 1) if (trimContent(lines[k].raw)) return true;
     return false;
   };
   const breakFlow = (kind) => { previousKind = kind; lastItem = null; lastParagraph = null; };
 
   // Classify every line first (fence state is sequential), then confirm numbered items.
   const classified = [];
-  let fenceOpen = false;
+  let pendingFence = null;
+  const matchedFences = new Set();
   for (const entry of lines) {
-    const info = classify(entry.raw, fenceOpen);
-    if (info.kind === "fence") fenceOpen = !fenceOpen;
-    classified.push(info);
+    const fence = FENCE_RE.exec(entry.raw);
+    if (!fence) continue;
+    if (!pendingFence) pendingFence = { index: entry.index, char: fence[1][0], length: fence[1].length };
+    else if (pendingFence.char === fence[1][0] && fence[1].length >= pendingFence.length) {
+      matchedFences.add(pendingFence.index);
+      matchedFences.add(entry.index);
+      pendingFence = null;
+    } else pendingFence = { index: entry.index, char: fence[1][0], length: fence[1].length };
+  }
+  for (const entry of lines) {
+    classified.push(matchedFences.has(entry.index) ? { kind: "fence" } : classify(entry.raw, false));
   }
   const infos = confirmNumberedItems(classified);
 
   for (const entry of lines) {
     const info = infos[entry.index];
     if (info.kind === "fence") {
-      insideFence = !insideFence;
       breakFlow("blank");
       continue;
     }
     if (info.kind === "blank") {
       breakFlow("blank");
-      continue;
-    }
-    if (info.kind === "code") {
-      if (lastParagraph && previousKind === "text") lastParagraph.lines.push(plainRuns(info.text));
-      else {
-        lastParagraph = { type: "paragraph", lines: [plainRuns(info.text)] };
-        blocks.push(lastParagraph);
-      }
-      previousKind = "text";
-      lastItem = null;
       continue;
     }
     if (info.kind === "rule") {

@@ -65,7 +65,7 @@ EXPERIENCE
 Duties:
 1. Plan the weekly schedule
 2) Order consumables
-4. Review the safety log
+3. Review the safety log
    * nested star item
 
 Closing note after the list.`;
@@ -163,7 +163,7 @@ second nested item that continues on an indented line
 Duties:
 1. Plan the weekly schedule
 2) Order consumables
-4. Review the safety log
+3. Review the safety log
 nested star item
 Closing note after the list.`,
   },
@@ -214,7 +214,7 @@ Final line with an unclosed **star and a snake_case_word.`,
     name: "windows line endings, tabs, non-breaking spaces and an overlong token",
     input: awkward,
     expected: `Pat Doe
-Spacing test with tabs and many spaces.
+Spacing${nbsp}test with tabs and many spaces.
 Windows line endings follow.
 https://example.com/this/is/an/extremely/long/address/that/has/no/spaces/at/all/and/keeps/going/and/going/until/it/is/wider/than/the/page/itself/for/sure/abcdefghijklmnopqrstuvwxyz0123456789
 Last line.`,

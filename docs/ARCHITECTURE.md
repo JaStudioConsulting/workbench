@@ -40,7 +40,7 @@ The app does not write directly to Loxo. Rejections, pipeline stage moves and lo
 
 ## Resumes without a resume file
 
-`getResumeSource` uses the resume on file or existing profile fields (title, work history, summary, skills, call notes, transcript). It invents nothing. With none of those, it says "Not enough data to build a resume". Profile-built resumes carry an internal-only badge. Workbench does not generate resume, PDF or slide files; document output is not set up yet.
+`getResumeSource` uses the resume on file or existing profile fields (title, work history, summary, skills, call notes, transcript). It invents nothing. With none of those, it says "Not enough data to build a resume". Profile-built resumes carry an internal-only badge. Branded PDF and Word files are built from saved resume text by a deterministic formatter with no AI or network calls.
 
 ## Migrations and retention
 

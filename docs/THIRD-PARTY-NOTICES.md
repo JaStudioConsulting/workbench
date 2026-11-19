@@ -97,7 +97,7 @@ AI model and no network service, and only formats the saved resume text.
 | Arimo (`apps/gateway/assets/fonts/`) | PDF font, metric-compatible with Arial. Copyright 2026 The Arimo Project Authors; full text in `apps/gateway/assets/fonts/LICENSE-Arimo.txt` | SIL Open Font License 1.1 |
 
 The formatter reads the firm logo from the console's existing
-`apps/console/public/assets/tttg_logo.png`; it is not copied. The Arimo font files
+`apps/gateway/assets/tttg_logo.png` (byte-identical to the approved console asset). The Arimo font files
 are listed with their hashes in `scripts/privacy-check.mjs` like the other approved assets.
 
 ### Reference skills (not copied into the app)

@@ -1,30 +1,16 @@
 import assert from "node:assert/strict";
 import test, { mock } from "node:test";
-import { BRAND, FIXED_ELEMENTS, NO_TEXT_MESSAGE, ResumeFormatError, buildResumeModel, expectedPdfWords, formatResume, isCapsBlock, layoutResume, modelWords, renderResumePdf, resumeFileName, upperForDisplay } from "../src/resume-format/index.js";
+import { BRAND, FIXED_ELEMENTS, NO_TEXT_MESSAGE, ResumeFormatError, assertDrawable, buildResumeModel, expectedPdfWords, formatResume, isCapsBlock, layoutResume, modelWords, renderResumePdf, resumeFileName, upperForDisplay } from "../src/resume-format/index.js";
 import { FIXTURES } from "./fixtures/resume-format-fixtures.js";
 import { docxBodyWords, pdfExtract } from "./helpers/resume-extract.js";
+import { brandedResumeSourceText } from "../../console/src/features/operator-cases/brandedResumeSource.js";
 
-const words = (text) => text.split(/\s+/u).filter(Boolean);
+const words = (text) => text.split(/[ \t\r\n]+/u).filter(Boolean);
 
-// PDF words must equal the hand-written expected words, except that words inside section
-// headings (the only capitalised element in the old template) are compared ignoring case
-// and must actually be in capitals. The model only says which words those are.
+// PDF text must equal the typed wording, with only level 1-2 headings upper-cased.
 function assertPdfWords(model, actual, expected, label) {
-  const flags = [];
-  for (const block of model.blocks) {
-    if (block.type === "listItem" && block.ordered) flags.push(false);
-    for (const line of block.lines || []) for (const _word of words(line.map((run) => run.text).join(""))) flags.push(isCapsBlock(block));
-  }
-  assert.equal(actual.length, expected.length, `${label}: word count`);
-  assert.equal(flags.length, expected.length, `${label}: flag count`);
-  actual.forEach((word, index) => {
-    if (flags[index]) {
-      assert.equal(word.toLowerCase(), expected[index].toLowerCase(), `${label}: heading word ${index}`);
-      assert.equal(word, upperForDisplay(expected[index]), `${label}: heading word ${index} is in capitals`);
-    } else {
-      assert.equal(word, expected[index], `${label}: word ${index} must be exactly as typed`);
-    }
-  });
+  assert.deepEqual(actual, expectedPdfWords(model), `${label}: strict PDF text`);
+  assert.deepEqual(modelWords(model), expected, `${label}: typed fixture wording`);
 }
 const kinds = (text) => buildResumeModel(text).blocks.map((block) => block.type);
 
@@ -120,6 +106,89 @@ test("rules, fences and inline marks", () => {
   ]);
 });
 
+test("inline marks obey boundaries and preserve punctuation, paths and addresses", () => {
+  const cases = [
+    ["5*3 and 2*4", "5*3 and 2*4"],
+    ["2*2 grid, 3*3 grid", "2*2 grid, 3*3 grid"],
+    ["2**3 and 4**5", "2**3 and 4**5"],
+    ["https://x.com/_profile_", "https://x.com/_profile_"],
+    ["snake_case", "snake_case"], ["a_b_c", "a_b_c"], ["C++", "C++"], ["*.pdf", "*.pdf"],
+    ["rate: 5*", "rate: 5*"], ["2 * 3 * 4", "2 * 3 * 4"],
+    ["**bold** text", "bold text"], ["_italic_ text", "italic text"], ["(**bold**)", "(bold)"],
+  ];
+  for (const [input, expected] of cases) assert.equal(modelWords(buildResumeModel(input)).join(" "), expected, input);
+});
+
+test("only matched fence lines disappear and their contents use normal rules", () => {
+  assert.equal(modelWords(buildResumeModel("~~~ Experience ~~~\n**bold**\n- item\n# head")).join(" "), "~~~ Experience ~~~ bold item # head");
+  assert.equal(modelWords(buildResumeModel("~~~js\n**bold**\n- item\n# head")).join(" "), "~~~js bold item # head");
+  assert.equal(modelWords(buildResumeModel("~~~js\n**bold**\n- item\n~~~\ntext after closing **bold**")).join(" "), "bold item text after closing bold");
+});
+
+test("headings, rules, plus bullets, balanced links and invisible characters", () => {
+  assert.equal(buildResumeModel("# of projects: 5").blocks[0].type, "paragraph");
+  assert.deepEqual(buildResumeModel("### 2024 Results\nbody").blocks[0], { type: "heading", level: 3, lines: [[{ text: "2024 Results", bold: false, italic: false, href: null }]], keepWithNext: true });
+  for (const text of ["+ 44 20 7946 0000", "+1 416 555 0100"]) assert.equal(modelWords(buildResumeModel(text)).join(" "), text);
+  const link = buildResumeModel("[Wiki](https://en.wikipedia.org/wiki/Foo_(bar))").blocks[0].lines[0][0];
+  assert.equal(link.text, "Wiki");
+  assert.equal(link.href, "https://en.wikipedia.org/wiki/Foo_(bar)");
+  assert.equal(buildResumeModel("___\ntext").blocks[0].type, "paragraph");
+  assert.equal(modelWords(buildResumeModel("A\u200BB\u200CC\u200DD\u2060E\uFEFFF")).join(" "), "ABCDEF");
+  assert.equal(modelWords(buildResumeModel("a\u00A0b")).join(" "), "a\u00A0b");
+  assert.equal(modelWords(buildResumeModel("\u00A0edge\u00A0")).join(" "), "\u00A0edge\u00A0");
+});
+
+test("empty list items are omitted and oversized single lines parse linearly", () => {
+  assert.equal(modelWords(buildResumeModel("- \n1. \n- visible")).join(" "), "visible");
+  const start = performance.now();
+  buildResumeModel("*a ".repeat(66_666) + "*a");
+  assert.ok(performance.now() - start < 2000, `parser took ${performance.now() - start}ms`);
+});
+
+test("empty list items are absent from both generated formats", async () => {
+  const text = "- \n1. \n- visible";
+  const docx = await docxBodyWords((await formatResume({ text, format: "docx" })).bytes);
+  const pdf = await pdfExtract((await formatResume({ text, format: "pdf" })).bytes);
+  assert.deepEqual(docx.words, ["visible"]);
+  assert.deepEqual(pdf.words, ["visible"]);
+});
+
+test("PDFs over 150 pages fail with the plain length message", async () => {
+  const text = "x\n".repeat(99_998);
+  await assert.rejects(formatResume({ text, format: "pdf" }), (error) => {
+    assert.equal(error.message, "This resume is too long to format (over 150 pages). Shorten the saved text, then try again.");
+    return true;
+  });
+});
+
+test("approval desk adapter prints stored values and suppresses app labels", () => {
+  const source = brandedResumeSourceText({ sections: {
+    name: { value: "Alex Example" }, title: { value: "Maintenance Planner" },
+    summary: [{ text: "Summary value exactly" }], skills: [{ text: "Skill one" }, { text: "Skill two" }],
+    experience: [{ title: { value: "Planner" }, dates: { value: "2020–2024" }, company: { value: "Example Co" }, location: { value: "Toronto" }, bullets: [{ text: "Bullet value exactly" }] }],
+    education: [{ text: "Diploma value" }], certifications: [{ text: "Certificate value" }], additionalInformation: [{ text: "Additional value" }],
+  } });
+  const model = buildResumeModel(source);
+  assert.deepEqual(modelWords(model), ["Alex", "Example", "Maintenance", "Planner", "Professional", "Summary", "Summary", "value", "exactly", "Core", "Competencies", "&", "Skills", "Skill", "one", "Skill", "two", "Professional", "Experience", "Planner", "2020–2024", "Example", "Co", "Toronto", "Bullet", "value", "exactly", "Education", "Diploma", "value", "Certifications", "Certificate", "value", "Additional", "Information", "Additional", "value"]);
+  assert.ok(!source.includes("Name\n") && !source.includes("Title\n"));
+  const fallback = brandedResumeSourceText({ text: "Name\nAlex Example\n\nTitle\nMaintenance Planner\n\nProfessional Summary\nA value\n\nUnexpected label\nRetained value" });
+  assert.deepEqual(modelWords(buildResumeModel(fallback)), ["Alex", "Example", "Maintenance", "Planner", "Professional", "Summary", "A", "value", "Unexpected", "label", "Retained", "value"]);
+});
+
+test("fontkit subset workaround is pinned to the exact tested version", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const packageJson = JSON.parse(await readFile(new URL("../node_modules/@pdf-lib/fontkit/package.json", import.meta.url), "utf8"));
+  assert.equal(packageJson.version, "1.1.1");
+});
+
+test("PDF glyph validation covers bullet markers and typed number characters", () => {
+  const model = buildResumeModel("- visible\n1. first\n2. second");
+  const glyphs = { hasGlyphForCodePoint: (codePoint) => !["•".codePointAt(0), "1".codePointAt(0), "2".codePointAt(0)].includes(codePoint) };
+  assert.throws(() => assertDrawable(model, Object.fromEntries(["regular", "bold", "italic", "boldItalic"].map((key) => [key, glyphs]))), /U\+2022/u);
+  const numberOnly = { ...model, blocks: model.blocks.filter((block) => block.type === "listItem" && block.ordered) };
+  assert.throws(() => assertDrawable(numberOnly, Object.fromEntries(["regular", "bold", "italic", "boldItalic"].map((key) => [key, glyphs]))), /U\+0031/u);
+});
+
 test("marks that are unclosed or inside a word stay as typed", () => {
   const input = "5*3 and snake_case_name and C++ and 50%+ and a * b and **unclosed and under_ and *";
   assert.deepEqual(modelWords(buildResumeModel(input)), words(input));
@@ -133,6 +202,7 @@ for (const fixture of FIXTURES) {
     assert.deepEqual(words(fixture.expected), modelWords(buildResumeModel(fixture.input)));
     const extracted = await docxBodyWords(file.bytes);
     assert.deepEqual(extracted.words, words(fixture.expected));
+    if (fixture.name.includes("non-breaking spaces")) assert.ok(extracted.xml.includes("\u00A0"), "Word XML preserves the typed NBSP");
   });
 
   test(`word for word, PDF: ${fixture.name}`, async () => {
@@ -140,8 +210,9 @@ for (const fixture of FIXTURES) {
     const extracted = await pdfExtract(file.bytes);
     const model = buildResumeModel(fixture.input);
     if (fixture.overlongToken) {
-      // An address wider than the page has to break inside the word. Compare the letters.
-      assert.equal(extracted.words.join(""), words(fixture.expected).join(""));
+      // PDF.js canonicalises NBSP to a normal space during extraction. Layout keeps it
+      // inside one unbreakable word; Word XML preserves the actual character.
+      assert.equal(extracted.words.join(""), expectedPdfWords(model).join("").replaceAll("\u00A0", ""));
     } else {
       assertPdfWords(model, extracted.words, words(fixture.expected), fixture.name);
     }

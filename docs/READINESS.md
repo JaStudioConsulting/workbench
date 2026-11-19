@@ -13,6 +13,8 @@
 
 The interface is one screen: Jobs column, Candidates (People / Swipe / Board), Today, and Meetings. Map, Process, Leads, Settings, and Profile open as panels.
 
+Branded PDF and Word files are built from saved resume text by a deterministic formatter with no AI or network calls.
+
 The operator approval desk remains behind `VITE_OPERATOR_CASES_ENABLED` (default off). It cannot send email, submit candidates, or write Tracker through an approval action. The Loxo control records only the user's report of manual entry.
 
 ## Not active or still gated

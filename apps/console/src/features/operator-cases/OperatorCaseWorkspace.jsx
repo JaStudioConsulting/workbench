@@ -9,6 +9,7 @@ import { blockingEvidence, loadOperatorCase, markDailyReviewActionReported, mark
 import { updateMpcArtifact } from "./mpcService.js";
 import { saveBrandedResumeVersion } from "./resumeVersionClient.js";
 import BrandedResumeControl from "../candidate-review/BrandedResumeControl.jsx";
+import { brandedResumeSourceText } from "./brandedResumeSource.js";
 
 const labels = {
   automation: "Automatic templates", after_call: "After-call case", mpc: "MPC case", daily: "Daily review case",
@@ -220,7 +221,7 @@ function ArtifactCard({ artifact, versionNumber, blocked, busy, onSave, onReview
       {artifact.content?.audit ? <AuditSummary audit={artifact.content.audit} /> : null}
       {artifact.content?.editReview?.reviewNeeded ? <p className="rounded-md border border-amber-400 bg-amber-50 p-3 text-sm text-amber-950" role="status">{artifact.content.editReview.humanEditedPaths?.length ? "Some wording was edited. Retained source quotes are reference material only; they do not verify the revised wording. Review these changes before approval." : artifact.content.editReview.note || "Review this saved draft before approval."}</p> : null}
       {evidence.length ? <details className="rounded-md border p-3 text-sm"><summary className="cursor-pointer font-medium">Source quotes ({evidence.length})</summary><ul className="mt-2 grid gap-2">{evidence.map((item, index) => <li key={`${item.source}:${index}`}><blockquote className="border-l-2 pl-3">“{item.quote}”</blockquote><p className="mt-1 text-xs text-muted-foreground">{item.source?.replaceAll("_", " ") || "Source not named"}</p></li>)}</ul></details> : null}
-      {artifact.artifact_type === "branded_resume" && !editing ? <BrandedResumeControl compact text={artifact.content?.text} candidateName={artifact.content?.sections?.name?.value || ""} /> : null}
+      {artifact.artifact_type === "branded_resume" && !editing ? <BrandedResumeControl compact text={brandedResumeSourceText(artifact.content)} candidateName={artifact.content?.sections?.name?.value || ""} /> : null}
       {!editing ? <Button variant="outline" onClick={() => { const blob = new Blob([displayPlainText(artifact.content, artifact.artifact_type)], { type: "text/plain;charset=utf-8" }); const url = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = url; a.download = `${artifact.artifact_type}.txt`; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); }}>Download text</Button> : null}
       <div className="flex flex-wrap gap-2">
         {editing ? <><Button variant="outline" disabled={busy} onClick={async () => { const saved = await onSave(artifact, value); if (saved) setEditing(false); }}>Save edits</Button><Button type="button" variant="ghost" disabled={busy} onClick={() => { setValue(artifact.content || {}); setEditing(false); }}>Cancel edits</Button></> : editableTypes.includes(artifact.artifact_type) ? <Button variant="outline" disabled={busy} onClick={() => setEditing(true)}>Edit output</Button> : null}

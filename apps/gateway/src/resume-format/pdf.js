@@ -170,12 +170,22 @@ export function layoutResume(model, { measure, logoHeightPt = 0 }) {
   const contentWidth = page.widthPt - m.left - m.right;
   const bottomLimit = page.heightPt - m.bottom;
   const plans = model.blocks.map((block) => planBlock(block, measure, contentWidth));
+  const linesHeight = (plan, count) => count * plan.lh;
+  const chainRemainder = new Array(plans.length).fill(0);
+  for (let i = plans.length - 1; i >= 0; i -= 1) {
+    const plan = plans[i];
+    if (plan.keepWithNext && i + 1 < plans.length) {
+      chainRemainder[i] = linesHeight(plan, plan.lines.length) + plan.extra
+        + plan.after + plans[i + 1].before + chainRemainder[i + 1];
+    } else chainRemainder[i] = linesHeight(plan, Math.min(2, plan.lines.length)) + (plan.kind === "rule" ? plan.extra : 0);
+  }
   const pages = [];
   const wordPieces = [];
   let current;
   let y;
   let pageTop;
   const startPage = () => {
+    if (pages.length >= 150) throw new ResumeFormatError("RESUME_TOO_LONG", "This resume is too long to format (over 150 pages). Shorten the saved text, then try again.");
     current = { items: [] };
     pages.push(current);
     y = m.top;
@@ -190,23 +200,7 @@ export function layoutResume(model, { measure, logoHeightPt = 0 }) {
     pageTop = false;
   }
 
-  const linesHeight = (plan, count) => count * plan.lh;
-  const chainHeight = (index, gapFirst) => {
-    let total = gapFirst;
-    let prev = null;
-    for (let j = index; j < plans.length; j += 1) {
-      const plan = plans[j];
-      if (j > index) total += prev.after + plan.before;
-      if (plan.keepWithNext) {
-        total += linesHeight(plan, plan.lines.length) + plan.extra;
-        prev = plan;
-        continue;
-      }
-      total += linesHeight(plan, Math.min(2, plan.lines.length)) + (plan.kind === "rule" ? plan.extra : 0);
-      break;
-    }
-    return total;
-  };
+  const chainHeight = (index, gapFirst) => gapFirst + chainRemainder[index];
 
   const emit = (plan, from, count) => {
     for (let i = 0; i < count; i += 1) {
@@ -348,15 +342,19 @@ export function expectedPdfWords(model) {
     if (block.type === "listItem" && block.ordered) words.push(block.marker);
     for (const line of block.lines || []) {
       const text = isCapsBlock(block) ? upperForDisplay(runsText(line)) : runsText(line);
-      words.push(...text.split(/\s+/u).filter(Boolean));
+      words.push(...text.split(/[ \t\r\n]+/u).filter(Boolean));
     }
   }
   return words;
 }
 
-function assertDrawable(model, fontkitFonts) {
+export function assertDrawable(model, fontkitFonts) {
   const missing = new Map();
   for (const block of model.blocks) {
+    if (block.type === "listItem" && block.ordered) {
+      for (const ch of block.marker) if (!fontkitFonts.regular.hasGlyphForCodePoint(ch.codePointAt(0)) && !missing.has(ch)) missing.set(ch, true);
+    }
+    if (block.type === "listItem" && !block.ordered && !fontkitFonts.regular.hasGlyphForCodePoint(BRAND.list.bulletChar.codePointAt(0)) && !missing.has(BRAND.list.bulletChar)) missing.set(BRAND.list.bulletChar, true);
     for (const line of block.lines || []) {
       for (const run of line) {
         const key = fontKeyFor(run, block.type === "title" || block.type === "heading");
