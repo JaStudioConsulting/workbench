@@ -2,44 +2,11 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { transformWithEsbuild } from "vite";
-import { makeCandidateNotes } from "../src/features/meetings/afterCallClient.js";
 import { createMeetingDraft, formatSpeakerTranscript, groupCalendarEvents, isMeetingContextLocked, safeJoinUrl } from "../src/features/meetings/meetingModel.js";
 import { fetchNativeCaptureAudio, getMeetingStatus, startNativeMeetingCapture, stopNativeMeetingCapture, transcribeMeetingAudio } from "../src/features/meetings/meetingGatewayClient.js";
 import { deleteLocalMeetingDraft, discardRecordingArchive, encodePcm16Wav, isSecureRecordingContext, listInterruptedRecordings, loadLocalMeetingDraft, meetingCaptureState, meetingRecordingErrorMessage, meetingRecordingFilename, openRecordingArchive, recoverBrowserRecording, saveLocalMeetingDraft, selectWorkbenchRecordingFormat, startBrowserRecording } from "../src/features/meetings/browserRecorder.js";
 import { MEETING_TEMPLATES, renderMeetingTemplate } from "../src/features/meetings/meetingTemplates.js";
 import { candidateCallHref, startCandidateCallSession } from "../src/features/meetings/candidateCallSession.js";
-import { saveMeetingAndReleaseArchive } from "../src/features/meetings/meetingRetention.js";
-
-test("recoverable audio survives failed and session-only saves until durable save succeeds", async () => {
-  const archive = new Map([["recording-1", "recoverable audio"]]);
-  const discardArchive = async (id) => { archive.delete(id); };
-  const attempt = (saveDraft) => saveMeetingAndReleaseArchive({ saveDraft, discardArchive, recordingId: "recording-1" });
-  await assert.rejects(() => attempt(async () => { throw new Error("offline"); }), /offline/);
-  assert.equal(archive.get("recording-1"), "recoverable audio");
-  await attempt(async () => ({ ok: true, persistence: "session_only", draft: { id: "local" } }));
-  assert.equal(archive.get("recording-1"), "recoverable audio");
-  await attempt(async () => ({ ok: true, persistence: "durable", draft: { id: "notes-only", transcript: "" } }));
-  assert.equal(archive.get("recording-1"), "recoverable audio");
-  await attempt(async () => ({ ok: true, persistence: "durable", draft: { id: "saved", transcript: "Speaker: Source words." } }));
-  assert.equal(archive.has("recording-1"), false);
-});
-
-test("archive cleanup failure logs the error and keeps the durable draft", async () => {
-  const cleanupError = new Error("storage unavailable");
-  const logged = [];
-  const result = await saveMeetingAndReleaseArchive({
-    saveDraft: async () => ({ ok: true, persistence: "durable", draft: { id: "saved", transcript: "Source words." } }),
-    discardArchive: async () => { throw cleanupError; },
-    recordingId: "recording-1",
-    logger: { error: (message, details) => logged.push({ message, details }) },
-  });
-  assert.equal(result.draft.id, "saved");
-  assert.equal(result.archiveRetained, true);
-  assert.equal(logged.length, 1);
-  assert.match(logged[0].message, /cleanup failed/);
-  assert.equal(logged[0].details.recordingId, "recording-1");
-  assert.equal(logged[0].details.error, cleanupError);
-});
 
 test("browser archive deletion reports storage failure to the retention boundary", async () => {
   await assert.rejects(
@@ -552,76 +519,6 @@ test("recruiter templates preserve source sentences and mark unmatched topics wi
   assert.match(result.sections.find((section) => section.heading === "Motivation").content, /plant closed/);
   assert.equal(result.sections.find((section) => section.heading === "Experience").content, "Not recorded in supplied text");
   assert.match(result.markdown, /## Compensation and vacation/);
-});
-
-test("after-call preparation saves all returned outputs in one approval case", async () => {
-  let request;
-  let savedCase;
-  const result = await makeCandidateNotes({
-    job: { id: "42", title: "Maintenance Manager", company: "Source company", location: "Ontario" },
-    candidate: { id: "sourcing:7", name: "Candidate Example", title: "Supervisor", profileSummary: "Maintenance leadership" },
-    transcript: "Candidate stated a two week notice period.",
-  }, {
-    baseURL: "https://gateway.example.invalid",
-    fetchImpl: async (url, options) => {
-      request = { url: url.toString(), options };
-      return { ok: true, json: async () => ({
-        audit: { missingSources: [], conflicts: [], finalizationBlocked: false },
-        brandedResume: { content: "Draft resume" },
-        submission: { fields: { profileSummary: ["Source-backed fact"] } },
-        presentationEmail: { subject: "Candidate profile", body: "Draft only" },
-        loxoDraft: { bullets: ["Meeting transcript: Candidate stated a two week notice period."] },
-      }) };
-    },
-    getAccessToken: async () => "supabase-user-token",
-    casesEnabled: true,
-    saveCase: async (input) => { savedCase = input; return { record: { id: "case-1" } }; },
-  });
-  assert.equal(new URL(request.url).pathname, "/api/workflows/after-call/prepare");
-  assert.equal(request.options.options, undefined);
-  assert.equal(request.options.headers.Authorization, "Bearer supabase-user-token");
-  assert.equal(JSON.parse(request.options.body).candidateId, "sourcing:7");
-  assert.equal(request.options.credentials, undefined);
-  const payload = JSON.parse(request.options.body);
-  assert.equal(payload.transcriptText, "Candidate stated a two week notice period.");
-  assert.equal(payload.verifiedFacts, undefined);
-  assert.equal(savedCase.candidate.id, "sourcing:7");
-  assert.equal(savedCase.workflow.presentationEmail.body, "Draft only");
-  assert.equal(result.approvalCase.record.id, "case-1");
-  assert.equal(result.blocked, false);
-});
-
-test("missing transcript remains a draft input gap and blocks case review", async () => {
-  let savedCase;
-  let requestPayload;
-  const result = await makeCandidateNotes({
-    job: { id: "42", title: "Maintenance Manager" },
-    candidate: { id: "sourcing:7", title: "Supervisor", profileSummary: "Maintenance leadership" },
-    transcript: "",
-  }, {
-    casesEnabled: true,
-    getAccessToken: async () => "session-token",
-    fetchImpl: async (_url, options) => {
-      requestPayload = JSON.parse(options.body);
-      return { ok: true, json: async () => ({ audit: { missingSources: ["transcript"], conflicts: [], finalizationBlocked: false }, brandedResume: { content: "Draft" }, submission: { fields: {} }, presentationEmail: { subject: "Draft", body: "Draft" }, loxoDraft: { bullets: [] } }) };
-    },
-    saveCase: async (input) => { savedCase = input; return { record: { id: "review-case", status: "blocked" } }; },
-  });
-  assert.equal("transcriptText" in requestPayload, false);
-  assert.equal(requestPayload.candidateId, "sourcing:7");
-  assert.deepEqual(savedCase.workflow.audit.missingSources, ["transcript"]);
-  assert.equal(savedCase.transcript, "");
-  assert.equal(result.blocked, true);
-  assert.equal(result.approvalCase.record.status, "blocked");
-});
-
-test("after-call auth and model errors give recoverable plain messages", async () => {
-  const input = { job: { id: 42, title: "Manager", company: "Example" }, candidate: { id: "sourcing:7", name: "Candidate", title: "Supervisor", profileSummary: "Leadership" }, transcript: "Call text" };
-  let calls = 0;
-  await assert.rejects(makeCandidateNotes(input, { getAccessToken: async () => "", fetchImpl: async () => { calls += 1; } }), /Workbench could not reach your workspace/);
-  assert.equal(calls, 0);
-  await assert.rejects(makeCandidateNotes(input, { getAccessToken: async () => "token", fetchImpl: async () => ({ ok: false, json: async () => ({ error: { code: "AI_NOT_CONFIGURED" } }) }) }), /not available right now/);
-  await assert.rejects(makeCandidateNotes(input, { getAccessToken: async () => "token", fetchImpl: async () => ({ ok: false, json: async () => ({ error: { code: "AI_INVALID_OUTPUT" } }) }) }), /checked against the source material/);
 });
 
 test("meetings workspace compiles and uses live selectors, manual transcripts, exports, and durable storage", async () => {

@@ -14,7 +14,6 @@ export {
   matchOpenJobs,
   scoreFit,
 } from "../pipeline/fitScore.js";
-export { personalizeOutreach } from "../pipeline/aiClient.js";
 export { default as FitBadge } from "../pipeline/FitBadge.jsx";
 export { getResumeSource } from "./brandResume.js";
 export { logOutreach } from "../mail/mailClient.js";

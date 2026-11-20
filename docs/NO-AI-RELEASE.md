@@ -1,6 +1,6 @@
 # No-AI release
 
-Workbench runs imports, records, rule-based fit, dated reminders, templates, audio recording, and exports without model calls. AI and transcription routes return `AI_DISABLED`, even when provider credentials exist. Hermes is not used or changed.
+Workbench runs imports, records, rule-based fit, dated reminders, templates, audio recording, and exports without model calls. AI-assisted fit and outreach are not exposed. Transcription and after-call endpoints return `AI_DISABLED`, even when provider credentials exist. Hermes is not used or changed.
 
 Open **Process → Automatic processing** to find a candidate, review output status, upload original PDF/DOCX/TXT documents, or enter explicit template fields and structured résumé sections. Outputs are editable and can be downloaded as text. Uploaded documents are retained as originals; their contents are not inferred. Candidate-only and notes-only meetings can be saved. Browser audio remains on its recording device with playback, download, and recovery; native audio and uploaded documents use the M1 data directory.
 
