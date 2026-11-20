@@ -1,16 +1,14 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { parseCandidateSourceKey } from "@ja/shared-types";
-import { AlertCircle, AlertTriangle, ExternalLink, FileText, Filter, Loader2, Mail, NotebookText, Pencil, Phone, Plus, Search, Send, ShieldAlert, Users } from "lucide-react";
+import { AlertCircle, AlertTriangle, ExternalLink, Filter, Loader2, Mail, NotebookText, Pencil, Phone, Plus, Search, Send, ShieldAlert, Users } from "lucide-react";
 import { Badge } from "../../components/ui/badge.tsx";
 import { Button } from "../../components/ui/button.tsx";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "../../components/ui/select.tsx";
 import { LOXO_PIPELINE_STAGES, RESUME_INDICATOR_STATES } from "./constants.js";
-import { getOwnershipStatus, openBrandedResume } from "./brandResume.js";
-import {
-  createCandidateDraft,
-  enrichCandidatesWithPresentations,
-} from "./candidateReviewService.js";
+import { getOwnershipStatus } from "./brandResume.js";
+import { enrichCandidatesWithPresentations } from "./candidateReviewService.js";
 import CandidateWriteUpDialog from "./CandidateWriteUpDialog.jsx";
+import BrandedResumeControl from "./BrandedResumeControl.jsx";
 import CandidateEditorDialog from "./CandidateEditorDialog.jsx";
 import CandidatePresentationSummary, {
   CandidatePresentationBadges,
@@ -23,7 +21,6 @@ import {
   subscribeCandidateRecords,
 } from "./candidateEditorService.js";
 import OutreachComposer from "./OutreachComposer.jsx";
-import { getResumeSource } from "./externals.js";
 
 const LOXO_PEOPLE_BASE_URL = "https://app.loxo.co/people/";
 const NotesPanel = lazy(() => import("../notes/NotesPanel.jsx"));
@@ -220,19 +217,6 @@ export default function PeopleView({ candidates = [], currentJob, jobs = [], sub
   };
 
   const overrideOwnership = (candidateId) => setOwnershipOverrides((current) => new Set([...current, candidateId]));
-
-  const brandResume = async (candidate) => {
-    setActionError("");
-    try {
-      const source = getResumeSource(candidate);
-      if (source.kind === "none") throw new Error("Not enough data to build a resume");
-      await createCandidateDraft({ job: currentJob, candidate, kind: "resume_pdf", body: source.text });
-      const result = openBrandedResume(candidate);
-      if (!result.ok) throw new Error(result.error);
-    } catch (error) {
-      setActionError(error.message || "The branded resume could not be opened.");
-    }
-  };
 
   return (
     <div className="flex flex-1 min-h-0 flex-col gap-3 overflow-hidden" data-testid="people-view">
@@ -438,7 +422,7 @@ export default function PeopleView({ candidates = [], currentJob, jobs = [], sub
                       ) : (
                         <>
                           <button type="button" disabled={!candidate.phone} onClick={() => onStartCandidateCall?.({ job: currentJob, candidate })} className="inline-flex h-8 items-center rounded-md border bg-background px-3 text-xs font-semibold hover:bg-muted disabled:pointer-events-none disabled:opacity-50"><Phone size={13} className="mr-1.5" />Call</button>
-                          <Button type="button" size="sm" variant="outline" className="h-8 text-xs" onClick={() => brandResume(candidate)}><FileText size={13} className="mr-1.5" />Brand resume</Button>
+                          <BrandedResumeControl compact text={candidate.fullResumeText} candidateName={candidate.name} />
                           <Button type="button" size="sm" variant="outline" className="h-8 text-xs" onClick={() => setWriteUpCandidate(candidate)}><NotebookText size={13} className="mr-1.5" />Write-up</Button>
                           <Button type="button" size="sm" variant="outline" className="h-8 text-xs" onClick={() => setOutreachCandidate(candidate)}><Mail size={13} className="mr-1.5" />Outreach</Button>
                           <Button type="button" size="sm" className="h-8 bg-blue-700 text-xs text-white hover:bg-blue-800" disabled={submittingId === candidate.id} onClick={() => markSubmitted(candidate)}>{submittingId === candidate.id ? <Loader2 size={13} className="mr-1.5 animate-spin" /> : <Send size={13} className="mr-1.5" />}Mark submitted</Button>

@@ -82,3 +82,36 @@ accepted an edit, and Excalidraw mounted and registered a drawn rectangle.
 This verifies the isolated fixture only; autosave, persistence, iPad input, and
 final Workbench styling were outside the experiment. Novel AI features,
 Tiptap Pro extensions and Cloud, and Excalidraw+ were not included.
+
+## Branded resume formatter (PDF and Word)
+
+The formatter lives in `apps/gateway/src/resume-format/`. It runs locally, calls no
+AI model and no network service, and only formats the saved resume text.
+
+| Component | Use | License |
+|---|---|---|
+| `docx` 9.x | Writes the Word file (real styles, list numbering) | MIT |
+| `pdf-lib` 1.17.1 and `@pdf-lib/fontkit` 1.1.1 | Draws the PDF and embeds the font | MIT |
+| `jszip` 3.x | Re-packs the Word file so the same text always gives the same file | MIT (dual MIT or GPL-3.0; used under MIT) |
+| `pdfjs-dist` (dev only) | Reads text back out of the generated PDF in tests | Apache-2.0 |
+| Arimo (`apps/gateway/assets/fonts/`) | PDF font, metric-compatible with Arial. Copyright 2026 The Arimo Project Authors; full text in `apps/gateway/assets/fonts/LICENSE-Arimo.txt` | SIL Open Font License 1.1 |
+
+The formatter reads the firm logo from the console's existing
+`apps/gateway/assets/tttg_logo.png` (byte-identical to the approved console asset). The Arimo font files
+are listed with their hashes in `scripts/privacy-check.mjs` like the other approved assets.
+
+### Reference skills (not copied into the app)
+
+File quality guidance for the Word and PDF output (real heading styles, list
+numbering instead of typed bullets, explicit US Letter page size, a font on every
+style, no folder entries in the zip) was taken from these skills, which the owner
+chose as the reference. No scripts or text were copied.
+
+- `anthropics/skills`, Apache-2.0, pinned reference commit
+  `1780c5e5a552fd4d1c9d6a7b0cab26b0c2bef064`: `skills/docx`, `skills/pptx`,
+  `skills/pdf`, `skills/xlsx`. `skills-lock.json` has no field for a commit; see
+  the report for the command that records these four in the lock file.
+- `google/skills`, Apache-2.0, commit `3c4dda4af5a63049cca71d69be1f5536577e7a6c`:
+  checked and found to hold no Google Docs, Slides, Drive, Sheets, Gmail or Calendar
+  skills (only cloud, ads, analytics, developers, identity and platform-devices),
+  so nothing from it was used or pinned.

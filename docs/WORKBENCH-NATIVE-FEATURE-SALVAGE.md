@@ -54,7 +54,7 @@ Only the dependencies required by these modules may be introduced.
 ## Backlog
 
 - recruiter-safe meeting templates
-- Markdown and PDF meeting export
+- Markdown meeting export
 - source-linked transcript citations
 - Ask Meetings
 - video recording

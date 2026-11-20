@@ -56,12 +56,14 @@ test("case workspace exposes review controls but no execution control", async ()
   assert.match(source, /markDailyReviewActionReported/);
   assert.match(source, /Ready for manual entry/);
   assert.match(source, /identityReviewRequired/);
-  assert.match(source, /Download resume PDF/);
+  assert.doesNotMatch(source, /Download resume PDF|downloadWorkflowResumePdf|Retry PDF export/);
+  assert.doesNotMatch(source, /Document output is not set up yet\./);
+  assert.match(source, /<BrandedResumeControl /);
   assert.match(source, /updateMpcArtifact/);
   assert.match(source, /if \(state\.data\.record\.case_type === "mpc"\) return updateMpcArtifact/);
   assert.match(source, /Earlier saved versions/);
   assert.match(source, /Edit output/);
-  assert.match(source, /renderBrandedResumeVersion\(state\.data\.record\.id/);
+  assert.match(source, /saveBrandedResumeVersion\(state\.data\.record\.id/);
   assert.match(source, /Retained quotes are reference material only/);
   assert.match(source, /Current version \{versionNumber\}/);
   assert.match(source, /!artifactVersions\.currentIds\.has\(action\.manifest\?\.artifactId\)/);
@@ -114,7 +116,7 @@ test("case service keeps Sheets data outside cases", async () => {
   assert.doesNotMatch(source, /merge.*name/i);
   assert.match(source, /create_draft_only/);
   assert.match(source, /operation: "manual_loxo_entry", execution: "user_reported"/);
-  assert.match(source, /workflow\.brandedResume\?\.pdf/);
+  assert.doesNotMatch(source, /workflow\.brandedResume\?\.pdf/);
   assert.match(source, /workflow\.audit/);
   assert.match(source, /required: false/);
 });

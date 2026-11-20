@@ -1,7 +1,6 @@
 import { WorkflowResumeSchema, errorEnvelope } from "@ja/shared-types";
 import { resolveCandidateSupabaseConfig } from "./candidate-routes.js";
 import { renderResume } from "./after-call.js";
-import { renderBrandedResume } from "./branded-resume-renderer.js";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -78,7 +77,7 @@ function editReview(originalSections, newSections) {
     humanEditedPaths,
     note: humanEditedPaths.length
       ? "Human-edited wording needs recruiter source review. Preserved quotes are reference material and do not verify revised wording."
-      : "New draft version. Review the structured resume and PDF before approval.",
+      : "New draft version. Review the structured resume before approval.",
   };
 }
 
@@ -104,7 +103,6 @@ export function registerBrandedResumeEditRoutes(app, {
   access,
   env = process.env,
   fetchImpl = globalThis.fetch,
-  renderer = renderBrandedResume,
 } = {}) {
   const config = resolveCandidateSupabaseConfig(env);
   app.post("/api/operator-cases/:caseId/branded-resume/versions", access, async (req, res) => {
@@ -153,10 +151,6 @@ export function registerBrandedResumeEditRoutes(app, {
         return respond(res, "INVALID_EVIDENCE", "Use only the saved source references when editing resume wording", 400);
       }
 
-      let pdf;
-      try { pdf = await renderer(parsedSections.data); }
-      catch { return respond(res, "RESUME_RENDER_FAILED", "A new branded PDF could not be rendered. No resume version was saved.", 503); }
-
       const identityMatches = normalizeIdentity(parsedSections.data.name.value) === normalizeIdentity(candidate.candidate_name);
       const audit = {
         ...latest.content.audit,
@@ -165,9 +159,6 @@ export function registerBrandedResumeEditRoutes(app, {
       const content = {
         text: renderResume(parsedSections.data),
         sections: parsedSections.data,
-        pdf,
-        exportStatus: "draft_rendered",
-        exportMessage: null,
         audit,
         editReview: {
           ...editReview(latest.content.sections, parsedSections.data),
@@ -191,9 +182,9 @@ export function registerBrandedResumeEditRoutes(app, {
       const inserted = await readJson(insertResponse);
       if (!insertResponse.ok) {
         if (/STALE_ARTIFACT/i.test(String(inserted?.message || inserted?.details || ""))) {
-          return respond(res, "STALE_ARTIFACT", "The resume draft changed while it was rendering. Reload it before saving edits.", 409);
+          return respond(res, "STALE_ARTIFACT", "The resume draft changed while it was being saved. Reload it before saving edits.", 409);
         }
-        return respond(res, "RESUME_SAVE_FAILED", "The rendered resume draft could not be saved", 502);
+        return respond(res, "RESUME_SAVE_FAILED", "The resume draft could not be saved", 502);
       }
       res.set("Cache-Control", "private, no-store");
       return res.status(201).json({ artifact: inserted });

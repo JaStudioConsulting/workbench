@@ -11,7 +11,7 @@ The desk stores recruiter review work in owner-scoped Supabase cases. Home holds
 - Each case binds its canonical sources, artifacts and exact action snapshot. Artifact revisions are appended as human drafts; prior approvals and dependent actions are withdrawn when a new version supersedes them.
 - The Loxo control records only the user's explicit report that they entered the reviewed snapshot in Loxo. The app does not call Loxo or imply a verified sync.
 - Email and candidate submission remain drafts. The app does not send, submit, or write Tracker data through an approved action.
-- After-call outputs require a configured model and source validation. They remain drafts for recruiter review; JD text cannot be used as career evidence. Editing the branded resume checks source references, rechecks the selected candidate, and renders a new PDF draft.
+- After-call outputs require a configured model and source validation. They remain drafts for recruiter review; JD text cannot be used as career evidence. Editing the branded resume checks source references, rechecks the selected candidate, and saves a new draft version of the resume text. No PDF is generated.
 
 ## Release state
 

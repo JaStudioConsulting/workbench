@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { renderBrandedResumeVersion } from "../src/features/operator-cases/resumeVersionClient.js";
+import { saveBrandedResumeVersion } from "../src/features/operator-cases/resumeVersionClient.js";
 
 function response(body, status = 200) {
   return { ok: status >= 200 && status < 300, status, async json() { return body; } };
@@ -9,8 +9,8 @@ function response(body, status = 200) {
 test("resume version edits send the exact structured sections with caller bearer token", async () => {
   const sections = { name: { value: "Example", evidence: [{ source: "resume", quote: "Example" }] } };
   let request;
-  const artifact = { id: "new-version", artifact_type: "branded_resume", content: { sections, pdf: { mimeType: "application/pdf" } } };
-  const result = await renderBrandedResumeVersion("case/one", { artifactId: "old", expectedUpdatedAt: "2026-11-13T12:00:00Z", sections }, {
+  const artifact = { id: "new-version", artifact_type: "branded_resume", content: { sections } };
+  const result = await saveBrandedResumeVersion("case/one", { artifactId: "old", expectedUpdatedAt: "2026-11-13T12:00:00Z", sections }, {
     baseURL: "https://gateway.example",
     getAccessToken: async () => "user-token",
     fetchImpl: async (url, options) => { request = { url: String(url), options }; return response({ artifact }); },
@@ -21,9 +21,9 @@ test("resume version edits send the exact structured sections with caller bearer
   assert.deepEqual(JSON.parse(request.options.body), { artifactId: "old", expectedUpdatedAt: "2026-11-13T12:00:00Z", sections });
 });
 
-test("resume version edit keeps saved version intact when rendering fails", async () => {
-  await assert.rejects(renderBrandedResumeVersion("case-1", { artifactId: "old", expectedUpdatedAt: "2026-11-13T12:00:00Z", sections: {} }, {
+test("resume version edit keeps saved version intact when saving fails", async () => {
+  await assert.rejects(saveBrandedResumeVersion("case-1", { artifactId: "old", expectedUpdatedAt: "2026-11-13T12:00:00Z", sections: {} }, {
     getAccessToken: async () => "user-token",
-    fetchImpl: async () => response({ error: { code: "RESUME_RENDER_FAILED" } }, 502),
+    fetchImpl: async () => response({ error: { code: "RESUME_SAVE_FAILED" } }, 502),
   }), /saved version is unchanged/i);
 });

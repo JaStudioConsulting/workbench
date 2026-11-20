@@ -168,23 +168,20 @@ test("generic artifact edits append a draft and reject stale revisions", async (
   const old = {
     id: "artifact-1", owner_id: ownerId, case_id: "case-1", artifact_type: "branded_resume",
     source_ref: "meeting:resume:v1", generated_by: "after_call_service", review_state: "approved",
-    reviewed_at: "2026-11-13T10:00:00.000Z", content: { text: "Old resume", pdf: { data: "old-pdf" }, exportStatus: "draft_rendered" },
+    reviewed_at: "2026-11-13T10:00:00.000Z", content: { text: "Old resume" },
     created_at: "2026-11-13T09:00:00.000Z", updated_at: "2026-11-13T10:00:00.000Z",
   };
   tables.case_artifacts.push(old);
-  const next = await updateCaseArtifact(old.id, { text: "Edited resume", pdf: { data: "old-pdf" } }, {
+  const next = await updateCaseArtifact(old.id, { text: "Edited resume" }, {
     client, expectedUpdatedAt: old.updated_at,
   });
   assert.notEqual(next.id, old.id);
   assert.equal(next.review_state, "draft");
   assert.equal(next.generated_by, "human");
-  assert.equal(next.content.pdf, null);
-  assert.equal(next.content.exportStatus, "not_rendered");
   assert.equal(next.content.editReview.reviewNeeded, true);
   assert.ok(next.content.editReview.humanEditedPaths.includes("text"));
   assert.match(next.content.editReview.note, /quotes are reference material/i);
   assert.equal(old.content.text, "Old resume");
-  assert.deepEqual(old.content.pdf, { data: "old-pdf" });
   assert.equal(old.review_state, "approved", "only the database supersession trigger changes prior review state");
 
   await assert.rejects(updateCaseArtifact(old.id, { text: "stale edit" }, { client, expectedUpdatedAt: old.updated_at }), /stale|reload/i);

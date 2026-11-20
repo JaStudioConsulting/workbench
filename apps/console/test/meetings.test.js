@@ -6,7 +6,6 @@ import { makeCandidateNotes } from "../src/features/meetings/afterCallClient.js"
 import { createMeetingDraft, formatSpeakerTranscript, groupCalendarEvents, isMeetingContextLocked, safeJoinUrl } from "../src/features/meetings/meetingModel.js";
 import { fetchNativeCaptureAudio, getMeetingStatus, startNativeMeetingCapture, stopNativeMeetingCapture, transcribeMeetingAudio } from "../src/features/meetings/meetingGatewayClient.js";
 import { deleteLocalMeetingDraft, discardRecordingArchive, encodePcm16Wav, isSecureRecordingContext, listInterruptedRecordings, loadLocalMeetingDraft, meetingCaptureState, meetingRecordingErrorMessage, meetingRecordingFilename, openRecordingArchive, recoverBrowserRecording, saveLocalMeetingDraft, selectWorkbenchRecordingFormat, startBrowserRecording } from "../src/features/meetings/browserRecorder.js";
-import { downloadWorkflowResumePdf, meetingPrintHtml } from "../src/features/meetings/meetingExport.js";
 import { MEETING_TEMPLATES, renderMeetingTemplate } from "../src/features/meetings/meetingTemplates.js";
 import { candidateCallHref, startCandidateCallSession } from "../src/features/meetings/candidateCallSession.js";
 import { saveMeetingAndReleaseArchive } from "../src/features/meetings/meetingRetention.js";
@@ -555,15 +554,6 @@ test("recruiter templates preserve source sentences and mark unmatched topics wi
   assert.match(result.markdown, /## Compensation and vacation/);
 });
 
-test("meeting print export is clean black Arial HTML", () => {
-  const template = renderMeetingTemplate("reference_check", "I would rehire them.");
-  const html = meetingPrintHtml({ title: "Reference check", template });
-  assert.match(html, /font-family:Arial/);
-  assert.match(html, /color:#000/);
-  assert.doesNotMatch(html, /gradient/i);
-  assert.match(html, /I would rehire them\./);
-});
-
 test("after-call preparation saves all returned outputs in one approval case", async () => {
   let request;
   let savedCase;
@@ -634,20 +624,6 @@ test("after-call auth and model errors give recoverable plain messages", async (
   await assert.rejects(makeCandidateNotes(input, { getAccessToken: async () => "token", fetchImpl: async () => ({ ok: false, json: async () => ({ error: { code: "AI_INVALID_OUTPUT" } }) }) }), /checked against the source material/);
 });
 
-test("resume PDF export validates mime type, byte size, and PDF signature", () => {
-  let download = null;
-  let revoked = "";
-  const documentRef = { createElement: () => ({ click() { download = this.download; } }) };
-  const URLImpl = { createObjectURL: (blob) => { assert.equal(blob.type, "application/pdf"); return "blob:resume"; }, revokeObjectURL: (url) => { revoked = url; } };
-  const binary = "%PDF-1.7\nresume";
-  const base64 = btoa(binary);
-  assert.deepEqual(downloadWorkflowResumePdf({ fileName: "Candidate Resume.pdf", mimeType: "application/pdf", base64, sizeBytes: binary.length }, { documentRef, URLImpl }), { sizeBytes: binary.length, fileName: "candidate-resume.pdf" });
-  assert.equal(download, "candidate-resume.pdf");
-  assert.equal(revoked, "blob:resume");
-  assert.throws(() => downloadWorkflowResumePdf({ mimeType: "text/plain", base64, sizeBytes: binary.length }, { documentRef, URLImpl }), /not available/);
-  assert.throws(() => downloadWorkflowResumePdf({ mimeType: "application/pdf", base64: btoa("not pdf"), sizeBytes: 7 }, { documentRef, URLImpl }), /could not be verified/);
-});
-
 test("meetings workspace compiles and uses live selectors, manual transcripts, exports, and durable storage", async () => {
   const [workspace, variants, store, migration, captureMigration, transcriptionMigration] = await Promise.all([
     readFile(new URL("../src/features/meetings/MeetingsWorkspace.jsx", import.meta.url), "utf8"),
@@ -666,7 +642,7 @@ test("meetings workspace compiles and uses live selectors, manual transcripts, e
   assert.match(variants, /__variant/);
   assert.match(variants, /transcript-first/);
   assert.match(workspace, /Download Markdown/);
-  assert.match(workspace, /Print or save PDF/);
+  assert.doesNotMatch(workspace, /Print or save PDF|printMeetingPdf/);
   assert.match(store, /export async function listRecentMeetings/);
   assert.match(store, /persistence: "durable"/);
   assert.doesNotMatch(store, /persistence: "session_only"/);

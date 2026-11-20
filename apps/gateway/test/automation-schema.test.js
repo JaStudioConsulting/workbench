@@ -342,7 +342,7 @@ test("removed or mismatched structured resumes withdraw the current output while
       await db.query("INSERT INTO public.automation_inputs(candidate_id,resume) VALUES ('sourcing:7',$1)", [JSON.stringify(source)]);
       await reconcile(db);
       const initialTask = await claim(db);
-      const firstDrafts = await assembleTemplates(initialTask.payload, { renderer: async () => ({ fileName: "saved.pdf" }) });
+      const firstDrafts = await assembleTemplates(initialTask.payload);
       const caseId = await finish(db, initialTask, "", firstDrafts.result, firstDrafts.outputs);
       const initial = (await db.query("SELECT * FROM public.case_artifacts WHERE case_id=$1 AND artifact_type='branded_resume'", [caseId])).rows[0];
       const humanContent = { ...initial.content, text: "Human-reviewed resume wording" };
@@ -353,7 +353,7 @@ test("removed or mismatched structured resumes withdraw the current output while
       else await asAdmin(db, "UPDATE public.candidates_all SET candidate_name='Corrected candidate identity' WHERE id='sourcing:7'");
       assert.equal(await reconcile(db), 1);
       const currentTask = await claim(db);
-      const currentDrafts = await assembleTemplates(currentTask.payload, { renderer: async () => { throw new Error("A stale resume must not render"); } });
+      const currentDrafts = await assembleTemplates(currentTask.payload);
       assert.equal(currentDrafts.outputs.some((output) => output.type === "branded_resume"), false);
       assert.equal(currentDrafts.result.resumeStatus, "needs_information");
       if (change === "name mismatch") assert.ok(currentDrafts.result.missing.includes("structuredResumeIdentity"));

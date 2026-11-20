@@ -40,7 +40,6 @@ import {
 import { SAMPLE_CANDIDATES, SAMPLE_JOBS } from "../src/features/candidate-review/sampleReviewData.js";
 import { getWindowedIndices, MAX_VISIBLE_DOTS } from "../src/features/candidate-review/figureUtils.js";
 import {
-  buildBrandResumePayload,
   buildCandidateWriteUp,
   getOwnershipStatus,
 } from "../src/features/candidate-review/brandResume.js";
@@ -713,19 +712,15 @@ test("write failure preserves activity note and enforces outbox idempotency", as
   assert.match(formSource, /items=\{ACTIVITY_TYPE_ITEMS\}/);
 });
 
-test("brand resume and write-up use only available candidate sources", () => {
+test("write-up uses only available candidate sources and the card has no resume layout button", () => {
   const candidate = SAMPLE_CANDIDATES[0];
-  const resume = buildBrandResumePayload(candidate);
   const writeUp = buildCandidateWriteUp(candidate);
 
-  assert.equal(resume.name, candidate.name);
-  assert.equal(resume.headline, candidate.title);
-  assert.deepEqual(resume.experience[0].bullets, candidate.workHistory[0].bullets);
   assert.match(writeUp.text, /Sources missing:/);
   assert.doesNotMatch(writeUp.text, /NEEDS VERIFICATION/);
 
   const cardSource = fs.readFileSync(path.join(featureDir, "CandidateCard.jsx"), "utf8");
-  assert.match(cardSource, /data-testid="brand-resume-button"/);
+  assert.doesNotMatch(cardSource, /brand-resume-button|openBrandedResume/);
   assert.match(cardSource, /CandidateWriteUpDialog/);
 });
 
@@ -783,7 +778,7 @@ test("people view exposes fast queues and wanted actions while swipe stays unrev
   assert.match(peopleSource, />Call</);
   assert.match(peopleSource, /onStartCandidateCall/);
   assert.doesNotMatch(peopleSource, /href=\{candidate\.phone \? `tel:/);
-  assert.match(peopleSource, />Brand resume</);
+  assert.doesNotMatch(peopleSource, />Brand resume</);
   assert.match(peopleSource, />Write-up</);
   assert.match(peopleSource, /Mark submitted/);
   assert.match(peopleSource, /data-testid="submission-filters"/);
@@ -1036,11 +1031,14 @@ test("Canada filter defaults on, remembers choices, and can include unknown loca
 test("card wires the new pieces and drops the old no-resume message", () => {
   const card = fs.readFileSync(path.join(featureDir, "CandidateCard.jsx"), "utf8");
   const people = fs.readFileSync(path.join(featureDir, "PeopleView.jsx"), "utf8");
+  const resumeSection = fs.readFileSync(path.join(featureDir, "ResumeSection.jsx"), "utf8");
   for (const source of [card, people]) {
     assert.doesNotMatch(source, /No source resume is stored/);
-    assert.match(source, /Not enough data to build a resume/);
-    assert.match(source, /getResumeSource/);
+    assert.doesNotMatch(source, /Brand resume/);
   }
+  assert.match(resumeSection, /Not enough data to build a resume/);
+  assert.match(resumeSection, /getResumeSource/);
+  assert.match(card, /getResumeSource/);
   assert.match(card, /<FitBadge job=\{currentJob\} candidate=\{candidate\} \/>/);
   assert.match(card, /RejectMenu/);
   assert.match(card, /ContactReveal/);

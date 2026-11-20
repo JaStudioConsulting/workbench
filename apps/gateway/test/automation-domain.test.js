@@ -72,20 +72,20 @@ test('manual structured resume intake rejects identity mismatch and malformed fi
   assert.throws(() => validateAutomationInputs({ resume: { ...structuredResume(), education: [] } }, candidate), /structured resume sections/);
 });
 
-test('PDF failure preserves structured resume, text, and other drafts without a model call', async () => {
+test('structured resume is saved as text without a model call', async () => {
   const originalFetch = globalThis.fetch;
   let calls = 0;
   globalThis.fetch = async () => { calls += 1; throw new Error('No model or send request is allowed'); };
   try {
     const resume = structuredResume();
-    const result = await assembleTemplates({ candidate, fields: {}, resume }, { renderer: async () => { throw new Error('Renderer offline'); } });
+    const result = await assembleTemplates({ candidate, fields: {}, resume });
     const branded = output(result, 'branded_resume');
     assert.equal(branded.status, 'ready');
-    assert.equal(branded.pdf, null);
-    assert.equal(branded.exportStatus, 'not_rendered');
+    assert.equal(branded.pdf, undefined);
+    assert.equal(branded.exportStatus, undefined);
     assert.deepEqual(branded.sections, resume);
     assert.match(branded.text, /Electrical Engineering Technician Diploma/);
-    assert.equal(result.result.resumeStatus, 'failed');
+    assert.equal(result.result.resumeStatus, 'ready');
     assert.ok(output(result, 'candidate_submission'));
     assert.ok(output(result, 'loxo_update'));
     assert.equal(calls, 0);
@@ -93,11 +93,7 @@ test('PDF failure preserves structured resume, text, and other drafts without a 
 });
 
 test('candidate name changes block stale resume output while preserving independent drafts', async () => {
-  let renderCalls = 0;
-  const result = await assembleTemplates({ candidate: { ...candidate, candidate_name: 'Corrected Candidate' }, fields: {}, resume: structuredResume() }, {
-    renderer: async () => { renderCalls += 1; throw new Error('Mismatched resume must not render'); },
-  });
-  assert.equal(renderCalls, 0);
+  const result = await assembleTemplates({ candidate: { ...candidate, candidate_name: 'Corrected Candidate' }, fields: {}, resume: structuredResume() });
   assert.equal(output(result, 'branded_resume'), undefined);
   assert.equal(output(result, 'candidate_submission').fields.name.value, 'Corrected Candidate');
   assert.ok(output(result, 'loxo_update'));
@@ -105,11 +101,9 @@ test('candidate name changes block stale resume output while preserving independ
   assert.ok(result.result.missing.includes('structuredResumeIdentity'));
 });
 
-test('valid resume rendering preserves the supplied sections and returned PDF', async () => {
+test('valid structured resume preserves the supplied sections', async () => {
   const resume = structuredResume();
-  const pdf = { fileName: 'Candidate.pdf', mimeType: 'application/pdf', base64: 'JVBERi0xLjc=', sizeBytes: 8 };
-  const result = await assembleTemplates({ candidate, fields: {}, resume }, { renderer: async (sections) => { assert.deepEqual(sections, resume); return pdf; } });
-  assert.deepEqual(output(result, 'branded_resume').pdf, pdf);
-  assert.equal(output(result, 'branded_resume').exportStatus, 'ready');
+  const result = await assembleTemplates({ candidate, fields: {}, resume });
+  assert.deepEqual(output(result, 'branded_resume').sections, resume);
   assert.equal(result.result.resumeStatus, 'ready');
 });
