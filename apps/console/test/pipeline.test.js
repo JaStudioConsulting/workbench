@@ -2,7 +2,6 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { transformWithEsbuild } from "vite";
-import { evaluateFit, personalizeOutreach } from "../src/features/pipeline/aiClient.js";
 import { scoreFit } from "../src/features/pipeline/fitScore.js";
 import { isInCanada, province } from "../src/features/pipeline/location.js";
 import { groupPipelineCandidates, resolvePendingStage } from "../src/features/pipeline/pendingStage.js";
@@ -46,26 +45,6 @@ test("rules fit is unknown without a title or work history", () => {
     roleMatches: [],
     basis: "rules",
   });
-});
-
-test("AI browser clients use authenticated gateway calls and preserve unavailable state", async () => {
-  const calls = [];
-  const options = {
-    baseURL: "https://gateway.example.invalid",
-    fetchImpl: async (url, request) => {
-      calls.push({ url: url.toString(), request });
-      if (url.pathname === "/api/fit/evaluate") {
-        return { ok: false, status: 503, json: async () => ({ error: { code: "AI_NOT_CONFIGURED", message: "AI check not set up" } }) };
-      }
-      return { ok: true, status: 200, json: async () => ({ subject: "Source subject", body: "Source body" }) };
-    },
-  };
-  const fit = await evaluateFit({ id: "job-1" }, { id: "candidate-1" }, options);
-  const outreach = await personalizeOutreach({ job: {}, candidate: {}, template: "Initial", body: "Hello" }, options);
-  assert.deepEqual(fit, { ok: false, available: false, result: null, error: "AI check not set up" });
-  assert.equal(outreach.ok, true);
-  assert.equal(calls.every(({ request }) => request.credentials === "include"), true);
-  assert.deepEqual(calls.map(({ url }) => new URL(url).pathname), ["/api/fit/evaluate", "/api/outreach/personalize"]);
 });
 
 test("FitBadge exposes deterministic evidence without AI controls or requests", async () => {

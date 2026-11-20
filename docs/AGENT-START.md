@@ -1,6 +1,6 @@
 # Agent start: Recruiting Workbench
 
-Use this on the M1 that hosts Workbench. Read the repository `AGENTS.md` first. The live task record is the [AgentsMCP Workbench board](https://agentsmcp.ai/board/work), especially forum D7 and the task cards labelled `workbench`. D7 contains Ja's build rules; each card states its dependency and acceptance criterion. Follow the full build plan when it is available in `docs/BUILD-PLAN.md`. Do not fill gaps in a missing plan from memory.
+Use this on the M1 that hosts Workbench. Read the repository `AGENTS.md` first. The live task record is the [AgentsMCP Workbench board](https://agentsmcp.ai/board/work), especially forum D7 and the task cards labelled `workbench`. D7 contains Ja's build rules; each card states its dependency and acceptance criterion. Do not fill gaps in a missing plan from memory.
 
 ## Find the checkout
 
@@ -47,7 +47,7 @@ pnpm --prefix apps/console build
 PORT=8093 HOST=127.0.0.1 pnpm start:local
 ```
 
-Do not restart, replace, or deploy the live `:8092` service without Ja's approval. See `README.md`, `docs/ARCHITECTURE.md`, `docs/READINESS.md`, and `docs/CUTOVER-ROLLBACK.md` for current behavior and release checks; verify claims against live behavior.
+Do not restart, replace, or deploy the live `:8092` service without Ja's approval. See `README.md`, `docs/ARCHITECTURE.md`, and `docs/READINESS.md` for current behavior and release checks; verify claims against live behavior.
 
 ## Task and data rules
 

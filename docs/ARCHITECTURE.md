@@ -36,7 +36,7 @@ The app does not write directly to Loxo. Rejections, pipeline stage moves and lo
 
 ## AI in the gateway
 
-`apps/gateway/src/ai-routes.js` serves `/api/ai/status`, `/api/fit/evaluate` and `/api/outreach/personalize` with the official `@anthropic-ai/sdk`. The key is read from `ANTHROPIC_API_KEY` in the runtime environment and the model from `ANTHROPIC_MODEL` (default `claude-sonnet-5-5`). Without a key the routes report "not set up" and the console keeps rules-based fit levels. AI output uses levels with cited reasons, never numbers, and never sends anything.
+Candidate fit uses deterministic rules. The console has no AI fit or outreach client. Meeting transcription and after-call drafting remain disabled and return `AI_DISABLED`.
 
 ## Resumes without a resume file
 

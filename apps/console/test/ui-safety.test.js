@@ -8,7 +8,6 @@ test("console has no local persistence or send authority", async () => {
     "../src/App.jsx",
     "../src/features/home/HomePage.jsx",
     "../src/features/mail/MailPage.jsx",
-    "../src/EmptyWorkspace.jsx",
     "../src/components/GoogleWorkspacePanel.jsx",
     "../src/components/UpcomingCalendar.jsx",
     "../src/google-workspace-client.js",

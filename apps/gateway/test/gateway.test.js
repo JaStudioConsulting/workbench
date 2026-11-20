@@ -5,7 +5,6 @@ import test from "node:test";
 import { createApp } from "../app.js";
 import { createConfiguredAuth, parseAllowedGoogleEmails, parseExactHttpsOrigins } from "../src/auth.js";
 import { discoverMcp, loadRecruitmentAuthority, validatePublishedRecruitmentAssets, validateRecruitmentManifest } from "../src/recruitment-package.js";
-import { createMemoryTestStorage, requireDurableStorage } from "../src/storage.js";
 
 const browserOrigin = "https://console.test";
 const testEnv = { APP_TRUSTED_ORIGINS: browserOrigin };
@@ -122,7 +121,6 @@ test("API routes require the appropriate approved app or Google session", async 
   const app = await createApp({ env: testEnv, recruitmentContextLoader: testRecruitmentContext, authConfig: authenticated });
   assert.equal((await request(app, "GET", "/api/mcp/discovery")).status, 401);
   assert.equal((await request(app, "GET", "/api/meetings/status")).status, 401);
-  assert.equal((await request(app, "GET", "/api/ai/status")).status, 401);
   assert.equal((await request(app, "POST", "/api/workflows/after-call/prepare", { body: {} })).status, 401);
   assert.equal((await request(app, "POST", "/api/meetings/transcribe", { rawBody: Buffer.from("audio"), headers: { "content-type": "audio/mp4" } })).status, 401);
   assert.equal((await request(app, "POST", "/api/meetings/capture/start", { body: { jobId: "job-1", candidateId: "candidate-1" } })).status, 401);
@@ -435,10 +433,6 @@ test("Gmail routes are not registered and test-only storage does not expose dura
   const app = await createApp({ env: testEnv, recruitmentContextLoader: testRecruitmentContext });
   const paths = app._router.stack.flatMap((layer) => layer.route ? [layer.route.path] : []);
   assert.equal(paths.some((path) => String(path).startsWith("/api/mail")), false);
-  const storage = createMemoryTestStorage();
-  await storage.put("x", { value: 1 });
-  assert.deepEqual(await storage.get("x"), { value: 1 });
-  assert.throws(() => requireDurableStorage(storage), { code: "STORAGE_UNAVAILABLE" });
 });
 
 test("public safety status contains only supported fields", async () => {

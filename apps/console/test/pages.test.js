@@ -22,10 +22,3 @@ test("App mounts one Workbench view with every former destination reachable", as
   assert.match(mail, /listOutreach/);
   assert.match(app, /clearLiveReviewCache\(\)/);
 });
-
-test("current empty-workspace wiring renders implemented Home and Leads pages", async () => {
-  const source = await readFile(new URL("../src/EmptyWorkspace.jsx", import.meta.url), "utf8");
-  assert.match(source, /Home: HomePage/);
-  assert.match(source, /Leads: LeadsPage/);
-  assert.match(source, /workbench-table min-w-0 max-w-full/);
-});

@@ -20,6 +20,6 @@ test("component provenance manifest resolves local primitives and official URLs"
   }
   assert.equal(new URL(manifest.shadcn.originInspection.registryUrl).hostname, "coss.com");
   assert.equal(manifest.shadcn.originInspection.decision, "not-installed");
-  assert.deepEqual(manifest.dndKit.packages, ["@dnd-kit/react", "@dnd-kit/helpers"]);
+  assert.deepEqual(manifest.dndKit.packages, ["@dnd-kit/react"]);
   assert.equal(new URL(manifest.dndKit.docsUrl).hostname, "github.com");
 });

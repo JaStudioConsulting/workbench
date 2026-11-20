@@ -5,7 +5,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { createLocalRuntimeApp } from "../src/local-runtime.js";
-import { isTrustedLocalAddress } from "../src/local-trust.js";
 
 async function request(app, path, { accept } = {}) {
   const server = await new Promise((resolve) => {
@@ -30,15 +29,6 @@ async function request(app, path, { accept } = {}) {
     await new Promise((resolve) => server.close(resolve));
   }
 }
-
-test("trusted local addresses are explicit and do not include public clients", () => {
-  for (const address of ["127.0.0.1", "::1", "::ffff:127.0.0.1", "10.1.2.3", "172.20.1.2", "192.168.1.3", "100.100.20.30", "fd7a:115c:a1e0::1", "fe80::1%en0"]) {
-    assert.equal(isTrustedLocalAddress(address), true, address);
-  }
-  for (const address of ["8.8.8.8", "172.32.0.1", "100.128.0.1", "2001:4860:4860::8888", "not-an-ip", ""]) {
-    assert.equal(isTrustedLocalAddress(address), false, address);
-  }
-});
 
 test("local runtime serves built assets and uses index only for SPA routes", async () => {
   const directory = await mkdtemp(join(tmpdir(), "workbench-dist-"));

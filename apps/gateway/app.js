@@ -7,7 +7,6 @@ import { createGoogleApiHandlers } from "./src/google-api.js";
 import { createMcpRequestHandler } from "./src/mcp.js";
 import { discoverMcp, loadRecruitmentContext } from "./src/recruitment-package.js";
 import { createNativeCaptureManager, parseByteRange } from "./src/native-capture.js";
-import { registerAiRoutes } from "./src/ai-routes.js";
 import { registerCandidateRoutes } from "./src/candidate-routes.js";
 import { registerNotesBoardsRoutes } from "./src/notes-boards-routes.js";
 import { registerSearchRoutes } from "./src/search-routes.js";
@@ -253,9 +252,6 @@ export async function createApp({
     app.post("/api/google-workspace/disconnect", authoritativeGoogleSession, googleWorkspaceHandler("disconnect"));
   }
   app.post("/api/gws/sync", authoritativeGoogleSession, googleApi.sync);
-  // AI routes use the user's approved Supabase app session. Google cookies are
-  // required only by Google-backed features.
-  registerAiRoutes(app, { authenticated: supabaseRecruiterAccess, env });
   registerCandidateRoutes(app, {
     env,
     authConfig: configuredAuth,

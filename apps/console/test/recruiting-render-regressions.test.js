@@ -13,7 +13,6 @@ test("job selectors keep Base UI SelectItems and Labels inside SelectGroup", () 
 test("mobile shell and empty table use min-width-safe responsive wrappers", () => {
   const app = fs.readFileSync(path.join(root, "src/App.jsx"), "utf8");
   const oneView = fs.readFileSync(path.join(root, "src/features/workbench/WorkbenchOneView.jsx"), "utf8");
-  const empty = fs.readFileSync(path.join(root, "src/EmptyWorkspace.jsx"), "utf8");
   const picker = fs.readFileSync(path.join(root, "src/ContextPicker.jsx"), "utf8");
   assert.match(app, /min-w-0 overflow-x-clip/);
   assert.match(app, /header data-print-hide className="sticky top-0[^\n]+flex min-h-16 flex-wrap/);
@@ -25,7 +24,6 @@ test("mobile shell and empty table use min-width-safe responsive wrappers", () =
   assert.match(oneView, /destination === "Notes"\) setMobileTab\("work"\)/);
   assert.match(oneView, /<MailPage \/>/);
   assert.match(oneView, /const navigateFromToday = \(next, item\) => onHomeNavigate\(next, item\)/);
-  assert.match(empty, /workbench-table min-w-0 max-w-full/);
   assert.match(picker, /w-full min-w-0 justify-between sm:w-auto sm:min-w-56/);
 });
 

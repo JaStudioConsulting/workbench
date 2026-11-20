@@ -37,7 +37,6 @@ import {
   _setSupabaseClientForTesting,
   _resetStoreForTesting,
 } from "../src/features/candidate-review/candidateReviewService.js";
-import { SAMPLE_CANDIDATES, SAMPLE_JOBS } from "../src/features/candidate-review/sampleReviewData.js";
 import { getWindowedIndices, MAX_VISIBLE_DOTS } from "../src/features/candidate-review/figureUtils.js";
 import {
   buildCandidateWriteUp,
@@ -47,6 +46,27 @@ import {
 const here = path.dirname(fileURLToPath(import.meta.url));
 const featureDir = path.resolve(here, "../src/features/candidate-review");
 const appFile = path.resolve(here, "../src/App.jsx");
+const TEST_JOBS = [
+  { id: "DEMO-JOB-001", title: "Maintenance Supervisor", company: "Example Manufacturing", location: "Toronto, ON" },
+  { id: "DEMO-JOB-002", title: "Maintenance Manager", company: "Example Manufacturing", location: "Toronto, ON" },
+];
+const TEST_CANDIDATES = [{
+  id: "DEMO-PERSON-001",
+  candidateId: "DEMO-CAND-001",
+  jobId: "DEMO-JOB-001",
+  name: "Candidate Example",
+  title: "Maintenance Supervisor",
+  employer: "Example Plant",
+  email: "candidate@example.invalid",
+  phone: "+1 555 0101",
+  fullResumeText: "Maintenance Supervisor with preventive maintenance experience.",
+  alsoFits: [{
+    jobTitle: "Maintenance Manager",
+    company: "Example Manufacturing",
+    trackerRow: { sheet: "Jobs", rowNumber: 2, dateAdded: "2026-10-01", addedBy: "Recruiter Example" },
+    matchingResumeLines: ["Preventive maintenance experience."],
+  }],
+}];
 
 test("presentation history failure keeps live candidates and exposes its notice", async () => {
   _resetStoreForTesting();
@@ -104,7 +124,7 @@ test("people view bounds rendered rows and keeps focused records reachable", () 
 });
 
 test.beforeEach(() => {
-  _resetStoreForTesting({ jobs: SAMPLE_JOBS, candidates: SAMPLE_CANDIDATES });
+  _resetStoreForTesting({ jobs: TEST_JOBS, candidates: TEST_CANDIDATES });
 });
 
 test("exact pipeline stages match docs/loxo/true-actions.md in order", () => {
@@ -713,7 +733,7 @@ test("write failure preserves activity note and enforces outbox idempotency", as
 });
 
 test("write-up uses only available candidate sources and the card has no resume layout button", () => {
-  const candidate = SAMPLE_CANDIDATES[0];
+  const candidate = { name: "Candidate Example", fullResumeText: "", profileSummary: "", workHistory: [] };
   const writeUp = buildCandidateWriteUp(candidate);
 
   assert.match(writeUp.text, /Sources missing:/);
@@ -820,23 +840,6 @@ test("screenshot feedback: LoginButton removed from shell, one-view destinations
   const reviewSource = fs.readFileSync(path.join(featureDir, "CandidateReview.jsx"), "utf8");
   assert.match(reviewSource, /data-testid="navigate-jobs-map"/);
   assert.match(reviewSource, /currentJob\s*\?\s*currentJob\.title\s*:\s*"Select active job"/);
-});
-
-test("fixtures strictly use synthetic IDs, 555 numbers, and example.invalid emails", () => {
-  for (const job of SAMPLE_JOBS) {
-    assert.match(job.id, /^DEMO-JOB-/);
-    assert.doesNotMatch(job.company, /Dyna-Mig|Linamar|Gerdau|Metro Supply Chain/i);
-  }
-
-  for (const cand of SAMPLE_CANDIDATES) {
-    assert.match(cand.id, /^DEMO-PERSON-/);
-    assert.match(cand.candidateId, /^DEMO-CAND-/);
-    assert.match(cand.jobId, /^DEMO-JOB-/);
-    assert.match(cand.email, /@example\.invalid$/);
-    assert.match(cand.phone, /^\+1 555 01\d{2}$/);
-    assert.doesNotMatch(cand.employer, /Dyna-Mig|Linamar|Gerdau|Metro Supply Chain/i);
-    assert.doesNotMatch(cand.fullResumeText, /@example\.com|\.co\b/);
-  }
 });
 
 test("candidate review code limits localStorage to the Canada filter, has no sessionStorage, and no send authority", () => {
@@ -994,24 +997,6 @@ test("experience timeline parses dates, totals without double counting, flags sh
   assert.equal(timeline.totalMonths, 69);
 });
 
-test("For your AI handoff starts with the front door line and lists only ticked work", async () => {
-  const { buildAiHandoff } = await import("../src/features/candidate-review/aiHandoff.js");
-  const candidate = { name: "Alex Rivera", loxoPersonId: "777" };
-  const job = { id: "42", title: "Millwright", company: "Grand River Steel Works" };
-  const empty = buildAiHandoff({ candidate, job, ticked: new Set() });
-  const first = empty.split("\n")[0];
-  assert.equal(first, "Route through the Recruiter front door ($recruiter).");
-  assert.match(empty, /Loxo person id: 777/);
-  assert.match(empty, /Loxo job id: 42/);
-  assert.match(empty, /Role in play: Millwright at Grand River Steel Works/);
-  assert.match(empty, /todo:\n\(nothing ticked yet\)$/);
-
-  const some = buildAiHandoff({ candidate, job, ticked: new Set(["loxo", "brandedresume"]) });
-  assert.match(some, /1\. Build the TTTG branded resume/);
-  assert.match(some, /2\. Queue the Loxo update/);
-  assert.doesNotMatch(some, /nothing ticked/);
-});
-
 test("Canada filter defaults on, remembers choices, and can include unknown locations", async () => {
   const { loadCanadaPrefs, saveCanadaPrefs, filterByCanada } = await import("../src/features/candidate-review/canadaFilter.js");
   const store = new Map();
@@ -1052,10 +1037,10 @@ test("card wires the new pieces and drops the old no-resume message", () => {
 test("empty live state never falls back to sample records", async () => {
   _resetStoreForTesting();
   assert.deepEqual(getReviewJobs(), []);
-  assert.deepEqual(getCandidatesForJob(SAMPLE_JOBS[0].id), []);
+  assert.deepEqual(getCandidatesForJob("test-job"), []);
   assert.deepEqual(getSubmissionHistory(), []);
   await assert.rejects(
-    recordCandidateSubmission(SAMPLE_JOBS[0].id, SAMPLE_CANDIDATES[0].id),
+    recordCandidateSubmission("test-job", "test-candidate"),
     /unknown candidate or job/
   );
   const reviewSource = fs.readFileSync(path.join(featureDir, "CandidateReview.jsx"), "utf8");

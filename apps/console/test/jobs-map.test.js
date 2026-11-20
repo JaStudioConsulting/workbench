@@ -13,7 +13,6 @@ import {
 } from "../src/features/jobs-map/geo-utils.js";
 import { createJobMarkerHtml, createSearchCandidateMarkerHtml } from "../src/features/jobs-map/map-markers.js";
 import { generateJobPitch } from "../src/features/jobs-map/pitch-formatter.js";
-import { INITIAL_JOBS_DATA } from "../src/features/jobs-map/sample-jobs.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const featureRoot = path.resolve(here, "../src/features/jobs-map");
@@ -159,7 +158,6 @@ test("jobs-map feature codebase adheres to security, privacy, and zero-persisten
     path.join(featureRoot, "geo-utils.js"),
     path.join(featureRoot, "map-markers.js"),
     path.join(featureRoot, "pitch-formatter.js"),
-    path.join(featureRoot, "sample-jobs.js"),
     path.join(featureRoot, "JobsMapView.jsx"),
   ];
 
@@ -178,13 +176,6 @@ test("jobs-map feature codebase adheres to security, privacy, and zero-persisten
   assert.doesNotMatch(source, /docs\.google\.com\/spreadsheets\/d\/.*\/gviz/);
   assert.doesNotMatch(source, /jsonp/i);
 
-  // Initial jobs data is non-empty and non-confidential
-  assert.ok(INITIAL_JOBS_DATA.length >= 5);
-  for (const item of INITIAL_JOBS_DATA) {
-    assert.ok(item["Job ID"]);
-    assert.ok(item["Job Title"]);
-    assert.ok(item["Location"]);
-  }
 });
 
 test("radius filtering excludes jobs without resolvable coordinates", () => {

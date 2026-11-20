@@ -1,5 +1,5 @@
 import { WorkflowResumeSchema } from '@ja/shared-types';
-import { renderResume } from './after-call.js';
+import { renderResume } from './resume-render.js';
 
 export const INPUT_FIELDS = ['vacation','workStatus','interviewAvailability','startDate','reasonForLeaving','profileSummary','specialty','niche'];
 const clean = value => typeof value === 'string' ? value.trim() : '';
