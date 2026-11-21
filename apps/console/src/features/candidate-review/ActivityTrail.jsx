@@ -12,7 +12,7 @@ export default function ActivityTrail({ candidate }) {
       <div className="flex items-center justify-between gap-2 border-b pb-2">
         <div className="flex items-center gap-1.5">
           <Clock size={14} className="text-muted-foreground" />
-          <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+          <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
             Activity Trail ({events.length})
           </h4>
         </div>
@@ -20,7 +20,7 @@ export default function ActivityTrail({ candidate }) {
         {otherContacts.length > 0 && (
           <Badge
             variant="outline"
-            className="border-amber-400 bg-amber-50 text-amber-900 text-[10.5px] font-semibold flex items-center gap-1 py-0.5 px-2"
+            className="border-amber-400 bg-amber-50 text-amber-900 text-xs font-semibold flex items-center gap-1 py-0.5 px-2"
           >
             <AlertTriangle size={11} className="text-amber-700" />
             {otherContacts.length} other contact{otherContacts.length > 1 ? "s" : ""} on record
@@ -49,19 +49,19 @@ export default function ActivityTrail({ candidate }) {
               >
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex items-center gap-1.5 flex-wrap">
-                    <span className="font-bold leading-tight">{ev.type}</span>
+                    <span className="font-semibold leading-tight">{ev.type}</span>
                     {ev.status === "Waiting for Loxo" && (
-                      <Badge variant="outline" className="text-[10px] py-0 px-1.5 border-dashed border-amber-500 text-amber-700 bg-amber-50">
+                      <Badge variant="outline" className="text-xs py-0 px-1.5 border-dashed border-amber-500 text-amber-700 bg-amber-50">
                         Waiting for Loxo
                       </Badge>
                     )}
                   </div>
-                  <span className="shrink-0 text-[11px] text-muted-foreground font-mono">
+                  <span className="shrink-0 text-xs text-muted-foreground font-mono">
                     {ev.date}
                   </span>
                 </div>
 
-                <div className="mt-1 flex items-center gap-1.5 text-[11px]">
+                <div className="mt-1 flex items-center gap-1.5 text-xs">
                   {isOther ? (
                     <span className="flex items-center gap-1 font-semibold text-amber-800">
                       <User size={11} />
@@ -81,7 +81,7 @@ export default function ActivityTrail({ candidate }) {
                 </div>
 
                 {ev.note && (
-                  <p className="mt-1.5 whitespace-pre-wrap text-[11.5px] leading-relaxed border-t pt-1 border-border/40">
+                  <p className="mt-1.5 whitespace-pre-wrap text-xs leading-relaxed border-t pt-1 border-border/40">
                     {ev.note}
                   </p>
                 )}

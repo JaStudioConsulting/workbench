@@ -57,7 +57,7 @@ export default function ResumeSection({ candidate }) {
       <div className="flex items-center justify-between gap-2 border-b pb-2">
         <div className="flex items-center gap-1.5">
           <FileText size={14} className="text-muted-foreground" />
-          <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+          <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
             Resume and Work History
           </h4>
         </div>
@@ -76,7 +76,7 @@ export default function ResumeSection({ candidate }) {
       </div>
 
       {resumeSource.kind === "profile" ? (
-        <div className="rounded-md border border-amber-700/30 bg-amber-50 px-2.5 py-2 text-[11px] text-amber-950">
+        <div className="rounded-md border border-amber-700/30 bg-amber-50 px-2.5 py-2 text-xs text-amber-950">
           <p className="font-semibold">Built from profile, no resume on file</p>
           <p className="mt-0.5">
             Sources used: {resumeSource.usedSources.map((source) => SOURCE_LABELS[source] || source).join(", ")}
@@ -92,7 +92,7 @@ export default function ResumeSection({ candidate }) {
 
       {showFullResume && (
         <div className="rounded-md border bg-muted/30 p-2.5">
-          <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">
+          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">
             {resumeSource.kind === "resume" ? "Verbatim Source Resume" : "Profile Sources"}
           </p>
           <pre className="whitespace-pre-wrap font-sans text-xs leading-relaxed text-foreground">
@@ -117,11 +117,11 @@ export default function ResumeSection({ candidate }) {
                     <p className="font-semibold text-foreground leading-snug">
                       {job.title}
                     </p>
-                    <p className="text-[11px] text-muted-foreground truncate">
+                    <p className="text-xs text-muted-foreground truncate">
                       {job.company} · {job.location}
                     </p>
                   </div>
-                  <div className="flex items-center gap-1.5 shrink-0 text-[11px] text-muted-foreground">
+                  <div className="flex items-center gap-1.5 shrink-0 text-xs text-muted-foreground">
                     <span>
                       {job.startDate} to {job.endDate}
                     </span>
@@ -130,7 +130,7 @@ export default function ResumeSection({ candidate }) {
                 </button>
 
                 {isExpanded && job.bullets && job.bullets.length > 0 && (
-                  <ul className="mt-2 space-y-1.5 border-t pt-2 text-[11.5px] leading-relaxed text-foreground/90 pl-3 list-disc marker:text-muted-foreground">
+                  <ul className="mt-2 space-y-1.5 border-t pt-2 text-xs leading-relaxed text-foreground/90 pl-3 list-disc marker:text-muted-foreground">
                     {job.bullets.map((bullet, bIndex) => (
                       <li key={bIndex}>
                         {formatVerbatimBoldFigures(bullet)}
@@ -149,7 +149,7 @@ export default function ResumeSection({ candidate }) {
       )}
 
       {candidate.education && (
-        <div className="pt-1 text-[11px] text-muted-foreground border-t">
+        <div className="pt-1 text-xs text-muted-foreground border-t">
           <span className="font-semibold text-foreground">Education:</span> {candidate.education}
         </div>
       )}

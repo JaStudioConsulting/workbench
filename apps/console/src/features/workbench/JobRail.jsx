@@ -46,8 +46,8 @@ function JobList({ jobs, selectedJob, onSelectJob, disabled, candidateDataAvaila
             {candidateDataAvailable ? <Badge variant="outline" className="shrink-0">{job.candidateCount}</Badge> : null}
           </span>
           {!candidateDataAvailable ? null : stageCounts.length ? <span className="mt-2 flex flex-wrap gap-1" aria-label="Nonzero stage counts">
-            {stageCounts.map(([stage, count]) => <span key={stage} className="rounded border bg-muted/40 px-1.5 py-0.5 text-[11px] text-muted-foreground">{stage} <strong className="text-foreground">{count}</strong></span>)}
-          </span> : job.candidateCount === 0 ? <span className="mt-2 block text-[11px] text-muted-foreground">No candidates</span> : null}
+            {stageCounts.map(([stage, count]) => <span key={stage} className="rounded border bg-muted/40 px-1.5 py-0.5 text-xs text-muted-foreground">{stage} <strong className="text-foreground">{count}</strong></span>)}
+          </span> : job.candidateCount === 0 ? <span className="mt-2 block text-xs text-muted-foreground">No candidates</span> : null}
         </button>
       </li>;
     })}

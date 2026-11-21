@@ -21,7 +21,7 @@ export function CandidatePresentationBadges({
     <>
       {summary.isPresented ? (
         <Badge
-          className="bg-blue-700 text-white text-[11px] font-bold py-0"
+          className="bg-blue-700 text-white text-xs font-semibold py-0"
           data-testid={`${prefix}-presented-badge`}
         >
           Presented
@@ -31,7 +31,7 @@ export function CandidatePresentationBadges({
       {summary.pendingPresentations.length > 0 ? (
         <Badge
           variant="outline"
-          className="border-amber-400 bg-amber-50 text-amber-900 text-[11px] font-semibold py-0"
+          className="border-amber-400 bg-amber-50 text-amber-900 text-xs font-semibold py-0"
           data-testid={`${prefix}-pending-presentation-badge`}
         >
           {summary.pendingBadgeLabel}
@@ -41,7 +41,7 @@ export function CandidatePresentationBadges({
       {summary.failedPresentations.length > 0 ? (
         <Badge
           variant="outline"
-          className="border-rose-400 bg-rose-50 text-rose-800 text-[11px] font-semibold py-0"
+          className="border-rose-400 bg-rose-50 text-rose-800 text-xs font-semibold py-0"
           data-testid={`${prefix}-failed-presentation-badge`}
         >
           {summary.failedBadgeLabel}
@@ -71,7 +71,7 @@ export default function CandidatePresentationSummary({
     <div
       className={
         compact
-          ? "mt-1.5 flex flex-col gap-1 text-[11px]"
+          ? "mt-1.5 flex flex-col gap-1 text-xs"
           : "rounded-md border bg-muted/20 px-3 py-2 text-xs space-y-1.5"
       }
       data-testid={`${prefix}-presentation-section`}
@@ -89,7 +89,7 @@ export default function CandidatePresentationSummary({
               <Badge
                 key={group.key}
                 variant="outline"
-                className="border-blue-300 bg-blue-50 text-blue-950 text-[10.5px] py-0"
+                className="border-blue-300 bg-blue-50 text-blue-950 text-xs py-0"
                 data-testid={`${prefix}-presented-client-badge`}
               >
                 {group.clientLabel}

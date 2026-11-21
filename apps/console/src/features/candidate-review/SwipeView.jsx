@@ -12,20 +12,28 @@ export default function SwipeView({
   onNavigateIndex,
   onReject,
   onWant,
+  onMarkSubmitted,
   onLogActivity,
-  onSwitchToPeopleView,
   onStartCandidateCall,
+  emptyState = null,
 }) {
   if (!candidates || candidates.length === 0) {
     return (
-      <div className="flex flex-1 flex-col items-center justify-center rounded-xl border border-dashed bg-card p-8 text-center text-muted-foreground">
+      <div
+        className="flex flex-1 flex-col items-center justify-center rounded-xl border border-dashed bg-card p-8 text-center text-muted-foreground"
+        role={emptyState?.kind === "loading" ? "status" : undefined}
+        data-testid="swipe-empty"
+      >
         <Users size={32} className="mb-2 opacity-50" />
         <p className="text-sm font-semibold text-foreground">
-          Unreviewed queue is clear
+          {emptyState?.title || "Unreviewed queue is clear"}
         </p>
-        <p className="text-xs text-muted-foreground mt-1 max-w-sm">
-          Reviewed and previously submitted candidates remain available in People view.
-        </p>
+        {emptyState?.action ? <div className="mt-3">{emptyState.action}</div> : null}
+        {emptyState ? null : (
+          <p className="text-xs text-muted-foreground mt-1 max-w-sm">
+            Reviewed and previously submitted candidates remain available in People view.
+          </p>
+        )}
       </div>
     );
   }
@@ -34,16 +42,16 @@ export default function SwipeView({
   const currentCandidate = candidates[safeIndex];
 
   return (
-    <div className="flex flex-1 min-h-0 flex-col gap-2.5 overflow-hidden" data-testid="swipe-view">
+    <div className="flex min-h-0 flex-1 flex-col gap-2.5" data-testid="swipe-view">
       {/* Position Navigation Bar */}
-      <div className="flex items-center justify-between gap-2 px-1 shrink-0">
+      <div className="flex flex-wrap items-center justify-between gap-2 px-1 shrink-0">
         <div className="flex items-center gap-2">
-          <span className="text-xs font-semibold text-muted-foreground">
+          <span className="whitespace-nowrap text-xs font-semibold text-muted-foreground">
             Candidate {safeIndex + 1} of {candidates.length}
           </span>
           {currentCandidate.decision && (
             <span
-              className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${currentCandidate.decision === "want"
+              className={`text-xs font-semibold px-2 py-0.5 rounded-full ${currentCandidate.decision === "want"
                   ? "bg-emerald-100 text-emerald-800"
                   : "bg-rose-100 text-rose-800"
                 }`}
@@ -81,7 +89,7 @@ export default function SwipeView({
                   onClick={() => onNavigateIndex(i)}
                   className={`h-2 rounded-full transition-all ${
                     i === safeIndex
-                      ? "w-5 bg-foreground"
+                      ? "w-5 bg-primary"
                       : c.decision === "want"
                       ? "w-2 bg-emerald-600"
                       : c.decision === "pass"
@@ -109,7 +117,7 @@ export default function SwipeView({
       </div>
 
       {/* Mount Current Candidate Card */}
-      <div className="flex-1 min-h-0 overflow-hidden">
+      <div className="flex min-h-0 flex-1 flex-col">
         <CandidateCard
           key={currentCandidate.id}
           candidate={currentCandidate}
@@ -126,6 +134,7 @@ export default function SwipeView({
             if (result?.ok === false) return result;
             return result || { ok: true };
           }}
+          onMarkSubmitted={onMarkSubmitted}
           onLogActivity={onLogActivity}
         />
       </div>

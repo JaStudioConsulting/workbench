@@ -24,15 +24,13 @@ test("Jobs and candidates use authenticated live data instead of browser fixture
   assert.doesNotMatch(jobsMap, /INITIAL_JOBS_DATA/);
   assert.match(review, /loadLiveReviewJobs/);
   assert.match(review, /loadLiveCandidatesForJob/);
-  assert.match(review, /dataError\s*\?\s*"Live data unavailable"/);
-  assert.match(review, />Candidates<\/h2>/);
-  assert.match(review, /`Loaded \$\{loadProgress\.loaded\} of \$\{loadProgress\.total\}`/);
-  assert.match(review, /"Live data loaded"/);
-  assert.match(review, /data-testid="live-data-progress"/);
+  assert.match(review, /\{dataError\}/);
+  assert.match(review, /"Candidates"/);
+  assert.doesNotMatch(review, /Loaded \$\{|Live data loaded|live-data-progress|Review candidates for one job at a time/);
   assert.doesNotMatch(review, /dataLoading\s*\?\s*"Loading Supabase"\s*:\s*"Saved to Supabase"/);
   assert.match(service, /from\("candidate_review_feed"\)/);
-  assert.match(oneView, /initialView="people"/);
-  assert.match(oneView, /initialView="swipe"/);
+  assert.match(oneView, /<CandidateReview view=\{workView\} onViewChange=\{chooseWorkView\}/);
+  assert.doesNotMatch(oneView, /<CandidateReview key=/);
 });
 
 test("review actions and candidate artifacts persist in Supabase", () => {

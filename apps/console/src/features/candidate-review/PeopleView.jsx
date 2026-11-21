@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { parseCandidateSourceKey } from "@ja/shared-types";
-import { AlertCircle, AlertTriangle, ExternalLink, Filter, Loader2, Mail, NotebookText, Pencil, Phone, Plus, Search, Send, ShieldAlert, Users } from "lucide-react";
+import { AlertCircle, AlertTriangle, Check, ExternalLink, Filter, Loader2, Mail, NotebookText, Pencil, Phone, Plus, Search, Send, ShieldAlert, Users } from "lucide-react";
 import { Badge } from "../../components/ui/badge.tsx";
 import { Button } from "../../components/ui/button.tsx";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "../../components/ui/select.tsx";
@@ -10,9 +10,7 @@ import { enrichCandidatesWithPresentations } from "./candidateReviewService.js";
 import CandidateWriteUpDialog from "./CandidateWriteUpDialog.jsx";
 import BrandedResumeControl from "./BrandedResumeControl.jsx";
 import CandidateEditorDialog from "./CandidateEditorDialog.jsx";
-import CandidatePresentationSummary, {
-  CandidatePresentationBadges,
-} from "./CandidatePresentationSummary.jsx";
+import CandidatePresentationSummary from "./CandidatePresentationSummary.jsx";
 import {
   describeCandidateProvenance,
   getCachedCandidateRecords,
@@ -31,13 +29,18 @@ const STAGE_FILTER_ITEMS = [
   ...LOXO_PIPELINE_STAGES.map((stage) => ({ value: stage, label: stage })),
 ];
 
+const EMPTY_VIEW_COPY = {
+  wanted: ["Nothing wanted yet.", "Choose Want on a candidate in Swipe."],
+  passed: ["Nothing passed yet.", "Choose Pass on a candidate in Swipe."],
+};
+
 function withinDateRange(value, start, end) {
   if (!value) return !start && !end;
   const day = String(value).slice(0, 10);
   return (!start || day >= start) && (!end || day <= end);
 }
 
-export default function PeopleView({ candidates = [], currentJob, jobs = [], submissionHistory = [], onSelectCandidateToSwipe, onMarkSubmitted, onStartCandidateCall, focusCandidateId = "" }) {
+export default function PeopleView({ candidates = [], currentJob, jobs = [], submissionHistory = [], onSelectCandidateToSwipe, onMarkSubmitted, onStartCandidateCall, focusCandidateId = "", emptyState = null }) {
   const [viewFilter, setViewFilter] = useState("all");
   const [searchTerm, setSearchTerm] = useState("");
   const [stageFilter, setStageFilter] = useState("ALL");
@@ -60,6 +63,9 @@ export default function PeopleView({ candidates = [], currentJob, jobs = [], sub
   const [actionError, setActionError] = useState("");
   const [submittingId, setSubmittingId] = useState("");
   const [visibleLimit, setVisibleLimit] = useState(100);
+  // With a job selected the list is that job's candidates. "All people" opens the whole directory.
+  const [showAllPeople, setShowAllPeople] = useState(false);
+  const [reviewNotice, setReviewNotice] = useState("");
   const focusedRowRef = useRef(null);
   const editorTriggerRef = useRef(null);
   const closeEditor = () => {
@@ -95,15 +101,17 @@ export default function PeopleView({ candidates = [], currentJob, jobs = [], sub
     };
   }, []);
 
-  const mergedCandidates = useMemo(
-    () =>
-      enrichCandidatesWithPresentations(
-        mergeCandidatesWithDirectory(candidates, directoryRecords),
-        submissionHistory,
-        { jobId: currentJob?.id ?? null }
-      ),
-    [candidates, directoryRecords, submissionHistory, currentJob?.id],
-  );
+  const scopedToJob = Boolean(currentJob) && !showAllPeople;
+  const mergedCandidates = useMemo(() => {
+    // Scoped to a job, directory records only refine people already in that job's list.
+    const jobPeople = new Set(candidates.map((candidate) => candidate.id));
+    const records = scopedToJob ? directoryRecords.filter((record) => jobPeople.has(record.id)) : directoryRecords;
+    return enrichCandidatesWithPresentations(
+      mergeCandidatesWithDirectory(candidates, records),
+      submissionHistory,
+      { jobId: currentJob?.id ?? null }
+    );
+  }, [candidates, directoryRecords, submissionHistory, currentJob?.id, scopedToJob]);
 
   const counts = useMemo(() => ({
     all: mergedCandidates.length,
@@ -190,6 +198,12 @@ export default function PeopleView({ candidates = [], currentJob, jobs = [], sub
     setOnlyOthersReachedOut(false);
   }, [focusKey]);
 
+  // A person opened from search who is not in the selected job needs the whole directory.
+  useEffect(() => {
+    if (!focusKey || !currentJob || showAllPeople || emptyState?.kind === "loading") return;
+    if (!candidates.some((candidate) => candidate.id === focusKey)) setShowAllPeople(true);
+  }, [focusKey, currentJob, showAllPeople, candidates, emptyState?.kind]);
+
   useEffect(() => {
     if (!focusKey) return;
     const focusedIndex = filteredCandidates.findIndex((candidate) => candidate.id === focusKey);
@@ -208,12 +222,21 @@ export default function PeopleView({ candidates = [], currentJob, jobs = [], sub
     try {
       const result = await onMarkSubmitted(candidate.id, { client: currentJob?.company, location: currentJob?.location });
       if (result?.ok === false) throw new Error(result.error || "Submission was not saved");
-      setViewFilter("submitted");
     } catch (error) {
       setActionError(error.message || "Submission was not saved");
     } finally {
       setSubmittingId("");
     }
+  };
+
+  // Opens the person's card in Swipe. Someone outside this job's list opens their record to edit instead.
+  const reviewCandidate = (candidate, event) => {
+    setReviewNotice("");
+    if (onSelectCandidateToSwipe?.(candidate.id)) return;
+    editorTriggerRef.current = event.currentTarget;
+    setSaveNotice("");
+    setReviewNotice(`${candidate.name} is not in this job's candidate list, so their record opened to edit.`);
+    setEditorState({ mode: "edit", candidate });
   };
 
   const overrideOwnership = (candidateId) => setOwnershipOverrides((current) => new Set([...current, candidateId]));
@@ -224,25 +247,35 @@ export default function PeopleView({ candidates = [], currentJob, jobs = [], sub
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex flex-wrap items-center gap-1.5" data-testid="people-status-tabs">
             {VIEW_TABS.map(([key, label]) => (
-              <button key={key} type="button" onClick={() => setViewFilter(key)} className={`rounded-md border px-2.5 py-1.5 text-xs font-semibold transition ${viewFilter === key ? "border-foreground bg-foreground text-background" : "bg-background text-muted-foreground hover:text-foreground"}`} data-testid={`people-tab-${key}`}>
-                {label} <span className="ml-1 opacity-75">{counts[key]}</span>
+              <button key={key} type="button" aria-pressed={viewFilter === key} onClick={() => setViewFilter(key)} className={`inline-flex min-h-9 items-center gap-1 rounded-md border px-2.5 py-1.5 text-xs transition ${viewFilter === key ? "border-primary bg-primary/10 font-semibold text-blue-700" : "bg-background font-medium text-muted-foreground hover:text-foreground"}`} data-testid={`people-tab-${key}`}>
+                {viewFilter === key ? <Check size={12} aria-hidden="true" /> : null}
+                {label} <span className="ml-0.5 font-normal">{counts[key]}</span>
               </button>
             ))}
           </div>
 
-          <Button
-            type="button"
-            size="sm"
-            onClick={(event) => {
-              editorTriggerRef.current = event.currentTarget;
-              setSaveNotice("");
-              setEditorState({ mode: "create", candidate: null });
-            }}
-            className="h-8 text-xs font-semibold"
-            data-testid="people-add-candidate-button"
-          >
-            <Plus size={14} className="mr-1" /> Add candidate
-          </Button>
+          <div className="flex flex-wrap items-center gap-1.5">
+            {currentJob ? (
+              <button type="button" aria-pressed={showAllPeople} onClick={() => setShowAllPeople((value) => !value)} className={`inline-flex min-h-9 items-center gap-1 rounded-md border px-2.5 py-1.5 text-xs transition ${showAllPeople ? "border-primary bg-primary/10 font-semibold text-blue-700" : "bg-background font-medium text-muted-foreground hover:text-foreground"}`} data-testid="people-all-chip">
+                {showAllPeople ? <Check size={12} aria-hidden="true" /> : null}
+                All people{directoryRecords.length ? <span className="ml-0.5 font-normal">{directoryRecords.length.toLocaleString()}</span> : null}
+              </button>
+            ) : null}
+            <Button
+              type="button"
+              size="sm"
+              onClick={(event) => {
+                editorTriggerRef.current = event.currentTarget;
+                setSaveNotice("");
+                setReviewNotice("");
+                setEditorState({ mode: "create", candidate: null });
+              }}
+              className="h-8 text-xs font-semibold"
+              data-testid="people-add-candidate-button"
+            >
+              <Plus size={14} className="mr-1" /> Add candidate
+            </Button>
+          </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
@@ -281,7 +314,7 @@ export default function PeopleView({ candidates = [], currentJob, jobs = [], sub
         ) : null}
 
         <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-          <Filter size={13} /> {filteredCandidates.length.toLocaleString()} in list {viewFilter === "submitted" ? <span>· filter by job, location, client, or date</span> : null}
+          <Filter size={13} /> {filteredCandidates.length.toLocaleString()} {scopedToJob ? "in this job" : "in all people"} {viewFilter === "submitted" ? <span>· filter by job, location, client, or date</span> : null}
           {directoryLoading ? <span role="status" className="inline-flex items-center gap-1" data-testid="candidates-directory-loading"><Loader2 size={12} className="animate-spin" /> Loading candidates...</span> : null}
         </div>
       </div>
@@ -292,12 +325,17 @@ export default function PeopleView({ candidates = [], currentJob, jobs = [], sub
         </div>
       ) : null}
       {directoryError ? <div role="alert" className="flex items-center gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-2 text-xs text-destructive" data-testid="candidates-directory-error"><AlertCircle size={14} />{directoryError}</div> : null}
+      {reviewNotice ? <div role="status" className="rounded-md border bg-muted/40 px-3 py-2 text-xs text-muted-foreground" data-testid="people-review-notice">{reviewNotice}</div> : null}
       {saveNotice ? <div role="status" className="rounded-md border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-900" data-testid="people-candidate-save-status">{saveNotice}</div> : null}
       {actionError ? <div role="alert" className="flex items-center gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-2 text-xs text-destructive"><AlertCircle size={14} />{actionError}</div> : null}
 
       <div className="flex-1 min-h-0 overflow-y-auto rounded-lg border bg-card">
         {filteredCandidates.length === 0 ? (
-          <div className="flex flex-col items-center justify-center p-8 text-center text-muted-foreground"><Users size={28} className="mb-2 opacity-50" /><p className="text-xs font-semibold text-foreground">Nothing in this view</p><p className="text-[11px] mt-0.5">Change the tab, search, or filters.</p></div>
+          scopedToJob && emptyState ? (
+            <div className="flex flex-col items-center justify-center p-8 text-center text-muted-foreground" role={emptyState.kind === "loading" ? "status" : undefined} data-testid="people-scope-empty"><Users size={28} className="mb-2 opacity-50" /><p className="text-xs font-semibold text-foreground">{emptyState.title}</p>{emptyState.action ? <div className="mt-3">{emptyState.action}</div> : null}</div>
+          ) : (
+            <div className="flex flex-col items-center justify-center p-8 text-center text-muted-foreground"><Users size={28} className="mb-2 opacity-50" /><p className="text-xs font-semibold text-foreground">{EMPTY_VIEW_COPY[viewFilter]?.[0] || "Nothing in this view"}</p><p className="text-xs mt-0.5">{EMPTY_VIEW_COPY[viewFilter]?.[1] || "Change the tab, search, or filters."}</p></div>
+          )
         ) : (
           <div className="divide-y divide-border">
             {visibleCandidates.map((candidate) => {
@@ -305,7 +343,8 @@ export default function PeopleView({ candidates = [], currentJob, jobs = [], sub
               const lastActivity = candidate.activityTrail?.[0] || null;
               const ownership = getOwnershipStatus(candidate.activityTrail);
               const ownershipOverridden = ownershipOverrides.has(candidate.id);
-              const isUnreviewed = !candidate.decision && !candidate.isSubmitted && candidate.presentationState !== "pending";
+              const isWanted = candidate.decision === "want" && !candidate.isSubmitted && candidate.presentationState !== "pending";
+              const statusText = candidate.isSubmitted ? "Presented" : candidate.presentationState === "pending" ? "Waiting for Loxo" : candidate.presentationState === "failed" ? "Submission failed" : candidate.decision === "want" ? "Wanted" : candidate.decision === "pass" ? "Passed" : "Unreviewed";
               const provenance = describeCandidateProvenance(candidate, { mode: "edit" });
               const recordKey = `${candidate.reviewJobId || currentJob?.id || candidate.jobId || "directory"}:${candidate.id}:${candidate.submission?.id || "candidate"}`;
               const submissionDateText = candidate.submission?.presentedOn
@@ -335,42 +374,22 @@ export default function PeopleView({ candidates = [], currentJob, jobs = [], sub
                 >
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div className="flex min-w-0 flex-1 items-center gap-3">
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-foreground text-background text-sm font-bold">{candidate.initials}</div>
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-muted text-sm font-semibold text-muted-foreground">{candidate.initials}</div>
                       <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          {isUnreviewed && onSelectCandidateToSwipe ? (
-                            <button type="button" onClick={() => onSelectCandidateToSwipe(candidate.id)} className="min-h-10 rounded text-left text-sm font-bold hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" data-testid="people-candidate-open">{candidate.name}</button>
-                          ) : candidate.profileUrl || candidate.loxoPersonId ? (
-                            <a href={candidate.profileUrl || `${LOXO_PEOPLE_BASE_URL}${candidate.loxoPersonId}`} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-sm font-bold hover:underline">{candidate.name}<ExternalLink size={12} className="text-muted-foreground" /></a>
-                          ) : <span className="text-sm font-bold">{candidate.name}</span>}
-                          {isUnreviewed && (candidate.profileUrl || candidate.loxoPersonId) ? (
-                            <a href={candidate.profileUrl || `${LOXO_PEOPLE_BASE_URL}${candidate.loxoPersonId}`} target="_blank" rel="noopener noreferrer" aria-label={`Open ${candidate.name} profile`} className="inline-flex min-h-10 min-w-10 items-center justify-center rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"><ExternalLink size={12} className="text-muted-foreground" /></a>
-                          ) : null}
-                          <Badge variant="outline" className="text-[11px] py-0">{candidate.stage}</Badge>
-                          {!provenance.invalidKey ? (
-                            <Badge
-                              variant="outline"
-                              className={
-                                provenance.isManual
-                                  ? "border-emerald-400 bg-emerald-50 text-emerald-900 text-[10.5px] py-0"
-                                  : provenance.hasOverlay
-                                    ? "border-amber-400 bg-amber-50 text-amber-900 text-[10.5px] py-0"
-                                    : "text-[10.5px] py-0"
-                              }
-                              data-testid="people-provenance-badge"
-                            >
-                              {provenance.badgeLabel}
-                            </Badge>
-                          ) : null}
-                          <CandidatePresentationBadges
-                            candidate={candidate}
-                            presentations={submissionHistory}
-                            jobId={candidate.reviewJobId || currentJob?.id || candidate.jobId}
-                            prefix="people"
-                          />
-                          <span className="text-[10.5px] text-muted-foreground">{resumeInfo.symbol} {resumeInfo.label}</span>
+                        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                          {candidate.profileUrl || candidate.loxoPersonId ? (
+                            <a href={candidate.profileUrl || `${LOXO_PEOPLE_BASE_URL}${candidate.loxoPersonId}`} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-sm font-semibold hover:underline">{candidate.name}<ExternalLink size={12} className="text-muted-foreground" aria-hidden="true" /><span className="sr-only"> (opens the Loxo profile)</span></a>
+                          ) : <span className="text-sm font-semibold">{candidate.name}</span>}
+                          <Badge variant="outline" className="text-xs py-0">{candidate.stage}</Badge>
+                          <span className="text-xs text-muted-foreground" data-testid="people-status">{statusText}</span>
                         </div>
                         <p className="mt-0.5 truncate text-xs text-muted-foreground">{candidate.title} at {candidate.employer} · {candidate.location}</p>
+                        <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
+                          {!provenance.invalidKey ? <span data-testid="people-provenance-badge">{provenance.badgeLabel}</span> : null}
+                          <span>{resumeInfo.symbol} {resumeInfo.label}</span>
+                          {lastActivity ? <span className="max-w-[180px] truncate">{lastActivity.type} · {lastActivity.date}</span> : null}
+                          {candidate.otherContactsCount > 0 ? <span className="inline-flex items-center gap-1 text-amber-900"><AlertTriangle size={12} aria-hidden="true" />{candidate.otherContactsCount} other recruiter contact{candidate.otherContactsCount === 1 ? "" : "s"}</span> : null}
+                        </p>
                         <CandidatePresentationSummary
                           candidate={candidate}
                           presentations={submissionHistory}
@@ -379,19 +398,21 @@ export default function PeopleView({ candidates = [], currentJob, jobs = [], sub
                           compact
                         />
                         {candidate.submission ? (
-                          <p className="mt-1 text-[11px] text-foreground" data-testid="submission-history-row">
-                            {candidate.submission.jobTitle || candidate.reviewJobTitle || "Job not recorded"} · {candidate.submission.clientName || candidate.submission.client || "Client not recorded"} · {submissionDateText}
-                            <Badge variant="outline" className={`ml-2 text-[10px] ${candidate.submission.presentationState === "pending" ? "border-amber-400 bg-amber-50 text-amber-900" : candidate.submission.presentationState === "failed" ? "border-rose-400 bg-rose-50 text-rose-800" : ""}`}>{submissionBadgeText}</Badge>
+                          <p className="mt-1 text-xs text-foreground" data-testid="submission-history-row">
+                            {candidate.submission.jobTitle || candidate.reviewJobTitle || "Job not recorded"} · {candidate.submission.clientName || candidate.submission.client || "Client not recorded"} · {submissionDateText}{candidate.submission.presentationState === "pending" || candidate.submission.presentationState === "failed" ? "" : ` · ${submissionBadgeText}`}
                           </p>
                         ) : null}
                       </div>
                     </div>
 
                     <div className="flex flex-wrap items-center gap-2 shrink-0">
-                      <Button type="button" size="sm" variant="outline" aria-expanded={notesCandidateId === candidate.id} aria-controls={`people-candidate-notes-${candidate.id}`} onClick={(event) => { event.stopPropagation(); setNotesCandidateId((current) => current === candidate.id ? null : candidate.id); }} className="h-8 px-2.5 text-xs font-semibold">
+                      <Button type="button" size="sm" className="h-8 px-3 text-xs font-semibold" aria-label={`Review ${candidate.name}`} onClick={(event) => reviewCandidate(candidate, event)} data-testid="people-candidate-open">
+                        Review
+                      </Button>
+                      <Button type="button" size="sm" variant="outline" aria-label={`Notes for ${candidate.name}`} aria-expanded={notesCandidateId === candidate.id} aria-controls={`people-candidate-notes-${candidate.id}`} onClick={(event) => { event.stopPropagation(); setNotesCandidateId((current) => current === candidate.id ? null : candidate.id); }} className="h-8 px-2.5 text-xs font-semibold">
                         <NotebookText size={12} className="mr-1" /> Notes
                       </Button>
-                      <Button type="button" size="sm" variant="outline" aria-expanded={boardCandidateId === candidate.id} onClick={(event) => { event.stopPropagation(); setBoardCandidateId((current) => current === candidate.id ? null : candidate.id); }} className="h-8 px-2.5 text-xs font-semibold">
+                      <Button type="button" size="sm" variant="outline" aria-label={`Board for ${candidate.name}`} aria-expanded={boardCandidateId === candidate.id} onClick={(event) => { event.stopPropagation(); setBoardCandidateId((current) => current === candidate.id ? null : candidate.id); }} className="h-8 px-2.5 text-xs font-semibold">
                         Board
                       </Button>
                       <Button
@@ -401,6 +422,7 @@ export default function PeopleView({ candidates = [], currentJob, jobs = [], sub
                         onClick={(event) => {
                           editorTriggerRef.current = event.currentTarget;
                           setSaveNotice("");
+                          setReviewNotice("");
                           setEditorState({ mode: "edit", candidate });
                         }}
                         className="h-8 px-2.5 text-xs font-semibold"
@@ -409,13 +431,10 @@ export default function PeopleView({ candidates = [], currentJob, jobs = [], sub
                       >
                         <Pencil size={12} className="mr-1" /> Edit
                       </Button>
-                      {lastActivity ? <span className="max-w-[180px] truncate text-[10.5px] text-muted-foreground">{lastActivity.type} · {lastActivity.date}</span> : null}
-                      {candidate.otherContactsCount > 0 ? <Badge variant="outline" className="border-amber-400 bg-amber-50 text-[10.5px] text-amber-900"><AlertTriangle size={11} className="mr-1" />{candidate.otherContactsCount} other</Badge> : null}
-                      {candidate.isSubmitted ? <Badge className="bg-blue-700 text-white">Presented</Badge> : candidate.presentationState === "pending" ? <Badge variant="outline" className="border-amber-400 bg-amber-50 text-amber-900">Waiting for Loxo</Badge> : candidate.presentationState === "failed" ? <Badge variant="outline" className="border-rose-400 bg-rose-50 text-rose-800">Submission failed</Badge> : candidate.decision === "want" ? <Badge className="bg-emerald-700 text-white">Wanted</Badge> : candidate.decision === "pass" ? <Badge variant="outline" className="border-rose-400 bg-rose-50 text-rose-800">Passed</Badge> : <Badge variant="outline">Unreviewed</Badge>}
                     </div>
                   </div>
 
-                  {viewFilter === "wanted" ? (
+                  {isWanted ? (
                     <div className="mt-3 flex flex-wrap items-center gap-2 rounded-md border bg-muted/20 p-2" onClick={(event) => event.stopPropagation()} data-testid="wanted-actions">
                       {ownership.active && !ownershipOverridden ? (
                         <><span className="mr-auto flex items-center gap-1.5 text-xs text-amber-900"><ShieldAlert size={13} />{ownership.latest.actor} contacted them within six months.</span><Button type="button" size="sm" variant="outline" className="h-8 text-xs" onClick={() => overrideOwnership(candidate.id)}>Reach out anyway</Button></>

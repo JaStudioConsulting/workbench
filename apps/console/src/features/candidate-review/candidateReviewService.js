@@ -782,10 +782,12 @@ export async function recordCandidateDecision(jobId, personId, decision, options
   }
 
   const source = sourceIdentity(personId);
+  // Describes the one row this call wrote, so Undo touches that row and nothing else.
+  let undo = null;
   if (source) {
     const { data: existing, error: lookupError } = await supabaseClient
       .from("candidate_review_actions")
-      .select("id")
+      .select("id,decision")
       .eq("job_id", Number(jobId))
       .eq("candidate_source", source.source)
       .eq("candidate_source_id", source.sourceId)
@@ -797,17 +799,28 @@ export async function recordCandidateDecision(jobId, personId, decision, options
       const { error } = await supabaseClient.from("candidate_review_actions").delete().eq("id", existing.id);
       if (error) throw new Error("Could not clear the saved decision");
     } else if (decision === "want" || decision === "pass") {
-      const payload = { decision, updated_at: new Date().toISOString() };
-      const result = existing
-        ? await supabaseClient.from("candidate_review_actions").update(payload).eq("id", existing.id)
-        : await supabaseClient.from("candidate_review_actions").insert({
+      if (existing) {
+        const { error } = await supabaseClient
+          .from("candidate_review_actions")
+          .update({ decision, updated_at: new Date().toISOString() })
+          .eq("id", existing.id);
+        if (error) throw new Error("Could not save the candidate decision");
+        undo = { kind: "updated", rowId: existing.id, decision, previousDecision: existing.decision ?? null };
+      } else {
+        const { data, error } = await supabaseClient
+          .from("candidate_review_actions")
+          .insert({
             job_id: Number(jobId),
             candidate_source: source.source,
             candidate_source_id: source.sourceId,
             action_type: "decision",
             decision,
-          });
-      if (result.error) throw new Error("Could not save the candidate decision");
+          })
+          .select("id")
+          .single();
+        if (error || data?.id === undefined || data?.id === null) throw new Error("Could not save the candidate decision");
+        undo = { kind: "created", rowId: data.id, decision, previousDecision: null };
+      }
     }
     invalidateReadCache("candidate-review:");
     invalidateReadCache("process:stage-counts:");
@@ -821,7 +834,71 @@ export async function recordCandidateDecision(jobId, personId, decision, options
     if (candidate) candidate.decision = decision;
   }
 
-  return { ok: true, jobId, personId, decision };
+  return { ok: true, jobId, personId, decision, undo };
+}
+
+function forgetSessionDecision(jobId, personId, decision) {
+  candidateDecisions.set(makeCompositeKey(jobId, personId), decision);
+  const candidate = runtimeCandidatesByJob.get(String(jobId))?.find((item) => item.id === personId);
+  if (candidate) candidate.decision = decision;
+}
+
+// Takes back the decision row that recordCandidateDecision just wrote. A row this session
+// created is deleted; a row it only changed goes back to its earlier decision. Both only
+// while the row still holds the decision this session saved.
+export async function undoCandidateDecision(jobId, personId, undo) {
+  if (!undo || !makeCompositeKey(jobId, personId)) throw new Error("There is nothing to undo");
+  const previous = undo.previousDecision ?? null;
+  if (undo.rowId !== undefined && undo.rowId !== null) {
+    const rows = supabaseClient.from("candidate_review_actions");
+    const query = undo.kind === "created"
+      ? rows.delete()
+      : rows.update({ decision: previous, updated_at: new Date().toISOString() });
+    const { data, error } = await query
+      .eq("id", undo.rowId)
+      .eq("job_id", Number(jobId))
+      .eq("action_type", "decision")
+      .eq("decision", undo.decision)
+      .select("id");
+    if (error) throw new Error("Could not undo the decision");
+    if (!data?.length) throw new Error("This decision has changed since it was saved, so it was not undone");
+    invalidateReadCache("candidate-review:");
+    invalidateReadCache("process:stage-counts:");
+    invalidateReadCache("process:candidate-evidence:");
+  }
+  forgetSessionDecision(jobId, personId, previous);
+  return { ok: true, jobId, personId, decision: previous };
+}
+
+// Takes back one queued activity (a pass note or a submission) by the idempotency key this
+// session gave it. Only a row still waiting for Loxo is removed.
+export async function undoQueuedActivity(jobId, personId, idempotencyKey) {
+  if (!idempotencyKey || !makeCompositeKey(jobId, personId)) throw new Error("There is nothing to undo");
+  const source = sourceIdentity(personId);
+  if (source) {
+    const { data, error } = await supabaseClient
+      .from("candidate_review_actions")
+      .delete()
+      .eq("job_id", Number(jobId))
+      .eq("candidate_source", source.source)
+      .eq("candidate_source_id", source.sourceId)
+      .eq("action_type", "activity")
+      .eq("idempotency_key", idempotencyKey)
+      .eq("status", "waiting_for_loxo")
+      .select("id");
+    if (error) throw new Error("Could not undo the queued action");
+    if (!data?.length) throw new Error("This was already recorded in Loxo, so it cannot be undone here");
+    invalidateReadCache("candidate-review:");
+    invalidateReadCache("process:stage-counts:");
+    invalidateReadCache("process:candidate-evidence:");
+  }
+  activityOutbox.delete(idempotencyKey);
+  const key = makeCompositeKey(jobId, personId);
+  const remaining = (loggedActivities.get(key) || []).filter((item) => item.idempotencyKey !== idempotencyKey);
+  if (remaining.length) loggedActivities.set(key, remaining);
+  else loggedActivities.delete(key);
+  if (source) await loadLiveCandidatesForJob(jobId);
+  return { ok: true, jobId, personId };
 }
 
 export async function recordCandidateSubmission(jobId, personId, details = {}, options = {}) {
@@ -885,6 +962,7 @@ export async function recordCandidateSubmission(jobId, personId, details = {}, o
     personId: String(personId),
     submission: refreshed,
     persisted: true,
+    idempotencyKey,
   };
 }
 

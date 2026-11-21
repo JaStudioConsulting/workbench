@@ -296,7 +296,7 @@ export default function App() {
 
   return <div className="min-h-screen bg-background text-foreground">
     <a href="#workbench-main" className="sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-50 focus:rounded-md focus:bg-background focus:px-4 focus:py-2 focus:text-foreground focus:shadow-lg focus:outline focus:outline-2 focus:outline-offset-2 focus:outline-ring">Skip to content</a>
-    <header data-print-hide className="sticky top-0 z-40 flex min-h-16 flex-wrap items-center gap-3 border-b bg-background/95 px-4 py-3 pt-[max(0.75rem,env(safe-area-inset-top))] backdrop-blur md:px-6">
+    <header data-print-hide className="z-40 flex min-h-16 flex-wrap items-center gap-3 border-b bg-white px-4 py-3 pt-[max(0.75rem,env(safe-area-inset-top))] md:px-6 xl:sticky xl:top-0">
       <h1 ref={pageHeadingRef} tabIndex={-1} className="shrink-0 text-lg font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">JA <span className="text-muted-foreground">Workbench</span></h1>
       <div className="min-w-56 flex-1"><HeaderSearch onSelectResult={navigateFromSearch} onNavigatePage={selectPage} /></div>
       <Suspense fallback={null}><ContextPicker value={context} onChange={setContext} /></Suspense>

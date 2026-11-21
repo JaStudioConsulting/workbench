@@ -577,9 +577,9 @@ test("CandidateEditorDialog, CandidateCard, and PeopleView wire accessible add/e
   assert.match(dialogSource, /data-testid=\{`null-indicator-\$\{field\.key\}`\}/);
   assert.match(dialogSource, /htmlFor=\{inputId\}/);
 
-  // CandidateCard wires Edit candidate, Add candidate, provenance badge, and CandidateEditorDialog
+  // CandidateCard wires Edit candidate, provenance badge, and CandidateEditorDialog; Add candidate lives in the People list only
   assert.match(cardSource, /data-testid="card-edit-candidate-button"/);
-  assert.match(cardSource, /data-testid="card-add-candidate-button"/);
+  assert.doesNotMatch(cardSource, /card-add-candidate-button/);
   assert.match(cardSource, /data-testid="card-provenance-badge"/);
   assert.match(cardSource, /data-testid="card-candidate-save-status"/);
   assert.match(cardSource, /<CandidateEditorDialog/);

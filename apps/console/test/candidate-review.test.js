@@ -834,12 +834,13 @@ test("screenshot feedback: LoginButton removed from shell, one-view destinations
   assert.doesNotMatch(cardSource, /Pass \(Drag Left\)/);
   assert.doesNotMatch(cardSource, /Want This Candidate \(Drag Right\)/);
   assert.match(cardSource, /Pass/);
-  assert.match(cardSource, /Want this candidate/);
+  assert.match(cardSource, /<Check size=\{15\} className="mr-1\.5" \/> Want\n/);
+  assert.doesNotMatch(cardSource, /Want this candidate/);
 
-  // CandidateReview renders Jobs Map navigation and job title in picker
+  // CandidateReview shows the selected job's title as a heading; the Jobs column chooses the job
   const reviewSource = fs.readFileSync(path.join(featureDir, "CandidateReview.jsx"), "utf8");
-  assert.match(reviewSource, /data-testid="navigate-jobs-map"/);
-  assert.match(reviewSource, /currentJob\s*\?\s*currentJob\.title\s*:\s*"Select active job"/);
+  assert.doesNotMatch(reviewSource, /navigate-jobs-map|job-picker-trigger|<Select/);
+  assert.match(reviewSource, /currentJob\s*\?\s*currentJob\.title\s*:\s*"Candidates"/);
 });
 
 test("candidate review code limits localStorage to the Canada filter, has no sessionStorage, and no send authority", () => {
@@ -1353,7 +1354,8 @@ test("CandidateCard, PeopleView, SwipeView, and CandidatePresentationSummary wir
   assert.match(cardSource, /<CandidatePresentationSummary/);
   assert.match(cardSource, /prefix="card"/);
 
-  assert.match(peopleSource, /<CandidatePresentationBadges/);
+  // A row says "Presented" once, as its status text, so it has no separate badge.
+  assert.doesNotMatch(peopleSource, /<CandidatePresentationBadges/);
   assert.match(peopleSource, /<CandidatePresentationSummary/);
   assert.match(peopleSource, /prefix="people"/);
   assert.match(peopleSource, /enrichCandidatesWithPresentations/);
