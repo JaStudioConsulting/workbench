@@ -149,3 +149,26 @@ test("Home remains the only approval desk entry surface", async () => {
   assert.match(home, /selectedWaiting\.actions\.map/);
   assert.doesNotMatch(app, /\["Approval desk"/);
 });
+
+test("Today cards stack in one column because Home only lives in the narrow Today panel", async () => {
+  const fs = await import("node:fs/promises");
+  const [home, view] = await Promise.all([
+    fs.readFile(new URL("../src/features/home/HomePage.jsx", import.meta.url), "utf8"),
+    fs.readFile(new URL("../src/features/workbench/WorkbenchOneView.jsx", import.meta.url), "utf8"),
+  ]);
+  assert.doesNotMatch(home, /grid-cols/);
+  assert.match(home, /<div className="grid gap-4">\s*\{operatorCasesEnabled \? <WorkList title="Approval desk"/);
+  assert.match(view, /aria-label="Today"[^]*?<HomePage /);
+});
+
+test("refreshing Home keeps the open approval case mounted so Escape and focus return keep working", async () => {
+  const fs = await import("node:fs/promises");
+  const [home, workspace] = await Promise.all([
+    fs.readFile(new URL("../src/features/home/HomePage.jsx", import.meta.url), "utf8"),
+    fs.readFile(new URL("../src/features/operator-cases/OperatorCaseWorkspace.jsx", import.meta.url), "utf8"),
+  ]);
+  assert.doesNotMatch(home, /setState\(\(current\) => \(\{ \.\.\.current, phase: "loading" \}\)\)/);
+  assert.match(home, /state\.phase === "loading"\) return/);
+  assert.match(workspace, /<Sheet open=\{open\} onOpenChange=\{onOpenChange\}>/);
+  assert.doesNotMatch(workspace, /modal=\{false\}|disablePointerDismissal/);
+});

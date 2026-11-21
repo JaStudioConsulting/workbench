@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { GitBranch, Map, RefreshCw, UsersRound } from "lucide-react";
 import { Badge } from "../../components/ui/badge.tsx";
 import { Button } from "../../components/ui/button.tsx";
@@ -6,7 +6,24 @@ import { loadJobRailData } from "../recruiting/processService.js";
 
 function JobList({ jobs, selectedJob, onSelectJob, disabled, candidateDataAvailable }) {
   const selectedId = String(selectedJob?.loxoJobId || selectedJob?.id || "");
-  return <ul className="grid gap-2" aria-label="Active jobs">
+  const hintId = useId();
+  const [focusId, setFocusId] = useState(null);
+  // One Tab stop for the whole list: the focused job, else the selected job, else the first.
+  const tabId = [focusId, selectedId].find((id) => id && jobs.some((job) => String(job.id) === id)) ?? String(jobs[0]?.id);
+  const moveFocus = (event) => {
+    const keys = { ArrowDown: 1, ArrowUp: -1, Home: "first", End: "last" };
+    if (!(event.key in keys)) return;
+    const buttons = [...event.currentTarget.querySelectorAll("button:not(:disabled)")];
+    const at = buttons.indexOf(document.activeElement);
+    if (at < 0) return;
+    event.preventDefault();
+    const step = keys[event.key];
+    const next = step === "first" ? 0 : step === "last" ? buttons.length - 1 : Math.min(Math.max(at + step, 0), buttons.length - 1);
+    buttons[next].focus();
+  };
+  return <>
+  <p id={hintId} className="sr-only">Use the up and down arrow keys to move between jobs, and Enter to select one.</p>
+  <ul className="grid gap-2" aria-label="Active jobs" aria-describedby={hintId} onKeyDown={moveFocus} onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) setFocusId(null); }}>
     {jobs.map((job) => {
       const selected = String(job.id) === selectedId;
       const stageCounts = Object.entries(job.stageCounts || {}).filter(([, count]) => Number(count) > 0);
@@ -16,6 +33,8 @@ function JobList({ jobs, selectedJob, onSelectJob, disabled, candidateDataAvaila
           disabled={disabled}
           title={disabled ? "Stop the active recording before changing jobs" : undefined}
           aria-pressed={selected}
+          tabIndex={String(job.id) === tabId ? 0 : -1}
+          onFocus={() => setFocusId(String(job.id))}
           className={`w-full rounded-lg border p-3 text-left outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 ${selected ? "border-foreground bg-muted" : "bg-background hover:bg-muted/50"}`}
           onClick={() => onSelectJob?.({ id: job.id, loxoJobId: job.id, title: job.title, company: job.company })}
         >
@@ -26,13 +45,14 @@ function JobList({ jobs, selectedJob, onSelectJob, disabled, candidateDataAvaila
             </span>
             {candidateDataAvailable ? <Badge variant="outline" className="shrink-0">{job.candidateCount}</Badge> : null}
           </span>
-          {!candidateDataAvailable ? <span className="mt-2 block text-[11px] text-muted-foreground">Stage counts unavailable</span> : stageCounts.length ? <span className="mt-2 flex flex-wrap gap-1" aria-label="Nonzero stage counts">
+          {!candidateDataAvailable ? null : stageCounts.length ? <span className="mt-2 flex flex-wrap gap-1" aria-label="Nonzero stage counts">
             {stageCounts.map(([stage, count]) => <span key={stage} className="rounded border bg-muted/40 px-1.5 py-0.5 text-[11px] text-muted-foreground">{stage} <strong className="text-foreground">{count}</strong></span>)}
           </span> : job.candidateCount === 0 ? <span className="mt-2 block text-[11px] text-muted-foreground">No candidates</span> : null}
         </button>
       </li>;
     })}
-  </ul>;
+  </ul>
+  </>;
 }
 
 export default function JobRail({ selectedJob, onSelectJob, onOpenMap, onOpenProcess, onOpenLeads, disabled = false }) {
@@ -65,6 +85,7 @@ export default function JobRail({ selectedJob, onSelectJob, onOpenMap, onOpenPro
       {state.phase === "loading" ? <p className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground" role="status">Loading active jobs…</p> : null}
       {state.phase === "error" ? <div className="rounded-lg border border-destructive/30 p-3" role="alert"><p className="text-sm text-destructive">{state.error}</p><Button type="button" size="sm" variant="outline" className="mt-3" onClick={() => setRequestId((value) => value + 1)}><RefreshCw size={14} />Retry</Button></div> : null}
       {state.phase === "ready" && !state.jobs.length ? <p className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">No active Tracker jobs.</p> : null}
+      {state.phase === "ready" && state.jobs.length && !state.candidateDataAvailable ? <div className="mb-2 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-dashed p-2 text-xs text-muted-foreground" role="status" data-testid="job-rail-counts-note"><span>Stage counts are not shown here.</span><Button type="button" size="sm" variant="outline" disabled={disabled} onClick={onOpenProcess}>Open Process</Button></div> : null}
       {state.phase === "ready" && state.jobs.length ? <JobList jobs={state.jobs} selectedJob={selectedJob} onSelectJob={onSelectJob} disabled={disabled} candidateDataAvailable={state.candidateDataAvailable} /> : null}
     </div>
   </aside>;

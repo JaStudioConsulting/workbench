@@ -8,8 +8,8 @@
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
-  "background_color": "#f5f8fc",
-  "theme_color": "#f5f8fc",
+  "background_color": "#e6ebf2",
+  "theme_color": "#e6ebf2",
   "icons": [
     {
       "src": "/icons/workbench-icon.svg",

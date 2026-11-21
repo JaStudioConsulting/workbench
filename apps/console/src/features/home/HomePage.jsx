@@ -58,7 +58,7 @@ export default function HomePage({ onNavigate = () => {}, recentMeetingsLoader }
 
   useEffect(() => {
     let active = true;
-    setState((current) => ({ ...current, phase: "loading" }));
+    // Keep the current lists on screen while refreshing so an open approval case is not unmounted (and loses focus and Escape) every reload.
     Promise.allSettled([
       loadHomeData({ includeCases: operatorCasesEnabled, force: requestId > 0 }),
       typeof recentMeetingsLoader === "function" ? recentMeetingsLoader() : Promise.resolve([]),
@@ -125,7 +125,7 @@ export default function HomePage({ onNavigate = () => {}, recentMeetingsLoader }
   return (
     <div className="flex min-w-0 flex-col gap-4" data-testid="home-page">
       <div><span className="eyebrow">TODAY</span><h2 className="text-lg font-semibold">Recruiting workbench</h2></div>
-      <div className={`grid gap-4 ${operatorCasesEnabled ? "xl:grid-cols-4" : "xl:grid-cols-3"}`}>
+      <div className="grid gap-4">
         {operatorCasesEnabled ? <WorkList title="Approval desk" description="Cases with source evidence and exact approvals." icon={FileCheck2} items={data.cases} empty="No approval cases are open." onOpen={(item) => setSelectedCaseId(item.id)} renderItem={(item) => <><strong>{item.title || "Untitled case"}</strong><span className="block text-xs text-muted-foreground">{({ mpc: "MPC", after_call: "After call", daily: "Recorded activity", automation: "Templates" })[item.case_type] || "Saved case"} · {item.status.replaceAll("_", " ")}</span></>} /> : null}
         <WorkList title="Waiting for Loxo" description={operatorCasesEnabled ? "Review and record exact queued changes." : "Queued changes grouped by candidate."} icon={Users} items={data.waiting} empty="No Loxo changes are waiting." onOpen={openWaitingGroup} renderItem={(item) => <><strong>{item.candidateName}</strong><span className="block text-xs text-muted-foreground">{item.count} queued action{item.count === 1 ? "" : "s"} · {waitingAgeLabel(item.oldestAt)}</span></>} />
         <WorkList title="Drafts ready" description="Saved templates and drafts ready for review." icon={FileText} items={data.drafts} empty="No drafts are ready." onOpen={(item) => setSelectedCaseId(item.case_id)} renderItem={(item) => <><strong>{String(item.kind || "Draft").replaceAll("_", " ")}</strong><span className="block text-xs text-muted-foreground">{item.title || "Saved case"}</span></>} />
