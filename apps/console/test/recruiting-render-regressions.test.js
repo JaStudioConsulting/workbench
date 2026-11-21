@@ -15,7 +15,7 @@ test("mobile shell and empty table use min-width-safe responsive wrappers", () =
   const oneView = fs.readFileSync(path.join(root, "src/features/workbench/WorkbenchOneView.jsx"), "utf8");
   const picker = fs.readFileSync(path.join(root, "src/ContextPicker.jsx"), "utf8");
   assert.match(app, /min-w-0 overflow-x-clip/);
-  assert.match(app, /header data-print-hide className="sticky top-0[^\n]+flex min-h-16 flex-wrap/);
+  assert.match(app, /header data-print-hide className="z-40 flex min-h-16 flex-wrap[^\n]+bg-white[^\n]+xl:sticky xl:top-0/);
   assert.match(oneView, /gridTemplateColumns: "minmax\(200px, 240px\) minmax\(0, 1fr\) minmax\(240px, 320px\)"/);
   assert.match(oneView, /aria-label="Workbench panels"/);
   assert.match(oneView, /value="today" disabled=\{recordingLocked\}>Today<\/TabsTrigger>/);

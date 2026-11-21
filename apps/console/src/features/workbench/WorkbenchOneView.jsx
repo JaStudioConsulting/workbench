@@ -1,5 +1,5 @@
 import { Component, lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
-import { X } from "lucide-react";
+import { ChevronDown, X } from "lucide-react";
 import { Button } from "../../components/ui/button.tsx";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../components/ui/tabs.tsx";
 
@@ -118,6 +118,7 @@ export default function WorkbenchOneView({
   const [workView, setWorkView] = useState(() => destination === "Pipeline" ? "board" : destination === "Candidate Review" ? "swipe" : "people");
   const [mobileTab, setMobileTab] = useState(() => destination === "Meetings" ? "meetings" : destination === "Home" || destination === "Mail" ? "today" : "work");
   const desktop = useDesktopLayout();
+  const [jobsOpen, setJobsOpen] = useState(false);
 
   useEffect(() => {
     if (destination === "Pipeline") setWorkView("board");
@@ -146,23 +147,23 @@ export default function WorkbenchOneView({
 
   const jobsPanel = <PanelBoundary name="Jobs"><Suspense fallback={<LoadingPanel />}><JobRail
     selectedJob={selectedJob}
-    onSelectJob={onSelectJob}
+    onSelectJob={(job) => { setJobsOpen(false); onSelectJob(job); }}
     onOpenMap={() => onNavigate("Jobs")}
     onOpenProcess={() => onNavigate("Process")}
     onOpenLeads={() => onNavigate("Leads")}
     disabled={recordingLocked}
   /></Suspense></PanelBoundary>;
 
-  const workPanel = <PanelBoundary name="Candidate work"><section className="relative h-full min-h-0 min-w-0 overflow-hidden rounded-xl border bg-card" aria-label="Candidate work">
-    <Tabs value={workView} onValueChange={chooseWorkView} className="h-full min-h-0 flex-col gap-0 overflow-hidden" inert={utilityOpen ? true : undefined} aria-hidden={utilityOpen ? "true" : undefined}>
+  const workPanel = <PanelBoundary name="Candidate work"><section className="relative h-full min-h-0 min-w-0 overflow-clip rounded-xl border bg-card xl:overflow-hidden" aria-label="Candidate work">
+    <Tabs value={workView} onValueChange={chooseWorkView} className="h-full min-h-0 flex-col gap-0 overflow-clip xl:overflow-hidden" inert={utilityOpen ? true : undefined} aria-hidden={utilityOpen ? "true" : undefined}>
       <div className="flex flex-wrap items-center justify-between gap-3 border-b p-3">
         <div><p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Work</p><h2 className="sr-only">Candidate work</h2></div>
         <TabsList aria-label="Candidate view"><TabsTrigger value="people" disabled={recordingLocked}>People</TabsTrigger><TabsTrigger value="swipe" disabled={recordingLocked}>Swipe</TabsTrigger><TabsTrigger value="board" disabled={recordingLocked}>Pipeline</TabsTrigger></TabsList>
       </div>
-      <div className="min-h-0 flex-1 overflow-auto p-3 md:p-4">
+      <div className={`min-h-0 flex-1 p-3 md:p-4 ${workView === "board" ? "overflow-auto" : "flex flex-col overflow-clip xl:overflow-hidden"}`}>
         <Suspense fallback={<LoadingPanel />}>
-          {workView === "people" ? <TabsContent value="people"><CandidateReview key="people" initialView="people" selectedJob={selectedJob} focusCandidateId={focusCandidateId} onSelectJob={onSelectJob} onNavigateJobsMap={() => onNavigate("Jobs")} onStartCandidateCall={onStartCandidateCall} /></TabsContent> : null}
-          {workView === "swipe" ? <TabsContent value="swipe"><CandidateReview key="swipe" initialView="swipe" selectedJob={selectedJob} focusCandidateId={focusCandidateId} onSelectJob={onSelectJob} onNavigateJobsMap={() => onNavigate("Jobs")} onStartCandidateCall={onStartCandidateCall} /></TabsContent> : null}
+          {/* One CandidateReview serves People and Swipe, so its loaded data survives switching between them. */}
+          {workView !== "board" ? <TabsContent value={workView} className="flex min-h-0 flex-1 flex-col"><CandidateReview view={workView} onViewChange={chooseWorkView} selectedJob={selectedJob} focusCandidateId={focusCandidateId} onSelectJob={onSelectJob} onNavigateJobsMap={() => onNavigate("Jobs")} onStartCandidateCall={onStartCandidateCall} /></TabsContent> : null}
           {workView === "board" ? <TabsContent value="board"><PipelinePage selectedJob={selectedJob} onSelectJob={onSelectJob} onOpenCandidate={onOpenCandidate} /></TabsContent> : null}
         </Suspense>
       </div>
@@ -181,10 +182,13 @@ export default function WorkbenchOneView({
   return <div className={`grid min-w-0 gap-3 ${desktop ? "h-[calc(100dvh-6rem)] min-h-0 overflow-hidden" : ""}`} style={desktop
     ? { gridTemplateColumns: "minmax(200px, 240px) minmax(0, 1fr) minmax(240px, 320px)", gridTemplateRows: "minmax(0, 1fr)", height: "calc(100dvh - 6rem)" }
     : { gridTemplateColumns: "minmax(0, 1fr)" }} data-testid="workbench-one-view">
-    <div className="contents">{!desktop ? <Tabs value={mobileTab} onValueChange={(value) => { if (!recordingLocked) setMobileTab(value); }} className="min-w-0 flex-col gap-3">
-      <TabsList className="sticky top-[4.5rem] z-30 grid h-10 w-full max-w-full shrink-0 grid-cols-3" aria-label="Workbench panels"><TabsTrigger className="h-full" value="today" disabled={recordingLocked}>Today</TabsTrigger><TabsTrigger className="h-full" value="work" disabled={recordingLocked}>Work</TabsTrigger><TabsTrigger className="h-full" value="meetings">Meetings</TabsTrigger></TabsList>
+    <div className="contents">{!desktop ? <Tabs value={mobileTab} onValueChange={(value) => { if (!recordingLocked) setMobileTab(value); }} className="contents">
+      <TabsList className="sticky top-0 z-30 grid h-10 w-full max-w-full shrink-0 grid-cols-3" aria-label="Workbench panels"><TabsTrigger className="h-full" value="today" disabled={recordingLocked}>Today</TabsTrigger><TabsTrigger className="h-full" value="work" disabled={recordingLocked}>Work</TabsTrigger><TabsTrigger className="h-full" value="meetings">Meetings</TabsTrigger></TabsList>
     </Tabs> : null}</div>
-    <div className={desktop ? "h-full min-h-0 min-w-0" : mobileTab === "work" ? "min-h-0 min-w-0" : "hidden"}>{jobsPanel}</div>
+    <div className={desktop ? "h-full min-h-0 min-w-0" : mobileTab === "work" ? "min-h-0 min-w-0" : "hidden"}>{desktop ? jobsPanel : <details open={jobsOpen} onToggle={(event) => setJobsOpen(event.currentTarget.open)} className="group rounded-xl border bg-card" data-testid="narrow-jobs">
+      <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-2 px-3 py-2 text-sm font-semibold [&::-webkit-details-marker]:hidden"><span className="min-w-0 truncate"><span className="text-xs font-medium text-muted-foreground">Job </span>{selectedJob?.title || "Choose a job"}</span><ChevronDown size={16} className="shrink-0 transition-transform group-open:rotate-180" aria-hidden="true" /></summary>
+      <div className="h-[min(60dvh,28rem)] border-t">{jobsPanel}</div>
+    </details>}</div>
     <div className={desktop ? "h-full min-h-0 min-w-0" : mobileTab === "work" ? "min-h-0 min-w-0" : "hidden"}>{workPanel}</div>
     <aside className={`min-h-0 min-w-0 gap-3 ${desktop ? "grid h-full overflow-hidden" : "grid"}`} style={desktop ? { gridTemplateRows: "minmax(0, 1fr) minmax(0, 1fr)" } : undefined} aria-label="Today and meetings">
       <div className={desktop || mobileTab === "today" ? "min-h-0 min-w-0" : "hidden"}>{todayPanel}</div>

@@ -51,3 +51,15 @@ test("search candidate navigation shows the directory without an active job and 
     await vite.close();
   }
 });
+
+test("theme defines every colour token the components use and the search field shows a focus ring", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const [styles, command] = await Promise.all([
+    readFile(new URL("../src/styles.css", import.meta.url), "utf8"),
+    readFile(new URL("../src/components/ui/command.tsx", import.meta.url), "utf8"),
+  ]);
+  for (const token of ["input", "card", "card-foreground", "popover", "popover-foreground", "border"]) assert.match(styles, new RegExp(`--color-${token}:\\s*#`));
+  assert.match(styles, /@layer base \{[^}]*border-color: var\(--color-border, currentColor\)/);
+  assert.match(command, /has-\[\[data-slot=command-input\]:focus-visible\]:ring-2 has-\[\[data-slot=command-input\]:focus-visible\]:ring-ring/);
+  assert.doesNotMatch(command, /border-input\/30/);
+});

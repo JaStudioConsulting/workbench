@@ -60,3 +60,22 @@ test("Meetings follows the Candidates job unless unsaved meeting content is pres
   assert.match(meetings, /workspaceSelectedJob\?\.loxoJobId \|\| workspaceSelectedJob\?\.id/);
   assert.match(meetings, /meetingDraftDirty \|\| transcript\.trim\(\) \|\| notes\.trim\(\) \|\| recording\?\.active/);
 });
+
+test("job list is one Tab stop with arrow-key movement and a named list", async () => {
+  const source = await readFile(new URL("../src/features/workbench/JobRail.jsx", import.meta.url), "utf8");
+  assert.match(source, /<ul className="grid gap-2" aria-label="Active jobs" aria-describedby=\{hintId\}/);
+  assert.match(source, /tabIndex=\{String\(job\.id\) === tabId \? 0 : -1\}/);
+  assert.match(source, /\[focusId, selectedId\]\.find/);
+  for (const key of ["ArrowDown", "ArrowUp", "Home", "End"]) assert.match(source, new RegExp(`${key}:`));
+  assert.match(source, /event\.preventDefault\(\)/);
+  assert.match(source, /aria-pressed=\{selected\}/);
+  assert.match(source, /focus-visible:ring-2 focus-visible:ring-ring/);
+});
+
+test("unavailable stage counts are explained once for the rail, not on every job card", async () => {
+  const source = await readFile(new URL("../src/features/workbench/JobRail.jsx", import.meta.url), "utf8");
+  assert.doesNotMatch(source, /Stage counts unavailable/);
+  assert.equal((source.match(/Stage counts are not shown here\./g) || []).length, 1);
+  assert.match(source, /!state\.candidateDataAvailable \?[^]*?data-testid="job-rail-counts-note"[^]*?onClick=\{onOpenProcess\}>Open Process/);
+  assert.match(source, /job\.candidateCount === 0 \? <span[^>]*>No candidates/);
+});

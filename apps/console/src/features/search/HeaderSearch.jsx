@@ -237,7 +237,7 @@ export default function HeaderSearch({
             <kbd
               onClick={focusInput}
               title="Press Command+K or Ctrl+K to search"
-              className="hidden cursor-pointer select-none items-center rounded border bg-muted/70 px-1.5 py-0.5 font-mono text-[10px] font-medium text-muted-foreground sm:inline-flex"
+              className="hidden cursor-pointer select-none items-center rounded border bg-muted/70 px-1.5 py-0.5 font-mono text-xs font-medium text-muted-foreground sm:inline-flex"
             >
               ⌘K
             </kbd>
@@ -408,26 +408,26 @@ export default function HeaderSearch({
                                   </span>
                                   <div className="flex shrink-0 items-center gap-1">
                                     {item.sourceLabel ? (
-                                      <Badge variant="outline" className="px-1.5 py-0 text-[10px]">
+                                      <Badge variant="outline" className="px-1.5 py-0 text-xs">
                                         {item.sourceLabel}
                                       </Badge>
                                     ) : item.status ? (
-                                      <Badge variant="outline" className="px-1.5 py-0 text-[10px]">
+                                      <Badge variant="outline" className="px-1.5 py-0 text-xs">
                                         {item.status}
                                       </Badge>
                                     ) : null}
                                     {item.entityType === "job" ? (
-                                      <span className="font-mono text-[10px] text-muted-foreground">#{item.entityId}</span>
+                                      <span className="font-mono text-xs text-muted-foreground">#{item.entityId}</span>
                                     ) : null}
                                   </div>
                                 </div>
                                 {metadataLine ? (
-                                  <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
+                                  <p className="mt-0.5 truncate text-xs text-muted-foreground">
                                     {metadataLine}
                                   </p>
                                 ) : null}
                                 {item.entityType === "candidate" ? (
-                                  <div className="mt-1 space-y-0.5 text-[11px]" data-testid="search-candidate-evidence">
+                                  <div className="mt-1 space-y-0.5 text-xs" data-testid="search-candidate-evidence">
                                     {evidence.phase === "loading" ? (
                                       <p className="text-muted-foreground">Checking presentation history and open jobs...</p>
                                     ) : candidateEvidence ? (
@@ -457,7 +457,7 @@ export default function HeaderSearch({
                                   </div>
                                 ) : null}
                                 {item.snippet ? (
-                                  <p className="mt-0.5 line-clamp-1 text-[11px] text-muted-foreground/90">
+                                  <p className="mt-0.5 line-clamp-1 text-xs text-muted-foreground/90">
                                     {item.snippet}
                                   </p>
                                 ) : null}

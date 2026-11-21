@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useId, useState } from "react";
 import { LOXO_LOGGABLE_ACTIVITIES } from "./constants.js";
 import { Button } from "../../components/ui/button.tsx";
 import { Textarea } from "../../components/ui/textarea.tsx";
@@ -12,6 +12,8 @@ const ACTIVITY_TYPE_ITEMS = LOXO_LOGGABLE_ACTIVITIES.map((activity) => ({
 }));
 
 export default function LogActivityForm({ candidateId, onLogActivity }) {
+  const typeId = useId();
+  const noteId = useId();
   const [selectedType, setSelectedType] = useState(LOXO_LOGGABLE_ACTIVITIES[0].name);
   const [note, setNote] = useState("");
   const [justLogged, setJustLogged] = useState(false);
@@ -66,12 +68,12 @@ export default function LogActivityForm({ candidateId, onLogActivity }) {
       <div className="flex items-center justify-between gap-2 border-b pb-1.5">
         <div className="flex items-center gap-1.5">
           <PlusCircle size={14} className="text-muted-foreground" />
-          <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-            Log Activity in Loxo
+          <h4 className="text-sm font-semibold">
+            Log activity
           </h4>
         </div>
         {justLogged && (
-          <Badge variant="outline" className="text-[10.5px] border-amber-400 bg-amber-50 text-amber-900 flex items-center gap-1">
+          <Badge variant="outline" className="text-xs border-amber-400 bg-amber-50 text-amber-900 flex items-center gap-1">
             <Clock size={11} className="text-amber-700 animate-pulse" />
             Waiting for Loxo
           </Badge>
@@ -92,7 +94,7 @@ export default function LogActivityForm({ candidateId, onLogActivity }) {
             size="sm"
             variant="ghost"
             onClick={handleSubmit}
-            className="h-6 px-2 text-[11px] underline"
+            className="h-6 px-2 text-xs underline"
           >
             Retry
           </Button>
@@ -101,11 +103,11 @@ export default function LogActivityForm({ candidateId, onLogActivity }) {
 
       <div className="flex flex-col gap-2">
         <div>
-          <label className="text-[11px] font-semibold text-muted-foreground block mb-1">
-            Activity Type (Exact Loxo Names)
+          <label htmlFor={typeId} className="text-xs font-semibold text-muted-foreground block mb-1">
+            Activity type
           </label>
           <Select items={ACTIVITY_TYPE_ITEMS} value={selectedType} onValueChange={setSelectedType} disabled={isSubmitting}>
-            <SelectTrigger className="w-full text-xs">
+            <SelectTrigger id={typeId} className="w-full text-xs">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -121,7 +123,7 @@ export default function LogActivityForm({ candidateId, onLogActivity }) {
         </div>
 
         {/* Stage Trigger Feedback */}
-        <div className="rounded-md border bg-muted/30 p-2 text-[11px] flex items-center justify-between gap-2">
+        <div className="rounded-md border bg-muted/30 p-2 text-xs flex items-center justify-between gap-2">
           <span className="text-muted-foreground">Loxo stage trigger:</span>
           {currentActivityConfig.trigger === "No automatic stage change" ? (
             <span className="font-medium text-muted-foreground">No automatic stage change</span>
@@ -133,10 +135,11 @@ export default function LogActivityForm({ candidateId, onLogActivity }) {
         </div>
 
         <div>
-          <label className="text-[11px] font-semibold text-muted-foreground block mb-1">
-            Activity Note
+          <label htmlFor={noteId} className="text-xs font-semibold text-muted-foreground block mb-1">
+            Note
           </label>
           <Textarea
+            id={noteId}
             rows={2}
             value={note}
             onChange={(e) => setNote(e.target.value)}
@@ -147,8 +150,8 @@ export default function LogActivityForm({ candidateId, onLogActivity }) {
         </div>
 
         <div className="flex items-center justify-between gap-2 pt-1">
-          <p className="text-[10px] text-muted-foreground italic">
-            Queued in local outbox as Waiting for Loxo without external network calls.
+          <p className="text-xs text-muted-foreground">
+            Saved here. Waiting for Loxo.
           </p>
           <Button
             type="submit"
@@ -156,7 +159,7 @@ export default function LogActivityForm({ candidateId, onLogActivity }) {
             disabled={isSubmitting}
             className="text-xs font-semibold px-3 h-8"
           >
-            {isSubmitting ? "Saving..." : "Log Activity"}
+            {isSubmitting ? "Saving..." : "Log activity"}
           </Button>
         </div>
       </div>

@@ -35,7 +35,7 @@ export default function RejectMenu({ onReject, disabled, open, onOpenChange }) {
             variant="outline"
             disabled={disabled}
             aria-label="Pass on this candidate, pick a reason"
-            className="h-10 max-w-[200px] flex-1 border-rose-300 text-xs font-bold text-rose-800 hover:border-rose-400 hover:bg-rose-50"
+            className="h-10 min-w-24 border-rose-300 text-xs font-semibold text-rose-800 hover:border-rose-400 hover:bg-rose-50"
             data-testid="reject-menu-trigger"
           />
         }
@@ -56,7 +56,7 @@ export default function RejectMenu({ onReject, disabled, open, onOpenChange }) {
             </button>
           ))}
         </div>
-        <p className="px-1 text-[11px] text-muted-foreground">The note waits for Loxo. Nothing is written there yet.</p>
+        <p className="px-1 text-xs text-muted-foreground">The note waits for Loxo. Nothing is written there yet.</p>
       </PopoverContent>
     </Popover>
   );

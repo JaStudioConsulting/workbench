@@ -463,7 +463,7 @@ export default function JobsMapView({ onSelectJobForWorkflow, onOpenJobReview })
                   <MapPin size={14} className="mt-0.5 text-muted-foreground" />
                   <div className="min-w-0 flex-1">
                     <p className="font-medium truncate">{item.mainText}</p>
-                    {item.secondaryText && <p className="text-[11px] text-muted-foreground truncate">{item.secondaryText}</p>}
+                    {item.secondaryText && <p className="text-xs text-muted-foreground truncate">{item.secondaryText}</p>}
                   </div>
                 </button>
               ))}
@@ -565,7 +565,7 @@ export default function JobsMapView({ onSelectJobForWorkflow, onOpenJobReview })
             </p>
           </div>
           {unmappedJobCount > 0 ? (
-            <p className="px-1 text-[11px] text-amber-700" role="status">
+            <p className="px-1 text-xs text-amber-700" role="status">
               {unmappedJobCount} {unmappedJobCount === 1 ? "role has" : "roles have"} no resolvable location and {unmappedJobCount === 1 ? "is" : "are"} not shown on the map
               {searchCoords && maxRadius !== "ALL" ? "; excluded from the radius filter." : "."}
             </p>
@@ -606,7 +606,7 @@ export default function JobsMapView({ onSelectJobForWorkflow, onOpenJobReview })
                             <MapPin size={12} /> {job.displayLocation}
                           </span>
                           {job.isMultiLocation && (
-                            <Badge variant="outline" className="text-[10px] py-0 px-1">
+                            <Badge variant="outline" className="text-xs py-0 px-1">
                               Site {job.locationIndex}/{job.totalLocations}
                             </Badge>
                           )}
@@ -634,7 +634,7 @@ export default function JobsMapView({ onSelectJobForWorkflow, onOpenJobReview })
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-1.5">
                     {selectedJob.isMultiLocation && (
-                      <Badge variant="secondary" className="text-[10px]">
+                      <Badge variant="secondary" className="text-xs">
                         Multi-Site Opening
                       </Badge>
                     )}
@@ -682,7 +682,7 @@ export default function JobsMapView({ onSelectJobForWorkflow, onOpenJobReview })
               </div>
 
               {selectedJob.description && (
-                <div className="mt-2.5 max-h-32 overflow-y-auto rounded-md border bg-muted/30 p-2 text-[11px] leading-relaxed whitespace-pre-wrap">
+                <div className="mt-2.5 max-h-32 overflow-y-auto rounded-md border bg-muted/30 p-2 text-xs leading-relaxed whitespace-pre-wrap">
                   {selectedJob.description}
                 </div>
               )}

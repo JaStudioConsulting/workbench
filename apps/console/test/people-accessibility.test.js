@@ -7,10 +7,11 @@ import { fileURLToPath } from "node:url";
 const here = path.dirname(fileURLToPath(import.meta.url));
 const source = fs.readFileSync(path.resolve(here, "../src/features/candidate-review/PeopleView.jsx"), "utf8");
 
-test("People candidate selection uses a keyboard-native button", () => {
-  assert.match(source, /<button type="button" onClick=\{\(\) => onSelectCandidateToSwipe\(candidate\.id\)\}[^>]*data-testid="people-candidate-open"/);
+test("People rows have one named Review button and named Notes and Board buttons", () => {
+  assert.match(source, /<Button type="button" size="sm"[^]*?aria-label=\{`Review \$\{candidate\.name\}`\}[^]*?data-testid="people-candidate-open"/);
+  assert.match(source, /aria-label=\{`Notes for \$\{candidate\.name\}`\}/);
+  assert.match(source, /aria-label=\{`Board for \$\{candidate\.name\}`\}/);
   assert.doesNotMatch(source, /<div key=\{recordKey\} onClick=/);
-  assert.match(source, /aria-label=\{`Open \$\{candidate\.name\} profile`\}/);
 });
 
 test("People filters have accessible names", () => {

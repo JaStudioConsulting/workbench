@@ -18,6 +18,7 @@ export async function rejectCandidate({ jobId, personId, reason, recordDecision,
   }
   const decision = await recordDecision(jobId, personId, "pass");
   if (decision?.ok === false) return decision;
+  const undo = { decision: decision?.undo || null, idempotencyKey: null };
   try {
     const logged = await logActivity(jobId, personId, {
       type: "*Note",
@@ -25,12 +26,14 @@ export async function rejectCandidate({ jobId, personId, reason, recordDecision,
       targetStage: "Rejected",
     });
     if (logged?.ok === false) throw new Error(logged.error || "Loxo note was not queued");
+    undo.idempotencyKey = logged?.activity?.idempotencyKey || null;
   } catch (error) {
     return {
       ok: false,
       decisionSaved: true,
+      undo,
       error: `Passed, but the Loxo note was not queued: ${error.message}`,
     };
   }
-  return { ok: true, status: "Waiting for Loxo" };
+  return { ok: true, status: "Waiting for Loxo", undo };
 }

@@ -218,8 +218,8 @@ export default function CandidateEditorDialog({
                 variant="outline"
                 className={
                   provenance.isManual
-                    ? "border-emerald-400 bg-emerald-50 text-emerald-900 text-[11px]"
-                    : "border-amber-400 bg-amber-50 text-amber-900 text-[11px]"
+                    ? "border-emerald-400 bg-emerald-50 text-emerald-900 text-xs"
+                    : "border-amber-400 bg-amber-50 text-amber-900 text-xs"
                 }
                 data-testid="candidate-provenance-badge"
               >
@@ -276,13 +276,13 @@ export default function CandidateEditorDialog({
                       {field.label}
                       {field.required ? <span className="ml-0.5 text-destructive">*</span> : null}
                       {field.trackerOnly ? (
-                        <span className="ml-1.5 text-[10px] font-normal text-muted-foreground">(Tracker overlay)</span>
+                        <span className="ml-1.5 text-xs font-normal text-muted-foreground">(Tracker overlay)</span>
                       ) : null}
                     </Label>
                     <div className="flex items-center gap-1.5">
                       {willClearToNull ? (
                         <span
-                          className="rounded border border-amber-300 bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-900"
+                          className="rounded border border-amber-300 bg-amber-50 px-1.5 py-0.5 text-xs font-semibold text-amber-900"
                           data-testid={`null-indicator-${field.key}`}
                         >
                           Clears to null
@@ -292,7 +292,7 @@ export default function CandidateEditorDialog({
                         <button
                           type="button"
                           onClick={() => handleClearField(field.key)}
-                          className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                          className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                           aria-label={`Clear ${field.label}`}
                           data-testid={`clear-field-${field.key}`}
                         >
@@ -332,7 +332,7 @@ export default function CandidateEditorDialog({
                   )}
 
                   {fieldErrors[field.key] ? (
-                    <p id={errorId} className="text-[11px] font-medium text-destructive">
+                    <p id={errorId} className="text-xs font-medium text-destructive">
                       {fieldErrors[field.key]}
                     </p>
                   ) : null}

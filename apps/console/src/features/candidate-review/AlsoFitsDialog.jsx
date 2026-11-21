@@ -16,11 +16,11 @@ export default function AlsoFitsDialog({ fit, open, onOpenChange }) {
       <DialogContent className="max-w-md bg-card text-foreground" data-testid="also-fits-dialog">
         <DialogHeader>
           <div className="flex items-center gap-2">
-            <Badge variant="outline" className="text-[11px] font-mono">
+            <Badge variant="outline" className="text-xs font-mono">
               Tracker Fit Evidence
             </Badge>
           </div>
-          <DialogTitle className="text-base font-bold mt-1 text-foreground">
+          <DialogTitle className="text-base font-semibold mt-1 text-foreground">
             {fit.jobTitle}
           </DialogTitle>
           <DialogDescription className="text-xs text-muted-foreground">
@@ -31,7 +31,7 @@ export default function AlsoFitsDialog({ fit, open, onOpenChange }) {
         <div className="flex flex-col gap-3 py-2 text-xs">
           {/* Tracker Row Reference */}
           <div className="rounded-lg border bg-muted/20 p-3">
-            <div className="flex items-center gap-1.5 font-bold text-muted-foreground uppercase tracking-wider text-[10px] mb-2">
+            <div className="flex items-center gap-1.5 font-semibold text-muted-foreground uppercase tracking-wider text-xs mb-2">
               <TableProperties size={13} />
               <span>Source Tracker Row</span>
             </div>
@@ -63,7 +63,7 @@ export default function AlsoFitsDialog({ fit, open, onOpenChange }) {
 
           {/* Matching Resume Lines Highlighted */}
           <div className="rounded-lg border bg-background p-3">
-            <div className="flex items-center gap-1.5 font-bold text-muted-foreground uppercase tracking-wider text-[10px] mb-2">
+            <div className="flex items-center gap-1.5 font-semibold text-muted-foreground uppercase tracking-wider text-xs mb-2">
               <CheckCircle2 size={13} className="text-emerald-600" />
               <span>Matching Resume Lines</span>
             </div>

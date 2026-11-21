@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useMemo, useState, useRef } from "react";
-import { ExternalLink, MapPin, Tag, Check, ShieldAlert, AlertCircle, Loader2, NotebookText, Pencil, Plus, Send } from "lucide-react";
+import { ExternalLink, MapPin, Tag, Check, ShieldAlert, AlertCircle, Loader2, NotebookText, Pencil, Phone, Send } from "lucide-react";
 import { Badge } from "../../components/ui/badge.tsx";
 import { handleTabListKeyDown } from "../../components/handleTabListKeyDown.js";
 import { Button } from "../../components/ui/button.tsx";
@@ -38,17 +38,19 @@ export default function CandidateCard({
   jobs = [],
   onReject,
   onWant,
+  onMarkSubmitted,
   onLogActivity,
   onStartCandidateCall,
   onCandidateSaved,
 }) {
   const [overlayRecord, setOverlayRecord] = useState(() => getCachedCandidateRecord(rawCandidate?.id));
-  const [editorMode, setEditorMode] = useState(null); // "edit" | "create" | null
+  const [editorMode, setEditorMode] = useState(null); // "edit" | null
   const [saveNotice, setSaveNotice] = useState("");
   const [activeFit, setActiveFit] = useState(null);
   const [dragOffset, setDragOffset] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
   const [isDeciding, setIsDeciding] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [decisionError, setDecisionError] = useState("");
   const [showWriteUp, setShowWriteUp] = useState(false);
   const [ownershipOverride, setOwnershipOverride] = useState(false);
@@ -186,11 +188,31 @@ export default function CandidateCard({
     }
   };
 
+  const handleMarkSubmitted = async () => {
+    if (isSubmitting || !onMarkSubmitted) return;
+    setIsSubmitting(true);
+    setDecisionError("");
+    try {
+      const result = await onMarkSubmitted(candidate.id, { client: currentJob?.company, location: currentJob?.location });
+      if (result?.ok === false) throw new Error(result.error || "Submission was not saved");
+      markDone("loxo");
+    } catch (error) {
+      setDecisionError(error.message || "Submission was not saved");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const handleCardLogActivity = async (candidateId, payload) => {
     const result = await onLogActivity(candidateId, payload);
     if (result?.ok !== false) markDone("loxo");
     return result;
   };
+
+  // Before a decision the bar offers Pass and Want. Once wanted, it offers the next steps.
+  const isWanted = candidate.decision === "want";
+  const isWaitingForLoxo = candidate.presentationState === "pending";
+  const showNextSteps = isWanted || isWaitingForLoxo || Boolean(candidate.isSubmitted);
 
   // Drag overlay stamps
   const showWantStamp = dragOffset > 40;
@@ -205,27 +227,28 @@ export default function CandidateCard({
       style={{
         transform: dragOffset ? `translateX(${dragOffset}px) rotate(${dragOffset * 0.04}deg)` : undefined,
         transition: isDragging ? "none" : "transform 0.25s ease-out",
-        fontFamily: "Arial, Calibri, sans-serif",
       }}
-      className="relative flex h-full max-h-[calc(100vh-175px)] w-full select-none flex-col overflow-hidden rounded-xl border bg-card text-foreground shadow-sm"
+      className="relative flex h-full min-h-0 w-full select-none flex-col overflow-clip rounded-xl border bg-card text-foreground shadow-sm xl:overflow-hidden"
       data-testid="swipe-candidate-card"
     >
       {/* Visual Swipe Direction Stamps */}
       {showWantStamp && (
-        <div className="pointer-events-none absolute right-8 top-8 z-30 rotate-12 rounded-lg border-2 border-emerald-600 bg-emerald-50/90 px-4 py-2 text-base font-extrabold tracking-wider text-emerald-700 shadow-lg">
+        <div className="pointer-events-none absolute right-8 top-8 z-30 rotate-12 rounded-lg border-2 border-emerald-600 bg-emerald-50/90 px-4 py-2 text-base font-semibold tracking-wider text-emerald-700 shadow-lg">
           WANT THIS CANDIDATE
         </div>
       )}
       {showPassStamp && (
-        <div className="pointer-events-none absolute left-8 top-8 z-30 -rotate-12 rounded-lg border-2 border-rose-600 bg-rose-50/90 px-4 py-2 text-base font-extrabold tracking-wider text-rose-700 shadow-lg">
+        <div className="pointer-events-none absolute left-8 top-8 z-30 -rotate-12 rounded-lg border-2 border-rose-600 bg-rose-50/90 px-4 py-2 text-base font-semibold tracking-wider text-rose-700 shadow-lg">
           PASS
         </div>
       )}
 
+      {/* Everything above the decision bar scrolls inside the card, so Pass and Want stay in view. */}
+      <div className="flex min-h-0 flex-1 flex-col xl:overflow-y-auto" data-testid="card-scroll-body">
       {/* 1. Header Row */}
       <div className="flex flex-wrap items-center justify-between gap-3 border-b bg-muted/10 p-4 shrink-0">
         <div className="flex items-center gap-3 min-w-0">
-          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-foreground text-background font-bold text-lg">
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-muted text-muted-foreground font-semibold text-lg">
             {candidate.initials}
           </div>
 
@@ -237,12 +260,12 @@ export default function CandidateCard({
                 target="_blank"
                 rel="noopener noreferrer"
                 onClick={(e) => e.stopPropagation()}
-                className="text-lg font-bold hover:underline hover:text-amber-800 flex items-center gap-1 leading-snug"
+                className="text-lg font-semibold hover:underline hover:text-amber-800 flex items-center gap-1 leading-snug"
                 title="Open Loxo profile in new tab"
               >
                 <span>{candidate.name}</span>
                 <ExternalLink size={14} className="text-muted-foreground" />
-              </a> : <span className="text-lg font-bold leading-snug">{candidate.name}</span>}
+              </a> : <span className="text-lg font-semibold leading-snug">{candidate.name}</span>}
 
               {/* Pipeline Stage Pill (exact Loxo name) */}
               <Badge variant="outline" className="font-semibold text-xs border-foreground/30 bg-background">
@@ -253,7 +276,7 @@ export default function CandidateCard({
 
               {/* Resume Indicator (3 states) */}
               <span
-                className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold border ${
+                className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold border ${
                   resumeIndicator.key === "no_resume_data"
                     ? "border-amber-400 bg-amber-50 text-amber-900"
                     : resumeIndicator.key === "profile_only"
@@ -271,10 +294,10 @@ export default function CandidateCard({
                   variant="outline"
                   className={
                     provenance.isManual
-                      ? "border-emerald-400 bg-emerald-50 text-emerald-900 text-[11px] font-semibold"
+                      ? "border-emerald-400 bg-emerald-50 text-emerald-900 text-xs font-semibold"
                       : provenance.hasOverlay
-                        ? "border-amber-400 bg-amber-50 text-amber-900 text-[11px] font-semibold"
-                        : "text-[11px]"
+                        ? "border-amber-400 bg-amber-50 text-amber-900 text-xs font-semibold"
+                        : "text-xs"
                   }
                   data-testid="card-provenance-badge"
                 >
@@ -292,7 +315,7 @@ export default function CandidateCard({
               {candidate.decision && (
                 <Badge
                   variant="outline"
-                  className={`text-xs font-bold ${
+                  className={`text-xs font-semibold ${
                     candidate.decision === "want"
                       ? "border-emerald-500 bg-emerald-50 text-emerald-800"
                       : "border-rose-400 bg-rose-50 text-rose-800"
@@ -328,20 +351,10 @@ export default function CandidateCard({
           >
             <Pencil size={12} className="mr-1" /> Edit candidate
           </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            onClick={(event) => { editorTriggerRef.current = event.currentTarget; setEditorMode("create"); }}
-            className="h-7 px-2 text-xs font-semibold"
-            data-testid="card-add-candidate-button"
-          >
-            <Plus size={12} className="mr-1" /> Add candidate
-          </Button>
         </div>
       </div>
 
-      <div className="mx-4 mt-2 empty:hidden">
+      <div className="mx-4 mt-2 shrink-0 empty:hidden">
         <CandidatePresentationSummary
           candidate={candidate}
           jobId={currentJob?.id}
@@ -351,7 +364,7 @@ export default function CandidateCard({
 
       {(candidate.industry || candidate.shift || candidate.compensation_target || candidate.current_compensation || candidate.compensation_context || candidate.role_context || candidate.client_context || candidate.notes) ? (
         <div
-          className="mx-4 mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 rounded-md border bg-muted/20 px-3 py-1.5 text-xs"
+          className="mx-4 mt-2 shrink-0 flex flex-wrap items-center gap-x-4 gap-y-1 rounded-md border bg-muted/20 px-3 py-1.5 text-xs"
           data-testid="card-candidate-details"
         >
           {candidate.industry ? <span><strong className="font-semibold">Industry:</strong> {candidate.industry}</span> : null}
@@ -368,7 +381,7 @@ export default function CandidateCard({
       {saveNotice ? (
         <div
           role="status"
-          className="mx-4 mt-2 rounded-md border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-900"
+          className="mx-4 mt-2 shrink-0 rounded-md border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-900"
           data-testid="card-candidate-save-status"
         >
           {saveNotice}
@@ -376,7 +389,7 @@ export default function CandidateCard({
       ) : null}
 
       {ownership.active && !ownershipOverride ? (
-        <div className="mx-4 mt-2 flex flex-wrap items-center justify-between gap-2 rounded-md border border-amber-300 bg-amber-50 p-2.5 text-xs text-amber-950" data-testid="ownership-warning">
+        <div className="mx-4 mt-2 shrink-0 flex flex-wrap items-center justify-between gap-2 rounded-md border border-amber-300 bg-amber-50 p-2.5 text-xs text-amber-950" data-testid="ownership-warning">
           <span className="flex items-center gap-2">
             <ShieldAlert size={14} />
             Ownership check: {ownership.latest.actor} contacted this candidate on {ownership.latest.date}. This is within six months.
@@ -388,13 +401,13 @@ export default function CandidateCard({
       ) : null}
 
       {ownershipOverride ? (
-        <div className="mx-4 mt-2 rounded-md border bg-muted/30 p-2 text-xs text-muted-foreground" data-testid="ownership-override">
+        <div className="mx-4 mt-2 shrink-0 rounded-md border bg-muted/30 p-2 text-xs text-muted-foreground" data-testid="ownership-override">
           Ownership warning overridden for this session. No message was sent.
         </div>
       ) : null}
 
       {decisionError ? (
-        <div role="alert" className="mx-4 mt-2 flex items-center gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-2 text-xs text-destructive">
+        <div role="alert" className="mx-4 mt-2 shrink-0 flex items-center gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-2 text-xs text-destructive">
           <AlertCircle size={14} /> {decisionError}
         </div>
       ) : null}
@@ -404,24 +417,24 @@ export default function CandidateCard({
         <button id="candidate-notes-tab" type="button" role="tab" tabIndex={activeTab === "notes" ? 0 : -1} aria-controls="candidate-notes-panel" aria-selected={activeTab === "notes"} onClick={() => { setNotesOpened(true); setActiveTab("notes"); }} className="min-h-10 rounded-t-md border px-3 text-sm aria-selected:bg-muted">Notes</button>
         <button id="candidate-board-tab" type="button" role="tab" tabIndex={activeTab === "board" ? 0 : -1} aria-controls="candidate-board-panel" aria-selected={activeTab === "board"} onClick={() => { setBoardOpened(true); setActiveTab("board"); }} className="min-h-10 rounded-t-md border px-3 text-sm aria-selected:bg-muted">Board</button>
       </div>
-      <div id="candidate-notes-panel" role="tabpanel" aria-labelledby="candidate-notes-tab" hidden={activeTab !== "notes"} className={activeTab === "notes" ? "min-h-0 flex-1 overflow-y-auto p-4 select-text" : "hidden"}>
+      <div id="candidate-notes-panel" role="tabpanel" aria-labelledby="candidate-notes-tab" hidden={activeTab !== "notes"} className={activeTab === "notes" ? "min-h-48 flex-1 p-4 select-text" : "hidden"}>
         {notesOpened ? <Suspense fallback={<p className="text-sm text-muted-foreground">Loading notes editor…</p>}>
           <NotesPanel subjectType="candidate" subjectId={candidate.id} defaultTitle={candidate.name} />
         </Suspense> : null}
       </div>
-      <div id="candidate-board-panel" role="tabpanel" aria-labelledby="candidate-board-tab" hidden={activeTab !== "board"} className={activeTab === "board" ? "min-h-0 flex-1 overflow-y-auto p-4 select-text" : "hidden"}>
+      <div id="candidate-board-panel" role="tabpanel" aria-labelledby="candidate-board-tab" hidden={activeTab !== "board"} className={activeTab === "board" ? "min-h-48 flex-1 p-4 select-text" : "hidden"}>
         {boardOpened ? <Suspense fallback={<p className="text-sm text-muted-foreground">Loading board editor…</p>}>
           <BoardPanel subjectType="candidate" subjectId={candidate.id} defaultTitle={candidate.name} />
         </Suspense> : null}
       </div>
       {/* 2. Main Two-Column Body with internal scrolling */}
-      <div id="candidate-profile-panel" role="tabpanel" aria-labelledby="candidate-profile-tab" hidden={activeTab !== "profile"} className={activeTab === "profile" ? "grid flex-1 min-h-0 gap-4 overflow-hidden p-4 lg:grid-cols-12" : "hidden"}>
+      <div id="candidate-profile-panel" role="tabpanel" aria-labelledby="candidate-profile-tab" hidden={activeTab !== "profile"} className={activeTab === "profile" ? "grid min-h-48 gap-4 p-4 lg:grid-cols-12 xl:flex-1 xl:overflow-hidden" : "hidden"}>
         {/* Left Column: Also Fits Tags + Resume Section */}
-        <div className="lg:col-span-7 flex flex-col gap-3 min-h-0 overflow-y-auto pr-1">
+        <div className="lg:col-span-7 flex flex-col gap-3 min-h-0 xl:overflow-y-auto pr-1">
           {/* "Also Fits" Tags (Source produced only) */}
           {candidate.alsoFits && candidate.alsoFits.length > 0 && (
             <div className="rounded-lg border bg-muted/20 p-2.5">
-              <div className="flex items-center gap-1 text-[11px] font-bold uppercase tracking-wider text-muted-foreground mb-1.5">
+              <div className="flex items-center gap-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">
                 <Tag size={12} />
                 <span>Also fits other roles (Tracker verified)</span>
               </div>
@@ -434,7 +447,7 @@ export default function CandidateCard({
                     className="inline-flex items-center gap-1 rounded-md border border-amber-300 bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-950 hover:bg-amber-100 transition-colors"
                   >
                     <span>{fit.jobTitle}</span>
-                    <span className="text-[10px] text-amber-800 font-normal">
+                    <span className="text-xs text-amber-800 font-normal">
                       ({fit.company})
                     </span>
                   </button>
@@ -450,7 +463,7 @@ export default function CandidateCard({
         </div>
 
         {/* Right Column: Full Activity Trail + Log Activity Form */}
-        <div className="lg:col-span-5 flex flex-col gap-3 min-h-0 overflow-y-auto pl-1">
+        <div className="lg:col-span-5 flex flex-col gap-3 min-h-0 xl:overflow-y-auto pl-1">
           <ActivityTrail candidate={candidate} />
           <LogActivityForm
             candidateId={candidate.id}
@@ -459,39 +472,83 @@ export default function CandidateCard({
         </div>
       </div>
 
-      {/* 3. Bottom Decision Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-2 border-t bg-muted/10 p-3 shrink-0">
-        <RejectMenu
-          onReject={handleReject}
-          disabled={isDeciding}
-          open={rejectOpen}
-          onOpenChange={setRejectOpen}
-        />
+      </div>
 
-        <Button type="button" variant="outline" onClick={() => setShowOutreach(true)} className="h-10 text-xs font-semibold" data-testid="outreach-button">
-          <Send size={15} className="mr-1.5" /> Outreach
-        </Button>
+      {/* 3. Bottom Decision Bar: one row, pinned to the card bottom */}
+      <div className="sticky bottom-0 z-10 flex shrink-0 flex-wrap items-center gap-2 border-t bg-card p-3 xl:static" data-testid="decision-bar">
+        {showNextSteps ? (
+          <>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={!String(candidate.phone || "").trim()}
+              onClick={() => onStartCandidateCall?.({ job: currentJob, candidate })}
+              className="h-10 px-2 text-xs font-semibold sm:px-2.5"
+              data-testid="call-button"
+            >
+              <Phone size={15} className="mr-1" /> Call
+            </Button>
 
-        <Button type="button" variant="outline" onClick={() => { markDone("write-up"); setShowWriteUp(true); }} className="h-10 text-xs font-semibold">
-          <NotebookText size={15} className="mr-1.5" /> Write-up
-        </Button>
+            <Button type="button" variant="outline" onClick={() => { markDone("write-up"); setShowWriteUp(true); }} className="h-10 px-2 text-xs font-semibold sm:px-2.5" data-testid="write-up-button">
+              <NotebookText size={15} className="mr-1" /> Write-up
+            </Button>
 
-        <BrandedResumeControl text={candidate.fullResumeText} candidateName={candidate.name} className="w-full" />
+            <Button type="button" variant="outline" onClick={() => setShowOutreach(true)} className="h-10 px-2 text-xs font-semibold sm:px-2.5" data-testid="outreach-button">
+              <Send size={15} className="mr-1" /> Outreach
+            </Button>
 
-        {resumeSource.kind === "profile" ? (
-          <Badge variant="outline" className="text-[10px]" title={`Sources: ${(resumeSource.usedSources || []).join(", ")}`}>
-            Built from profile, no resume on file
-          </Badge>
-        ) : null}
+            <BrandedResumeControl compact className="order-last basis-full sm:order-none sm:basis-auto" text={candidate.fullResumeText} candidateName={candidate.name} />
 
-        <Button
-          type="button"
-          onClick={() => handleDecision("want")}
-          disabled={isDeciding}
-          className="flex-1 max-w-[220px] bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs h-10 shadow-sm"
-        >
-          <Check size={15} className="mr-1.5" /> Want this candidate
-        </Button>
+            {resumeSource.kind === "profile" ? (
+              <Badge variant="outline" className="text-xs" title={`Sources: ${(resumeSource.usedSources || []).join(", ")}`}>
+                Built from profile, no resume on file
+              </Badge>
+            ) : null}
+
+            {candidate.isSubmitted ? (
+              <span className="order-first basis-full text-xs font-semibold text-muted-foreground sm:order-none sm:ml-auto sm:basis-auto">Presented</span>
+            ) : isWaitingForLoxo ? (
+              <span className="order-first basis-full text-xs font-semibold text-muted-foreground sm:order-none sm:ml-auto sm:basis-auto">Marked submitted. Waiting for Loxo.</span>
+            ) : (
+              <Button
+                type="button"
+                onClick={handleMarkSubmitted}
+                disabled={isSubmitting || !onMarkSubmitted}
+                className="order-first h-10 basis-full bg-blue-700 text-xs font-semibold text-white shadow-sm hover:bg-blue-800 sm:order-none sm:ml-auto sm:min-w-40 sm:basis-auto"
+                data-testid="mark-submitted-button"
+              >
+                {isSubmitting ? <Loader2 size={15} className="mr-1.5 animate-spin" /> : <Send size={15} className="mr-1.5" />} Mark submitted
+              </Button>
+            )}
+          </>
+        ) : (
+          <>
+            <RejectMenu
+              onReject={handleReject}
+              disabled={isDeciding}
+              open={rejectOpen}
+              onOpenChange={setRejectOpen}
+            />
+
+            <BrandedResumeControl compact className="order-last basis-full sm:order-none sm:basis-auto" text={candidate.fullResumeText} candidateName={candidate.name} />
+
+            {resumeSource.kind === "profile" ? (
+              <Badge variant="outline" className="order-last text-xs sm:order-none" title={`Sources: ${(resumeSource.usedSources || []).join(", ")}`}>
+                Built from profile, no resume on file
+              </Badge>
+            ) : null}
+
+            <Button
+              type="button"
+              onClick={() => handleDecision("want")}
+              disabled={isDeciding}
+              className="h-10 min-w-32 flex-1 bg-emerald-700 sm:min-w-40 text-xs font-semibold text-white shadow-sm hover:bg-emerald-800"
+              data-testid="want-button"
+            >
+              <Check size={15} className="mr-1.5" /> Want
+            </Button>
+          </>
+        )}
       </div>
 
       {/* Dialog showing WHY this fit exists from Tracker Sheet */}
